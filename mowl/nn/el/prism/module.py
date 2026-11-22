@@ -36,8 +36,8 @@ class PrismModule(ELModule):
     - Raises :class:`ValueError` if ``embed_dim < 3``.
     - :meth:`prism_params` returns ``(h, box_center, |box_offset|)`` of shapes
       ``(B, 3)``, ``(B, d - 2)``, ``(B, d - 2)`` with non-negative ``box_offset``.
-    - Every GCI loss returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL
-      (whereas ELBE returns ``(B, 1)``).
+    - Every GCI loss returns a 1-D tensor of shape ``(B,)`` (MultiBoxEL and Box\\ :sup:`2`\\ EL
+      now return ``(B, 1)``).
     - :meth:`gci1_bot_loss` aggregates box coordinates with ``min`` (semantically
       disjointness-if-any-separates; ELBE uses the Euclidean norm).
 
@@ -91,6 +91,12 @@ class PrismModule(ELModule):
     size_reg : float, default 1e-3
         Non-negative weight multiplying the primitive prism size regulariser
         ``mean([|r|, 2|o|])`` in :meth:`structural_extra_loss`.
+    gci2_negative_triangle : {"overlap", "inradius"}, default "overlap"
+        Triangle part of the negative loss of :math:`C \\sqsubseteq \\exists r.D` and of
+        negative role assertions: ``"overlap"`` is the exact overlap test of the translated
+        triangle and the triangle of :math:`D` (zero iff they overlap); ``"inradius"`` is the
+        earlier per-direction test on the inscribed discs, see
+        :func:`~mowl.nn.el.prism.losses.gci2_score_neg`.
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
@@ -108,7 +114,10 @@ class PrismModule(ELModule):
         structural_definitions: bool = True,
         existence_weight: float = 1.0,
         size_reg: float = 1e-3,
+        gci2_negative_triangle: str = "overlap",
     ) -> None:
+        if gci2_negative_triangle not in ("overlap", "inradius"):
+            raise ValueError("gci2_negative_triangle must be 'overlap' or 'inradius'.")
         if isinstance(embed_dim, bool) or not isinstance(embed_dim, int) or embed_dim < 3:
             raise ValueError(f"embed_dim must be an int >= 3, got {embed_dim!r}")
         if not isinstance(objective, str) or objective not in _PRISM_OBJECTIVES:
@@ -147,6 +156,7 @@ class PrismModule(ELModule):
         self.structural_definitions = bool(structural_definitions)
         self.existence_weight = float(existence_weight)
         self.size_reg = float(size_reg)
+        self.gci2_negative_triangle = gci2_negative_triangle
         self.definition_table: Optional[DefinitionTable] = None
         self.existence_targets: Optional[ExistenceTargets] = None
         self.top_idx: Optional[int] = None
@@ -510,7 +520,9 @@ class PrismModule(ELModule):
             d_abs = L.PrismRegions(h=d.h, cen=d.cen, w=th.abs(d.w))
             rel = self.rel_embed(data[:, 1])
             if neg:
-                return L.gci2_score_neg_prisms(c_abs, d_abs, rel, self.margin)
+                return L.gci2_score_neg_prisms(
+                    c_abs, d_abs, rel, self.margin,
+                    triangle_negative=self.gci2_negative_triangle)
             return L.gci2_score_prisms(c_abs, d_abs, rel, self.margin)
         return L.gci2_loss(
             data,
@@ -521,6 +533,7 @@ class PrismModule(ELModule):
             self.rel_embed,
             self.margin,
             neg=neg,
+            triangle_negative=self.gci2_negative_triangle,
         )
 
     def gci3_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
@@ -590,4 +603,5 @@ class PrismModule(ELModule):
             self.rel_embed,
             self.margin,
             neg=neg,
+            triangle_negative=self.gci2_negative_triangle,
         )
