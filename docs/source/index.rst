@@ -114,6 +114,7 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    embedding_alc/index
    geometric/index
    methods/index
+   representation/index
    logic/index
    training/index
    evaluation/index

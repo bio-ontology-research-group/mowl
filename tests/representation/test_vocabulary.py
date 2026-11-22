@@ -70,3 +70,83 @@ class TestParts(TestCase):
         rows = dict(get_method("dfalc").representation.rows())
         self.assertEqual(rows["An individual is"], "element of a finite domain")
         self.assertIn("exists: fuzzy operator", rows["Compound classes"])
+
+
+#: Methods that cannot be built without a text encoder; their geometry is checked in the tests
+#: of the language-model methods.
+NEEDS_ENCODER = {"hit", "ont"}
+#: Disagreements between the catalogue and the geometry that are known and not resolved,
+#: as ``(key, field): reason``. A listed pair is skipped; the list must not grow silently.
+KNOWN_DISAGREEMENTS = {}
+
+
+def _build(key):
+    from mowl.representation import METHODS, METHOD_KINDS
+    if METHOD_KINDS[key] == "queries":
+        return METHODS[key](nb_classes=6, nb_relations=6, num_classes=3, embed_dim=8)
+    return METHODS[key](5, 2, 3, 8)
+
+
+class TestGeometryAgreesWithCatalogue(TestCase):
+    """A method that is rebuilt from parts names the same class model, relation model and
+    measure as its catalogue entry says."""
+
+    def values(self, rep, field):
+        return {v.value for v in getattr(rep, field)}
+
+    def test_every_rebuilt_method_has_an_entry(self):
+        from mowl.representation import METHODS
+        self.assertLessEqual(set(METHODS), set(REPRESENTATIONS))
+
+    def test_parts_agree(self):
+        from mowl.representation import METHODS
+        disagreements = []
+        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+            parts = _build(key).parts
+            rep = REPRESENTATIONS[key]
+            for field in ("classes", "relations", "measure"):
+                if (key, field) in KNOWN_DISAGREEMENTS:
+                    continue
+                if parts[field] not in self.values(rep, field):
+                    disagreements.append(
+                        (key, field, parts[field], sorted(self.values(rep, field))))
+        self.assertEqual(disagreements, [])
+
+    def test_individuals_and_conjunction_agree(self):
+        from mowl.representation import METHODS
+        problems = []
+        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+            parts = _build(key).parts
+            rep = REPRESENTATIONS[key]
+            if parts.get("individuals") == "none" and IndividualModel.NONE not in rep.individuals:
+                problems.append((key, "individuals", parts["individuals"]))
+            # a method without compound classes (NONE) does not use the constructor of
+            # its region; a learned conjunction is realised as an approximation
+            kind = parts.get("conjunction", "none")
+            catalogue = rep.conjunction
+            allowed = {Construction.NONE, Construction(kind) if kind in (
+                c.value for c in Construction) else None}
+            if kind == "approximate":
+                allowed.add(Construction.LEARNED)
+            if catalogue not in allowed:
+                problems.append((key, "conjunction", kind, catalogue.value))
+        self.assertEqual(problems, [])
+
+    def test_fuzzy_methods_name_their_operator_family(self):
+        from mowl.representation import METHODS
+        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+            if "family" in _build(key).parts:
+                self.assertTrue(REPRESENTATIONS[key].operators, key)
+                self.assertIs(REPRESENTATIONS[key].conjunction, Construction.FUZZY, key)
+
+    def test_vocabulary_has_the_parts_the_code_has(self):
+        from mowl.representation.vocabulary import OperatorFamily
+        from mowl.representation.library.logic_fuzzy import get_family
+        self.assertIn(ClassModel.LINKED, REPRESENTATIONS["eike"].classes)
+        self.assertIn(ClassModel.LINKED, REPRESENTATIONS["concept2box"].classes)
+        self.assertEqual(RelationModel.HEAD_TAIL_BALLS.value, "head and tail balls")
+        for family in (OperatorFamily.PRODUCT, OperatorFamily.GOEDEL,
+                       OperatorFamily.LUKASIEWICZ):
+            self.assertIsNotNone(get_family(family.value))
+        rows = dict(REPRESENTATIONS["falcon"].rows())
+        self.assertIn("product", rows["Fuzzy operators"])
