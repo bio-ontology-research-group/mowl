@@ -23,10 +23,13 @@ zero.
 The hand-written loss module that this one replaces is kept for comparison as
 :mod:`mowl.baselines.nn.alc.alcone`.
 """
+from types import SimpleNamespace
+
 import numpy as np
 import torch as th
+import torch.nn as nn
 
-from mowl.representation.library.logic_alc import ExpressionGeometry
+from mowl.representation.library.logic_alc import ExpressionGeometry, Relaxation
 from mowl.representation.library.logic_fuzzy import alcone_parts
 
 __all__ = ["ALConeModule", "CONSTANT_LOGIT", "DEFAULT_CONSTANT_LOGIT"]
@@ -80,9 +83,20 @@ class ALConeModule(ExpressionGeometry):
         if margin <= 0:
             raise ValueError("margin must be positive (zero loss implies a model only "
                              "for margin > 0).")
-        super().__init__(**alcone_parts(
-            nclasses, nrelations, nindividuals, dim, margin, 0.0, None, top_index,
-            bottom_index, constant_logit, init_std, anneal, noise, nondegeneracy))
+        # The tables are drawn in the order of the earlier module (all three, then the logits
+        # of all three), so that a seed gives the numbers it always gave.
+        nhalf = 2 * dim
+        classes = nn.Embedding(nclasses, nhalf)
+        relations = nn.Embedding(max(nrelations, 1), nhalf * nhalf)
+        individuals = nn.Embedding(max(nindividuals, 1), nhalf)
+        for table in (classes, relations, individuals):
+            nn.init.normal_(table.weight, std=init_std)
+        tables = SimpleNamespace(
+            c_embedding=classes, r_embedding=relations, e_embedding=individuals, dim=dim,
+            margin=margin, top_index=top_index, bottom_index=bottom_index,
+            constant_logit=constant_logit, relaxation=Relaxation(0.0))
+        super().__init__(**alcone_parts(None, None, nondegeneracy=nondegeneracy,
+                                        anneal=anneal, noise=noise, tables=tables))
         self.constant_logit = constant_logit
         self.dim = dim
         self.nhalf = 2 * dim

@@ -1,4 +1,6 @@
-import torch as th
+from types import SimpleNamespace
+
+import torch.nn as nn
 
 from mowl.representation.library.logic_alc import ExpressionGeometry
 from mowl.representation.library.logic_fuzzy import falcon_parts
@@ -60,12 +62,26 @@ class FALCONModule(ExpressionGeometry):
             raise ValueError("residuum must be 'notCorD'.")
         if loss_type not in ('c', 'r'):
             raise ValueError("loss_type must be 'c' or 'r'.")
-        parts = falcon_parts(nclasses, nrelations, nentities, embed_dim, t_norm=t_norm,
-                             max_measure=max_measure, role_pairs=role_pairs,
-                             top_index=top_index, bottom_index=bottom_index, thing=thing,
-                             nothing=nothing, num_negs=num_negs,
-                             role_loss="contrast" if loss_type == 'c' else "ranking")
-        parts["objective"].attach_assertions(heads_dict, tails_dict, nentities)
+        # The tables are drawn in the order of the earlier module (embeddings, then the two
+        # layers, then the Xavier initialisation of all), so that a seed gives the numbers it
+        # always gave.
+        c_embedding = nn.Embedding(nclasses, embed_dim)
+        r_embedding = nn.Embedding(nrelations, embed_dim)
+        e_embedding = nn.Embedding(nentities, embed_dim)
+        fc_0 = nn.Linear(embed_dim * 2, embed_dim)
+        fc_1 = nn.Linear(embed_dim, 1)
+        for table in (c_embedding, r_embedding, e_embedding, fc_0, fc_1):
+            nn.init.xavier_uniform_(table.weight.data)
+        tables = SimpleNamespace(
+            c_embedding=c_embedding, r_embedding=r_embedding, e_embedding=e_embedding,
+            fc_0=fc_0, fc_1=fc_1, t_norm=t_norm, max_measure=max_measure, role_pairs=role_pairs,
+            top_index=top_index if thing == 'all' else None,
+            bottom_index=bottom_index if nothing == 'empty' else None,
+            num_negs=num_negs, heads_dict=heads_dict, tails_dict=tails_dict,
+            nentities=nentities)
+        parts = falcon_parts(None, None, t_norm=t_norm, thing=thing, nothing=nothing,
+                             role_loss="contrast" if loss_type == 'c' else "ranking",
+                             tables=tables)
         super().__init__(**parts)
         self.network = parts["classes"].network
         self.role_pairs = role_pairs

@@ -19,6 +19,10 @@ quantum-logic operations of Sec. 3 in general and are used to check the axis-par
 against ground truth and to exhibit non-distributivity (which the axis-parallel restriction
 removes, supplementary material Theorem 11).
 """
+from types import SimpleNamespace
+
+import torch.nn as nn
+
 from mowl.representation.library.logic_subspace import SubspaceGeometry, e2r_parts, AXIOM_KINDS
 from mowl.representation.library.logic_subspace_algebra import (  # noqa: F401
     projector, indicator_projector, rank, orthocomplement, join_projector, meet_projector,
@@ -62,7 +66,14 @@ class E2RModule(SubspaceGeometry):
 
     def __init__(self, num_entities, num_classes, num_relations, dim=100, top_index=None,
                  bottom_index=None, role_unit_length=True):
-        super().__init__(**e2r_parts(num_classes, num_relations, num_entities, dim,
-                                     top_index, bottom_index, role_unit_length,
-                                     regularization=False))
+        # The tables are created in the order of the earlier module (entities, concepts,
+        # relations) and initialised by :meth:`reset_parameters`, so that a seed gives the
+        # numbers it always gave.
+        tables = SimpleNamespace(
+            e_embedding=nn.Embedding(max(num_entities, 1), 2 * dim),
+            c_embedding=nn.Embedding(max(num_classes, 1), 2 * dim),
+            r_embedding=nn.Embedding(max(num_relations, 1), 2 * dim),
+            top_index=top_index, bottom_index=bottom_index, role_unit_length=role_unit_length)
+        super().__init__(**e2r_parts(None, None, regularization=False, tables=tables))
         self.role_unit_length = role_unit_length
+        self.reset_parameters()

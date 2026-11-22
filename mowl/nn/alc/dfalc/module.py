@@ -13,7 +13,10 @@ model :class:`~mowl.representation.library.logic_fuzzy.TruthMatrix`, measure
 :class:`~mowl.representation.library.logic_fuzzy.FuzzyObjective`); the hand-written loss module
 it replaces is kept for comparison as :mod:`mowl.baselines.nn.alc.dfalc`.
 """
+from types import SimpleNamespace
+
 import torch as th
+import torch.nn as nn
 
 from mowl.representation.library.logic_alc import ExpressionGeometry
 from mowl.representation.library.logic_fuzzy import (dfalc_parts, has_quantifier,
@@ -53,9 +56,16 @@ class DFALCModule(ExpressionGeometry):
             raise ValueError("The domain of a DF-ALC interpretation must not be empty.")
         if loss_type not in ("hierarchical", "rule"):
             raise ValueError("loss_type must be 'hierarchical' or 'rule'.")
-        super().__init__(**dfalc_parts(nclasses, nrelations, ndomain, ndomain, ndomain,
-                                       loss_type, threshold, "godel", top_index,
-                                       bottom_index, init_std))
+        # The tables are drawn in the order of the earlier module (both, then the logits of
+        # both), so that a seed gives the numbers it always gave.
+        classes = nn.Embedding(nclasses, ndomain)
+        relations = nn.Embedding(max(nrelations, 1), ndomain * ndomain)
+        for table in (classes, relations):
+            nn.init.normal_(table.weight, std=init_std)
+        tables = SimpleNamespace(ndomain=ndomain, c_embedding=classes, r_embedding=relations,
+                                 top_index=top_index, bottom_index=bottom_index,
+                                 loss_type=loss_type, threshold=threshold)
+        super().__init__(**dfalc_parts(None, None, tables=tables))
         self.ndomain = ndomain
         self.top_index = top_index
         self.bottom_index = bottom_index

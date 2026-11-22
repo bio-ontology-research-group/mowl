@@ -654,6 +654,21 @@ class IncidenceMatrices(_FuzzyRelations):
         n = self.domain
         return self.vectors(ids).view(*ids.shape, n, n).transpose(-1, -2)
 
+    # The operators run over the stored layout (``[successor, source]``) instead of the
+    # transposed table: the same numbers, summed in the order of the table the optimiser
+    # holds (the smooth relaxation sums in floating point, so the order is visible).
+    def image(self, ids, region):
+        family = self._domain_of(region)
+        stored = self.vectors(ids).view(*ids.shape, self.domain, self.domain)
+        return FuzzySet(family.sup(family.and_(
+            stored, region.values.unsqueeze(-2).expand_as(stored)), -1), family)
+
+    def preimage(self, ids, region):
+        family = self._domain_of(region)
+        stored = self.vectors(ids).view(*ids.shape, self.domain, self.domain)
+        return FuzzySet(family.sup(family.and_(
+            stored, region.values.unsqueeze(-1).expand_as(stored)), -2), family)
+
 
 class PairNetworkRelations(Relations):
     """A relation is a vector; the degree of ``r(a, b)`` is the network applied to
@@ -894,13 +909,11 @@ class ConeMeasure(_FuzzyMeasure):
 
     def inside(self, a, b, margin=0.0):
         self.check(a, b)
-        return (th.relu(margin + a.values) * th.relu(margin - b.values)).mean(
-            dim=-1, keepdim=True)
+        return CL.either(-a.values, b.values, margin).mean(dim=-1, keepdim=True)
 
     def apart(self, a, b, margin=0.0):
         self.check(a, b)
-        return (th.relu(margin + a.values) * th.relu(margin + b.values)).mean(
-            dim=-1, keepdim=True)
+        return CL.either(-a.values, -b.values, margin).mean(dim=-1, keepdim=True)
 
     def empty(self, a, margin=0.0):
         self.check(a)
@@ -1086,10 +1099,13 @@ class FuzzyObjective(ExpressionReading, Objective):
         return super().inclusion(g, sub, sup, x)
 
     def equivalence(self, g, first, second, x):
+        if not self.rule:
+            return super().equivalence(g, first, second, x)
         # C ⊑ D with every rule that applies; D ⊑ C only with the rule for inclusions
-        # without a quantifier (the shapes of normal forms 4-7 are not mirrored).
-        a, b, _ = self.regions(g, first, second, x)
+        # without a quantifier (the shapes of normal forms 4-7 are not mirrored). The two
+        # directions read the expressions again, as DF-ALC's code does.
         forward = self.inclusion(g, first, second, x)
+        a, b, _ = self.regions(g, first, second, x)
         if self.rule and not (has_quantifier(first) or has_quantifier(second)):
             backward = rule_based_loss(b.values, a.values)
         else:
@@ -1400,7 +1416,7 @@ def alcone_parts(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin
     :class:`~mowl.representation.library.logic_alc.ExpressionGeometry` (see :func:`alcone`)."""
     t = tables
     if t is not None:
-        relaxation = _ModuleTemperature(t)
+        relaxation = getattr(t, "relaxation", None) or _ModuleTemperature(t)
         fam = LogitGoedel(source=relaxation) if family is None else get_family(family)
         classes = HalfAxisClasses(logits=t.c_embedding, family=fam, top_index=t.top_index,
                                   bottom_index=t.bottom_index,
@@ -1409,7 +1425,6 @@ def alcone_parts(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin
         individuals = HalfAxisClasses(logits=t.e_embedding, family=fam)
         measure = ConeMeasure(source=relaxation)
         margin = t.margin
-        nondegeneracy = 0.0
     else:
         relaxation = Relaxation(temperature)
         fam = LogitGoedel(source=relaxation) if family is None else get_family(family)
@@ -1490,4 +1505,4 @@ def _falcon_adapter(module):
 
 @register_adapter("ALConeModule")
 def _alcone_adapter(module):
-    return alcone(None, None, tables=module)
+    return alcone(None, None, anneal=None, nondegeneracy=0.0, tables=module)
