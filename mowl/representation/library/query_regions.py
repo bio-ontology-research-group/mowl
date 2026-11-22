@@ -127,6 +127,9 @@ class ConeClasses(Classes):
 
     :param centres, apertures: Existing tables (of another module, which then shares its
         parameters).
+
+    Part (vocabulary value): ``sector cone``. Used by: no method by default (``acone`` and
+    ``cone_qe`` read sector cones through their query models).
     """
 
     region = SectorCone
@@ -167,6 +170,8 @@ class ConeBounds(RegionMeasure):
     coordinate, the sectors overlap iff :math:`d \\le \\alpha_A + \\alpha_B`. As for boxes
     (:class:`~mowl.representation.Bounds`) the cost is the norm of the violations, and two
     cones are apart if they are separated in at least one coordinate.
+
+    Part (vocabulary value): ``angle``. Used by: ``acone``, ``cone_qe``.
     """
 
     accepts = (SectorCone,)
@@ -221,6 +226,8 @@ class BetaKL(RegionMeasure):
     the query's). It is zero iff the two distributions are equal, which is a *membership*
     cost, not an inclusion: two Beta distributions have no containment order. Only
     :meth:`inside` is defined; ``margin`` is added before the hinge.
+
+    Part (vocabulary value): ``divergence``. Used by: ``betae``.
     """
 
     accepts = (BetaRegion,)

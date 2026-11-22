@@ -97,7 +97,15 @@ class TestPointObjectives(TestCase):
                     geometry.train(training)
                     for form, rows in ROWS.items():
                         for neg in (False, True):
-                            old = getattr(module, form + "_loss")(rows, neg=neg).reshape(-1, 1)
+                            try:
+                                old = getattr(module, form + "_loss")(rows, neg=neg)
+                            except NotImplementedError:
+                                # a module refuses a negative loss it does not have: so
+                                # does the geometry
+                                with self.assertRaises(NotImplementedError):
+                                    getattr(geometry, form + "_loss")(rows, neg=neg)
+                                continue
+                            old = old.reshape(-1, 1)
                             new = getattr(geometry, form + "_loss")(rows, neg=neg)
                             self.assertTrue(th.allclose(old, new, atol=1e-6),
                                             (cls, mode, training, form, neg))

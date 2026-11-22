@@ -290,6 +290,8 @@ class BumpedBoxClasses(BoxClasses):
     :class:`~mowl.representation.BoxClasses`; the region is a :class:`BumpedBox`.
 
     :param bumps: An existing table to use instead of a new one.
+
+    Part (vocabulary value): ``box``. Used by: ``box2el``.
     """
 
     region = BumpedBox
@@ -312,6 +314,8 @@ class UnionClasses(Classes):
     :param bump: Whether every class has a bump vector (shared by its boxes), for
         :class:`HeadTailRelations`.
     :param centres, offsets, bumps: Existing tables to use instead of new ones.
+
+    Part (vocabulary value): ``union of boxes``. Used by: ``multiboxel``, ``multielbe``.
     """
 
     region = UnionOfBoxes
@@ -391,7 +395,7 @@ def _packed_init(count, boxes, dim, bound, generator):
 
 
 register_class_model("box with bump")(BumpedBoxClasses)
-register_class_model("union of boxes")(lambda size, embed_dim: UnionClasses(size, embed_dim))
+register_class_model("union of boxes")(UnionClasses)
 
 
 # ====================================================================================
@@ -547,6 +551,8 @@ class PairUnions(Relations):
     :param bound: :math:`b_o`, the half-width of the space in which the gate of the
         projection clips the boxes.
     :param table: An existing parameter to use instead of a new one.
+
+    Part (vocabulary value): ``region over pairs``. Used by: ``mcmultibox``.
     """
 
     part = "region over pairs"
@@ -629,10 +635,15 @@ class UnionMeasure(RegionMeasure):
     The cost of a relation between two unions is the cost of the relation between pairs of
     boxes, aggregated:
 
-    * ``inside(A, B)`` (also ``meets``): every component :math:`A_i` has to be in *some*
+    * ``inside(A, B)``: every component :math:`A_i` has to be in *some*
       component of :math:`B`, so :math:`\\operatorname{mean}_i \\operatorname{agg}_j
       \\mathrm{cost}(A_i, B_j)`; ``agg`` is the minimum (``aggregation="hard"``) or the
       soft minimum with temperature ``tau`` (``"soft"``).
+    * ``meets(A, B)``: with ``meets_reading="some"`` (default) *some* component of :math:`A`
+      meets *some* component of :math:`B` (:math:`\\operatorname{agg}_{i,j}`: zero exactly
+      when the unions overlap); ``"every"``: every component of :math:`A` meets some
+      component of :math:`B` (the mean over :math:`i` as for ``inside``: a sufficient
+      condition, which the published MultiBoxEL and MultiELBE losses use).
     * ``apart(A, B)``: every pair has to be apart, the mean over all pairs.
     * ``empty(A)``: the mean over the components.
     * ``intersection_inside``: the designated pair of components (the pair that intersects
@@ -650,15 +661,22 @@ class UnionMeasure(RegionMeasure):
     :param aggregation: ``"hard"`` or ``"soft"``.
     :param tau: Temperature of the soft minimum (a float, or a tensor that is updated in
         place, as the buffer of the modules).
+    :param meets_reading: ``"some"`` (default) or ``"every"``, see ``meets``.
+
+    Part (vocabulary value): ``bounds per coordinate``. Used by: ``multiboxel`` and
+    ``multielbe`` (``meets_reading="every"``).
     """
 
     accepts = (UnionOfBoxes, Box)
     part = "bounds per coordinate"
     exact_intersection = False
 
-    def __init__(self, base=None, aggregation="hard", tau=1.0):
+    def __init__(self, base=None, aggregation="hard", tau=1.0, meets_reading="some"):
         if aggregation not in ("hard", "soft"):
             raise ValueError("aggregation must be 'hard' or 'soft'.")
+        if meets_reading not in ("some", "every"):
+            raise ValueError("meets_reading must be 'some' or 'every'.")
+        self.meets_reading = meets_reading
         self.base = base if base is not None else Bounds()
         self.aggregation = aggregation
         self.tau = tau
@@ -687,8 +705,10 @@ class UnionMeasure(RegionMeasure):
         return self._agg(per, 1).unsqueeze(1)
 
     def meets(self, a, b, margin=0.0):
-        return self._agg(self._pairs(self.base.meets, a, b, margin), 2).mean(
-            dim=1, keepdim=True)
+        pairs = self._pairs(self.base.meets, a, b, margin)
+        if self.meets_reading == "some":
+            return self._agg(self._agg(pairs, 2), 1).unsqueeze(1)
+        return self._agg(pairs, 2).mean(dim=1, keepdim=True)
 
     def meets_all(self, a, b, margin=0.0):
         return self._pairs(self.base.meets, a, b, margin).mean(dim=(1, 2)).unsqueeze(1)
@@ -787,6 +807,8 @@ class SampledVolume(RegionMeasure, nn.Module):
         formula of the thesis, positive everywhere).
     :param chunk_size: Points processed at once (memory only).
     :param seed: Seed of the Sobol scrambling.
+
+    Part (vocabulary value): ``sampled volume``. Used by: ``mcmultibox``.
     """
 
     accepts = (Region,)

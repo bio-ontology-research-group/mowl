@@ -276,6 +276,8 @@ class ConeRotation(_ConeRelations):
         and the preimage subtracts it; no set of pairs of points has these as image and
         preimage (the preimage of a cone is then *narrower* than the cone, also for
         :math:`\\delta_r > 0`).
+
+    Part (vocabulary value): ``rotation``. Used by: ``acone``, ``cone_qe``.
     """
 
     part = "rotation"
@@ -438,7 +440,13 @@ class ConeAttentionIntersection(_Intersection):
 # ---------------------------------------------------------------------------------------
 
 class BetaInversion(nn.Module):
-    """BetaE negation: ``alpha, beta`` to ``1/alpha, 1/beta``."""
+    """BetaE negation: ``alpha, beta`` to ``1/alpha, 1/beta``.
+
+    The construction is exact for the model (the inverted density is the complement the
+    method defines): ``exact = True``, which ``geometry.parts["negation"]`` reports.
+    """
+
+    exact = True
 
     def forward(self, region):
         return region.invert()
@@ -446,7 +454,10 @@ class BetaInversion(nn.Module):
 
 class ConeComplement(nn.Module):
     """ConE negation: the closure of the complement of every sector, with the absolute
-    aperture; ``signed=True`` is the published ``pi - aperture``."""
+    aperture; ``signed=True`` is the published ``pi - aperture``. It is taken per coordinate,
+    not the complement of the product of sectors: ``exact = False`` (``approximate``)."""
+
+    exact = False
 
     def __init__(self, signed=False):
         super().__init__()

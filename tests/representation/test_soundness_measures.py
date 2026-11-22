@@ -461,11 +461,32 @@ def test_union_of_boxes():
 
 
 def test_union_meets_needs_every_component():
-    """``UnionMeasure.meets`` is zero only if *every* component of ``a`` meets ``b``: a
-    sufficient condition for the overlap of two unions (sound, not complete)."""
+    """``UnionMeasure(meets_reading="every")`` (the published MultiBoxEL / MultiELBE losses) is
+    zero only if *every* component of ``a`` meets ``b``: a sufficient condition for the
+    overlap of two unions (sound, not complete)."""
     a = UnionOfBoxes(th.tensor([[[0.0, 0.0], [10.0, 10.0]]]), th.ones(1, 2, 2) * 0.5)
     b = Box(th.zeros(1, 2), th.ones(1, 2))
-    assert float(UnionMeasure().meets(a, b)) > 0      # they do meet (first component)
+    assert float(UnionMeasure(meets_reading="every").meets(a, b)) > 0   # they do meet
+
+
+def test_union_meets_is_exact_by_default():
+    """``UnionMeasure().meets`` is zero exactly when some component of ``a`` meets some
+    component of ``b``: sampled points of the union intersection."""
+    a = UnionOfBoxes(th.tensor([[[0.0, 0.0], [10.0, 10.0]]]), th.ones(1, 2, 2) * 0.5)
+    b = Box(th.zeros(1, 2), th.ones(1, 2))
+    assert float(UnionMeasure().meets(a, b)) == 0
+    assert float(UnionMeasure().meets(a, Box(th.full((1, 2), 5.0), th.ones(1, 2)))) > 0
+    g = _gen(11)
+    a = UnionOfBoxes(th.randn(64, 3, D, generator=g), th.rand(64, 3, D, generator=g))
+    b = UnionOfBoxes(th.randn(64, 2, D, generator=g), th.rand(64, 2, D, generator=g))
+    # witnesses: the unions overlap iff some pair of boxes does (closed boxes)
+    gap = (a.centre.unsqueeze(2) - b.centre.unsqueeze(1)).abs() \
+        - a.offset.unsqueeze(2) - b.offset.unsqueeze(1)
+    overlap = (gap <= 0).all(dim=-1).flatten(1).any(dim=1)
+    cost = UnionMeasure().meets(a, b).reshape(-1)
+    assert bool(overlap.any()) and bool((~overlap).any())
+    assert bool((cost[overlap] <= TOL).all())      # complete
+    assert bool((cost[~overlap] > TOL).all())      # sound
 
 
 def test_sector_cones():
@@ -619,3 +640,195 @@ def test_wrong_regions_are_an_error_that_says_so():
             measure.inside(box, box)
     with pytest.raises(ConstructorUnavailable):
         PointDistance().empty(Point(th.zeros(1, 2)))     # a point is never empty
+
+
+# -- families the first review did not sample ------------------------------------------------
+#
+# Soft (Gumbel) boxes at the zero-temperature limit, binary-code boxes and shadow cones are
+# sets of points only in a limit or by a convention; what is sampled here is what can be
+# stated about points, and the reason is given where nothing can.
+
+def _boxes(n, seed, shift=0.0):
+    g = _gen(seed)
+    return Box(th.randn(n, D, generator=g) + shift, th.rand(n, D, generator=g) + 0.2)
+
+
+def test_soft_boxes_at_zero_temperature_are_hard_boxes():
+    """A soft box is a distribution of boxes, not a set of points (``contains`` says so), but
+    as the scale goes to 0 its intersection and its volume ratio are those of the hard box:
+    the intersection holds the points in both boxes, and ``GumbelVolumeRatio.inside(a, b)``
+    is the share of ``a`` that lies outside ``b``, measured on sampled points."""
+    from mowl.representation.library.shapes_measures import GumbelVolumeRatio
+    from mowl.representation.library.shapes_regions import SoftBox
+    a, b = _boxes(48, 1), _boxes(48, 2)
+    b = Box(th.cat([a.centre[:16], b.centre[16:]]), th.cat([a.offset[:16] + 0.3, b.offset[16:]]))
+    beta = 1e-4
+    sa, sb = SoftBox(a.centre, a.offset, beta), SoftBox(b.centre, b.offset, beta)
+    with pytest.raises(ConstructorUnavailable):
+        sa.contains(th.zeros(2, D))
+    hard, _ = a.intersect(b, signed=True)
+    soft, _ = sa.intersect(sb)
+    assert float((soft.lower - hard.lower).abs().max()) < 1e-2
+    assert float((soft.upper - hard.upper).abs().max()) < 1e-2
+    x, _ = points_in(a, 4000)
+    in_a, in_b = member(a, x), member(b, x)
+    share_outside = (in_a & ~in_b).float().sum(1) / in_a.float().sum(1).clamp_min(1)
+    cost = GumbelVolumeRatio(beta=beta).inside(sa, sb).reshape(-1)
+    assert float((cost - share_outside).abs().max()) < 0.06
+    assert bool((cost[:16] < 1e-3).all())           # nested: zero cost
+    assert bool((cost[share_outside > 0.2] > 0.1).all())   # a violated inclusion costs
+
+
+def test_binary_code_boxes_with_equal_codes_are_cylinders():
+    """A box with binary codes (BCBox, ``vbc``) is read on the dimensions where its code is 1:
+    the set is the cylinder over the box in those dimensions. When both codes are equal,
+    the zero-temperature energy is zero exactly when the first cylinder lies in the second,
+    which is checked on the intervals of the coded dimensions."""
+    from mowl.representation.library.hierarchy_measures import LogVolumeRatio
+    from mowl.representation.library.hierarchy_regions import CodedBox
+    n, d = 64, 3
+    g = _gen(3)
+    lo = th.randn(n, d, generator=g)
+    hi = lo + th.rand(n, d, generator=g) + 0.1
+    lo2 = th.where(th.rand(n, d, generator=g) < 0.5, lo - 0.2, lo + 0.1)
+    hi2 = th.where(th.rand(n, d, generator=g) < 0.5, hi + 0.2, hi - 0.05)
+    hi2 = th.maximum(hi2, lo2 + 0.05)
+    code = (th.rand(n, d, generator=g) < 0.6).float()
+    a = CodedBox.from_corners(lo, hi, code=code)
+    b = CodedBox.from_corners(lo2, hi2, code=code)
+    energy = LogVolumeRatio(intersection_temp=0.0).energy(a, b).reshape(-1)
+    nested = (((lo2 <= lo) & (hi <= hi2)) | (code == 0)).all(dim=1)
+    assert bool(nested.any()) and bool((~nested).any())
+    assert bool((energy[nested] <= 1e-9).all()) and bool((energy[~nested] > 1e-3).all())
+
+
+def test_binary_codes_that_differ_are_not_a_set_inclusion():
+    """Where the code of the parent constrains a dimension that the code of the child does
+    not (child free, parent bounded), the published energy is the sum over the dimensions of
+    *both* codes, so it ignores that dimension: zero cost although the child cylinder is not
+    inside the parent's. This is how BCBox is defined (Zhang et al. 2022), so it is declared,
+    not changed; the reading is sound only for equal codes (previous test)."""
+    from mowl.representation.library.hierarchy_measures import LogVolumeRatio
+    from mowl.representation.library.hierarchy_regions import CodedBox
+    child = CodedBox.from_corners(th.tensor([[0.0, 0.0]]), th.tensor([[1.0, 5.0]]),
+                                  code=th.tensor([[1.0, 0.0]]))
+    parent = CodedBox.from_corners(th.tensor([[-1.0, 0.0]]), th.tensor([[2.0, 1.0]]),
+                                   code=th.tensor([[1.0, 1.0]]))
+    assert float(LogVolumeRatio(intersection_temp=0.0).energy(child, parent)) < 1e-9
+
+
+def test_shadow_cones_are_reflexive_up_to_their_floor_and_nested():
+    """A shadow cone is defined by an energy in hyperbolic space, not by a point-membership
+    test that could be written independently of it, so the cone itself is not sampled.
+    What the construction promises is sampled: a point lies in its own cone (up to the
+    numerical floor of the formulations, which is below ``5e-3``: it is the open item "a
+    disk or cone inside itself costs slightly above zero"), and the cones are nested (a point
+    ``y`` of the cone of ``x``, ``x`` in the cone of ``b``: ``y`` is in the cone of ``b``)."""
+    from mowl.nn.order import cones as C
+    g = _gen(4)
+    n = 300000
+    b = th.randn(n, 2, generator=g)
+    b = b / b.norm(dim=1, keepdim=True) * (0.2 + 0.5 * th.rand(n, 1, generator=g))
+
+    def child(p):
+        d = p + 0.15 * th.randn(p.shape, generator=g)
+        d = d / d.norm(dim=1, keepdim=True)
+        r = p.norm(dim=1, keepdim=True)
+        return d * (r + (0.98 - r) * th.rand(len(p), 1, generator=g))
+
+    x = child(b)
+    y = child(x)
+    for form in ("umbral-ball", "penumbral-ball"):
+        def energy(p, c):
+            return C.shadow_cone_energy(p, c, form, 0.05, 20.0, 1e-4)
+        assert float(energy(b, b).max()) < 5e-3, form
+        chain = (energy(b, x) <= 0) & (energy(x, y) <= 0)
+        assert int(chain.sum()) > 20, form
+        assert bool((energy(b, y)[chain] <= 1e-6).all()), form
+
+
+def _prisms(n, seed, with_empty=True):
+    from mowl.representation.library.shapes_regions import NORMALS, Prism
+    g = _gen(seed)
+    pts = th.randn(n, 2, generator=g) * 0.5
+    h = pts @ NORMALS.T + th.rand(n, 3, generator=g) * 1.2
+    centre = th.randn(n, 2, generator=g) * 0.5
+    offset = th.rand(n, 2, generator=g) + 0.1
+    if with_empty:
+        h[::7] -= 3.0                      # empty triangle
+        offset[3::7, 0] = -0.4             # empty box
+    return Prism(h, centre, offset)
+
+
+def test_prism_bounds_reads_empty_prisms_as_the_empty_set():
+    """``PrismBounds`` (default options): zero cost iff the relation holds in the sampled
+    points, empty prisms (triangle or box part) included; an empty prism lies in every prism,
+    meets none, is apart from all, and no non-empty prism lies inside it."""
+    from mowl.representation.library.shapes_measures import PrismBounds
+    m = PrismBounds()
+    a, b = _prisms(70, 1), _prisms(70, 2)
+    g = _gen(5)
+    x = (th.rand(6000, 4, generator=g) * 2 - 1) * 2.5
+    in_a, in_b = a.contains(x), b.contains(x)
+    empty_a = ~in_a.any(1)
+    assert bool(a.is_empty()[empty_a].all())         # no sampled point: the prism is empty
+    inside = m.inside(a, b).reshape(-1)
+    meets = m.meets(a, b).reshape(-1)
+    apart = m.apart(a, b).reshape(-1)
+    nonempty_a = ~a.is_empty()
+    # sound
+    assert not ((inside <= TOL) & (in_a & ~in_b).any(1)).any()
+    assert not ((apart <= TOL) & (in_a & in_b).any(1)).any()
+    # complete on the constructed cases: empty prisms are inside everything, meet nothing,
+    # are apart from all; a non-empty prism is not inside an empty one
+    ea, eb = a.is_empty(), b.is_empty()
+    assert bool((inside[ea] <= TOL).all())
+    assert bool((meets[ea | eb] > TOL).all())
+    assert bool((apart[ea | eb] <= TOL).all())
+    assert bool((inside[nonempty_a & eb] > TOL).all())
+    # a prism is inside itself and meets itself unless it is empty
+    assert bool((m.inside(a, a) <= TOL).all())
+    assert bool((m.meets(a, a)[nonempty_a] <= TOL).all())
+    # empty: triangle or box
+    empty = m.empty(a).reshape(-1)
+    assert bool((empty[ea] <= TOL).all()) and bool((empty[nonempty_a] > TOL).all())
+
+
+def test_prism_conjunction_is_exact_by_default_and_published_on_request():
+    from mowl.representation.library.shapes_measures import PrismBounds
+    a, b, c = _prisms(50, 3), _prisms(50, 4), _prisms(50, 5)
+    exact = PrismBounds().intersection_inside(a, b, c).reshape(-1)
+    both, gap = a.intersect(b)
+    assert bool((exact[both.is_empty().reshape(-1)] <= TOL).all())    # empty meet: inside c
+    published = PrismBounds(conjunction="nonempty").intersection_inside(a, b, c).reshape(-1)
+    assert bool((published[(gap > 0).reshape(-1)] > 0).all())          # the gap is the cost
+    # the old reading of the intersection: absolute half-widths
+    old, _ = a.intersect(b, signed=False)
+    assert bool((old.offset >= 0).all())
+
+
+def test_slot_measure_reads_inactive_slots_as_empty_and_the_published_reading_on_request():
+    from mowl.representation.library.structural_measure import SlotMeasure
+    from mowl.representation.library.structural_regions import SlotBoxes
+    centre = th.zeros(2, 2, 2)
+    w = th.tensor([[[1.0, 1.0], [-1.0, -1.0]], [[-1.0, -1.0], [-1.0, -1.0]]])
+    active = th.tensor([[True, False], [True, True]])
+    a = SlotBoxes.make(centre, w, active)             # row 0: one box; row 1: all empty
+    big = SlotBoxes.make(centre, th.tensor([[[2.0, 2.0], [-1.0, -1.0]]] * 2), th.ones(2, 2).bool())
+    nothing = SlotBoxes.make(centre, -th.ones(2, 2, 2), th.zeros(2, 2).bool())
+    exact, structural = SlotMeasure(), SlotMeasure(reading="structural")
+    assert exact.exact_intersection and not structural.exact_intersection
+    # sampled: the points of the regions
+    x = (th.rand(4000, 2, generator=_gen(6)) * 2 - 1) * 3
+    assert a.contains(x)[0].any() and not a.contains(x)[1].any() and not nothing.contains(x).any()
+    # the relation holds in the sampled points exactly where the cost is zero
+    assert bool((exact.inside(a, big) <= TOL).all())            # row 1 is empty: inside
+    assert float(exact.inside(big, nothing)[0]) > 0             # not inside the empty class
+    assert float(exact.inside(a, nothing)[0]) > 0
+    assert float(exact.inside(a, nothing)[1]) == 0              # the empty class is inside
+    assert bool((exact.meets(a, nothing) > 0).all())
+    assert bool((exact.apart(a, nothing) <= TOL).all())
+    assert bool((exact.empty(nothing) <= TOL).all()) and float(exact.empty(a)[0]) > 0
+    # the published structural reading: a target without a counting slot makes the
+    # inclusion vacuous (zero cost), which is not the set inclusion
+    assert float(structural.inside(a, nothing)[0]) == 0

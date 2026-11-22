@@ -96,15 +96,21 @@ class RegionMeasure:
 
     def inside(self, a, b, margin=0.0):
         """Zero iff ``a`` lies inside ``b`` (with ``margin`` room)."""
-        raise NotImplementedError
+        raise ConstructorUnavailable(
+            f"{type(self).__name__} has no reading of 'inside' (it does not compare regions "
+            f"in that way).")
 
     def meets(self, a, b, margin=0.0):
         """Zero iff ``a`` and ``b`` overlap (by at least ``margin``)."""
-        raise NotImplementedError
+        raise ConstructorUnavailable(
+            f"{type(self).__name__} has no reading of 'meets' (it does not compare regions "
+            f"in that way).")
 
     def apart(self, a, b, margin=0.0):
         """Zero iff ``a`` and ``b`` are disjoint (at least ``margin`` apart)."""
-        raise NotImplementedError
+        raise ConstructorUnavailable(
+            f"{type(self).__name__} has no reading of 'apart' (it does not compare regions "
+            f"in that way).")
 
     def meets_all(self, a, b, margin=0.0):
         """``meets`` for the negative reading "overlap": every part of a region made of
@@ -113,11 +119,15 @@ class RegionMeasure:
 
     def empty(self, a, margin=0.0):
         """Zero iff ``a`` is empty (has no extent, with ``margin`` room)."""
-        raise NotImplementedError
+        raise ConstructorUnavailable(
+            f"{type(self).__name__} has no reading of 'empty' (it does not compare regions "
+            f"in that way).")
 
     def nonempty(self, a, epsilon=0.0):
         """Zero iff ``a`` has extent at least ``epsilon``."""
-        raise NotImplementedError
+        raise ConstructorUnavailable(
+            f"{type(self).__name__} has no reading of 'nonempty' (it does not compare regions "
+            f"in that way).")
 
     def member(self, a, b, margin=0.0):
         """Zero iff the individual ``a`` is a member of ``b``. Default: ``inside``; a
@@ -221,6 +231,8 @@ class CentreDistance(RegionMeasure):
     :param radius_term: With ``"published"``: whether the conjunction loss has its fourth
         term, the radius of :math:`C` against the smaller radius, which the authors' code
         leaves out.
+
+    Part (vocabulary value): ``centre distance``. Used by: ``elem``, ``emelpp``, ``emelvar``.
     """
 
     accepts = (Ball,)
@@ -322,6 +334,9 @@ class Bounds(RegionMeasure):
         above. ``"formula"``: the formulas are applied to its negative half-widths as they
         are (the ELK-Em module: its fixed bottom class and the top class are then not
         apart by the margin).
+
+    Part (vocabulary value): ``bounds per coordinate``. Used by: ``box2el``, ``elbe``,
+    ``multiboxel``, ``multielbe``, ``query2box``.
     """
 
     accepts = (Box,)

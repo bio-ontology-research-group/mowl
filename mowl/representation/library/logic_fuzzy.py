@@ -353,6 +353,8 @@ class HalfAxisClasses(_FuzzyClasses, Classes):
     :param constant_logit: Magnitude of the logits of ``owl:Thing`` (``+``) and
         ``owl:Nothing`` (``-``); it has to be at least the margin, and a large value scales
         every loss that involves them. Default ``1.0``; the earlier mOWL module used ``1e4``.
+
+    Part (vocabulary value): ``axis-aligned cone``. Used by: ``alcone``.
     """
 
     region = LogitSet
@@ -516,7 +518,10 @@ class _FuzzyRelations(Relations):
 
 
 class TruthMatrix(_FuzzyRelations):
-    """The truth values of the pairs, ``sigmoid(logit)`` (DF-ALC)."""
+    """The truth values of the pairs, ``sigmoid(logit)`` (DF-ALC).
+
+    Part (vocabulary value): ``fuzzy relation``. Used by: ``dfalc``.
+    """
 
     def matrix(self, ids):
         n = self.domain
@@ -530,6 +535,8 @@ class IncidenceMatrices(_FuzzyRelations):
 
     :param size: Number of relations; :param dim: :math:`n` (the matrix is
         ``2 n x 2 n``).
+
+    Part (vocabulary value): ``fuzzy relation``. Used by: ``alcone``.
     """
 
     def __init__(self, size=None, dim=None, vectors=None, init_std=0.5):
@@ -643,6 +650,8 @@ class MeanViolation(_FuzzyMeasure):
     ``a`` is a member of :math:`C` with the cost :math:`1 - C(a)` (a fuzzy assertion of
     degree 1). A positive margin makes the inclusion strict; for degrees in ``[0, 1]`` it
     makes disjointness unsatisfiable, so use margin 0 or a negative margin (slack).
+
+    Part (vocabulary value): ``fuzzy implication``. Used by: ``dfalc``.
     """
 
     part = "fuzzy implication"
@@ -677,6 +686,8 @@ class ConflictMeasure(_FuzzyMeasure):
     :param stabiliser: ``"clamp"`` (default): :math:`-\\log \\max(1 - m, 10^{-10})`, never
         negative. ``"add"``: :math:`-\\log(1 - m + 10^{-10})` as in the FALCON code (down to
         :math:`-10^{-10}` for a perfect fit).
+
+    Part (vocabulary value): ``fuzzy implication``. Used by: ``falcon``.
     """
 
     part = "fuzzy implication"
@@ -730,6 +741,8 @@ class ConeMeasure(_FuzzyMeasure):
     a coordinate (Def. 2 of the paper).
 
     :param empty_margin: Margin used by :meth:`empty` (which gets none).
+
+    Part (vocabulary value): ``fuzzy implication``. Used by: ``alcone``.
     """
 
     part = "fuzzy implication"
@@ -877,14 +890,26 @@ def _truth_table(size, embed_dim, family="godel"):
     return TruthTableClasses(size, embed_dim, family=family)
 
 
-register_class_model("fuzzy set")(_truth_table)
-register_class_model("fuzzy set (product)")(lambda s, d: _truth_table(s, d, "product"))
-register_class_model("fuzzy set (lukasiewicz)")(
-    lambda s, d: _truth_table(s, d, "lukasiewicz"))
-register_class_model("half-axis cone")(
-    lambda s, d: HalfAxisClasses(s, d))
-register_relation_model("fuzzy relation")(lambda s, d: TruthMatrix(s, d))
-register_relation_model("incidence matrix")(lambda s, d: IncidenceMatrices(s, d))
+def _fuzzy_set(family, operators, used_by):
+    """A registered fuzzy-set class model with the operators of ``family``."""
+    def factory(size, embed_dim):
+        return _truth_table(size, embed_dim, family)
+    factory.part = ClassModel.FUZZY_SET.value
+    factory.__doc__ = (
+        f"A class is a fuzzy set over a finite domain (a truth degree per element) with the "
+        f"{operators} operators (:class:`TruthTableClasses`, ``family={family!r}``); "
+        f"part: ``fuzzy set``. Used by: {used_by}.")
+    return factory
+
+
+register_class_model("fuzzy set")(_fuzzy_set("godel", "Goedel", "``dfalc`` (Goedel is its "
+                                             "default family)"))
+register_class_model("fuzzy set (product)")(_fuzzy_set("product", "product", "``falcon``"))
+register_class_model("fuzzy set (lukasiewicz)")(_fuzzy_set("lukasiewicz", "Lukasiewicz",
+                                                           "no method (a combination)"))
+register_class_model("half-axis cone")(HalfAxisClasses)
+register_relation_model("fuzzy relation")(TruthMatrix)
+register_relation_model("incidence matrix")(IncidenceMatrices)
 
 
 # =========================================================================================

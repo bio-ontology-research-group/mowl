@@ -126,7 +126,10 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     Published options set here: :math:`\exists r.C \sqsubseteq D` only has to overlap
     :math:`D` (``gci3="overlap"``), the loss of :math:`C \sqsubseteq \bot` is the support
     sum of the triangle plus ``margin`` and ignores the box (``PrismBounds(empty="triangle")``),
-    and the negative loss of :math:`C \sqsubseteq \exists r.D` is the exact overlap test of
+    :math:`A \sqcap B \sqsubseteq C` also needs the intersection to be non-empty
+    (``PrismBounds(conjunction="nonempty")``, with the absolute half-widths of the box part:
+    ``Prism.intersect(signed=False)``), and the negative loss of
+    :math:`C \sqsubseteq \exists r.D` is the exact overlap test of
     the translated triangle and the triangle of :math:`D` (``gci2_negative_triangle="overlap"``,
     the measure's ``meets``); ``"inradius"`` is the earlier test on the inscribed discs
     (``meets_shrunk``), which is not an overlap test: a small triangle in a corner of a large
@@ -167,6 +170,7 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         individuals = Points(nb_individuals, embed_dim, family="prism")
     elif t is not None and getattr(t, "ind_embed", None) is not None:
         individuals = Points(family="prism", centres=t.ind_embed)
+    measure = PrismBounds(empty="triangle", conjunction="nonempty", empty_prisms="formula")
     options = dict(
         gci3="overlap",
         gci2_negative="overlap" if gci2_negative_triangle == "overlap" else "shrunk",
@@ -175,7 +179,7 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         from mowl.representation.library.structural_methods import StructuralGeometry
         from mowl.representation.library.structural_reading import StructuralReading
         geometry = StructuralGeometry(
-            classes, relations, PrismBounds(empty="triangle"),
+            classes, relations, measure,
             StructuralReading(margin, empty_regions="abs", gci3_bot="filler", **options),
             individuals=individuals, existence_weight=existence_weight, size_reg=size_reg,
             size_tables=lambda m: [m._slot_classes.inradii.weight,
@@ -187,7 +191,8 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
                                            getattr(t, "top_idx", None))
         return geometry
     objective = ShapeObjective(margin, **options)
-    return ComposedGeometry(classes, relations, PrismBounds(empty="triangle"), objective,
+    return ComposedGeometry(classes, relations,
+                            measure, objective,
                             individuals=individuals,
                             neg_capable_gcis={"gci2", "object_property_assertion"})
 

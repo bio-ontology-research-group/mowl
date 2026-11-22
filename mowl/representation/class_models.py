@@ -99,6 +99,9 @@ class BallClasses(Classes):
     :param radius: How the radius is obtained from the stored parameter: ``"abs"``
         (default), ``"relu"`` (:math:`\\max(0, r)`, the EmEL++ Keras code) or ``"softplus"``
         (the training code of RegD's ``Elem``).
+
+    Part (vocabulary value): ``ball``. Used by: ``elem``, ``emelpp``, ``emelvar``,
+    ``regd_elem``.
     """
 
     region = Ball
@@ -127,6 +130,8 @@ class BoxClasses(Classes):
     through their absolute value).
 
     :param centres, offsets: Existing tables to use instead of new ones.
+
+    Part (vocabulary value): ``box``. Used by: ``elbe``, ``regd``, ``transbox``.
     """
 
     region = Box

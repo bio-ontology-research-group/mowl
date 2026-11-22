@@ -70,9 +70,28 @@ class SlotBoxes(UnionOfBoxes):
         """The structural module's :class:`~mowl.nn.el.structural.Regions`."""
         return Regions(cen=self.centre, w=self.w, active=self.active)
 
+    @property
+    def signed_offset(self):
+        """``(B, K, d)``: the signed half-widths, with every inactive slot read as an empty
+        box (half-width -1). The region is the union of these boxes: a box of negative
+        half-width in some coordinate is empty."""
+        return th.where(self.active.unsqueeze(-1), self.w, -th.ones_like(self.w))
+
+    def contains(self, points):
+        """Whether the points ``(P, d)`` lie in an active slot of non-negative half-width
+        in every coordinate, ``(B, P)``. (The inherited union test would read the inactive
+        slots, whose ``offset`` is ``abs(w)``, as boxes.)"""
+        batch, k, d = self.centre.shape
+        boxes = Box(self.centre.reshape(-1, d), self.signed_offset.reshape(-1, d))
+        return boxes.contains(points).reshape(batch, k, -1).any(dim=1)
+
     def is_empty(self):
         """No active slot has a non-negative half-width in every coordinate."""
         return ~(self.active & (self.w >= 0).all(dim=-1)).any(dim=-1)
+
+    def scale(self, factor):
+        w = self.w * factor.abs().unsqueeze(1)
+        return SlotBoxes.make(self.centre * factor.unsqueeze(1), w, self.active, self.bump)
 
     def translate(self, vector):
         centre = th.where(self.active.unsqueeze(-1), self.centre + vector.unsqueeze(1),
@@ -141,10 +160,14 @@ class SlotClasses(UnionClasses):
 
     :param components: ``k``.
     :param max_components: ``K``, default :math:`k^2` (as the module).
+
+    Part (vocabulary value): ``union of boxes``. Used by: ``multiboxel(reading=structural)``.
     """
 
     region = SlotBoxes
     part = "union of boxes"
+    #: The intersection of two classes keeps every pair of slots (it raises where the
+    #: pairs do not fit into ``max_components`` slots), so the conjunction is exact.
     exact_conjunction = True
 
     def __init__(self, size=None, embed_dim=None, components=2, max_components=None,
@@ -200,7 +223,8 @@ class DefinedClasses(Classes):
         self.base = base
         self.region = base.region
         self.part = base.part
-        self.exact_conjunction = True
+        # the definition is the exact intersection; it is as exact as the base's intersection
+        self.exact_conjunction = bool(getattr(base, "exact_conjunction", False))
         self.table = table
         n = len(base)
         if table is not None:

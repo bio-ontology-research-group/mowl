@@ -30,6 +30,8 @@ SEMANTICS = {
     "box with fixed classes": "boxes; fixed classes are the empty box and a very large box",
     "box with bump": "boxes (the bump is read by the relation model only)",
     "union of boxes": "finite unions of boxes",
+    "union of boxes with slots": "finite unions of boxes in K slots: an inactive slot or a slot "
+                                 "of negative half-width is the empty box",
     "unit box": "boxes in the unit cube",
     "soft box": "Gumbel boxes: a distribution of boxes, compared by expected volumes",
     "point": "points (a class of one element)",
@@ -110,12 +112,6 @@ EXACT = sorted(n for n in set(R.CLASS_MODELS) - NOT_POINT_SETS
 
 @pytest.mark.parametrize("name", EXACT)
 def test_a_conjunction_declared_exact_is_exact(name):
-    if name == "triangle x box":
-        pytest.xfail("Prism.intersect takes |upper - lower| / 2 as the half-width of the box "
-                     "part, so the intersection of two prisms whose boxes are apart is a "
-                     "non-empty box (the gap says so); the prism measures read |offset| "
-                     "everywhere, so making it signed needs PrismBounds to read empty boxes "
-                     "(left to the owners of the prism parts).")
     model = _model(name)
     a, b = model(th.arange(6)), model(th.arange(6, 12))
     both, gap = a.intersect(b)

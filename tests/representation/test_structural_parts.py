@@ -88,7 +88,22 @@ class TestStructuralMultiBoxEL(TestCase):
             if forms is not None and form not in forms:
                 continue
             for neg in negs:
-                old = getattr(module, form + "_loss")(rows, neg=neg).reshape(-1, 1)
+                try:
+                    old = getattr(module, form + "_loss")(rows, neg=neg).reshape(-1, 1)
+                except NotImplementedError:
+                    # a module refuses a negative loss it does not have: so does the geometry
+                    with self.assertRaises(NotImplementedError):
+                        getattr(geometry, form + "_loss")(rows, neg=neg)
+                    # and both agree on the earlier reading (the positive loss)
+                    module.strict_negatives = geometry.strict_negatives = False
+                    try:
+                        old = getattr(module, form + "_loss")(rows, neg=neg).reshape(-1, 1)
+                        new = getattr(geometry, form + "_loss")(rows, neg=neg)
+                    finally:
+                        module.strict_negatives = geometry.strict_negatives = True
+                    self.assertTrue(th.allclose(old, new, atol=1e-6), (form, neg, old, new))
+                    compared += float(old.abs().sum() > 0)
+                    continue
                 new = getattr(geometry, form + "_loss")(rows, neg=neg)
                 self.assertEqual(new.shape, old.shape, (form, neg))
                 self.assertTrue(th.allclose(old, new, atol=1e-6), (form, neg, old, new))
@@ -190,6 +205,9 @@ class TestStructuralMultiBoxEL(TestCase):
 
     def test_built_from_parts_with_fresh_tables(self):
         module = structural_module()
+        # the builder gives the module's earlier reading (a positive loss for a negative of a
+        # form without one); the module itself refuses
+        module.strict_negatives = False
         geometry = METHODS["multiboxel"](N, R, I, embed_dim=D, margin=0.05, n_components=2,
                                          reading="structural", max_components=4,
                                          existence_weight=1.0, size_reg=1e-2,
@@ -379,6 +397,61 @@ class TestStructuralComposedEL(TestCase):
         regime.on_epoch_end(0, {})
         self.assertEqual(regime.history[-1][0], 0)
         self.assertGreater(regime.history[-1][1], 0)
+
+    def test_tables_come_from_the_dataset_without_a_subclass(self):
+        dataset = FamilyDataset()
+        th.manual_seed(0)
+        model = ComposedEL(dataset, method="multiboxel", reading="structural", embed_dim=4,
+                           margin=0.02, n_components=2, max_components=4)
+        geometry = model.module
+        self.assertIsInstance(geometry, StructuralGeometry)
+        self.assertFalse(geometry.wants_structural_tables)
+        table, targets, top = build_structural_tables(model, k=2, max_components=4)
+        self.assertTrue(th.equal(geometry.definition_table.def_mask, table.def_mask))
+        self.assertTrue(th.equal(geometry.existence_targets.classes, targets.classes))
+        self.assertEqual(geometry.top_idx, top)
+        self.assertIn("ExistencePenalty", {type(r).__name__ for r in geometry.regularizers})
+        self.assertIsInstance(geometry.class_model, DefinedClasses)
+        # building the module again keeps the tables
+        model.init_module()
+        self.assertIsInstance(model.module.class_model, DefinedClasses)
+        # a geometry that does not read the structure is left alone
+        plain = ComposedEL(dataset, method="multiboxel", embed_dim=4, n_components=2)
+        self.assertFalse(getattr(plain.module, "wants_structural_tables", False))
+        self.assertFalse(hasattr(plain, "reseed_components"))
+        with self.assertRaises(TypeError):
+            IdleComponentReseeding(every=1).attach(plain)
+
+    def test_the_reseeding_regime_without_a_subclass(self):
+        dataset = FamilyDataset()
+        th.manual_seed(0)
+        model = ComposedEL(dataset, method="multiboxel", reading="structural", embed_dim=4,
+                           margin=0.02, n_components=2, max_components=4)
+        with th.no_grad():
+            model.module.class_model.base.offsets.weight.fill_(1e-5)
+        regime = IdleComponentReseeding(every=1, reset_optimizer=False)
+        regime.attach(model)
+        regime.on_epoch_end(0, {})
+        self.assertGreater(regime.history[-1][1], 0)
+        self.assertEqual(model.module.last_reseed_count, regime.history[-1][1])
+
+    def test_a_prism_has_no_components_to_reseed(self):
+        model = ComposedEL(FamilyDataset(), method="prism", reading="structural", embed_dim=6,
+                           margin=0.02)
+        self.assertFalse(model.module.wants_structural_tables)    # tables came from the data
+        self.assertFalse(hasattr(model, "reseed_components"))
+        with self.assertRaises(TypeError):
+            IdleComponentReseeding(every=1).attach(model)
+
+    def test_trains_with_the_regime(self):
+        dataset = FamilyDataset()
+        th.manual_seed(0)
+        model = ComposedEL(dataset, method="multiboxel", reading="structural", embed_dim=4,
+                           margin=0.02, learning_rate=0.05, n_components=2, max_components=4)
+        regime = IdleComponentReseeding(every=1)
+        model.training_regime = regime
+        model.train(epochs=3, validate_every=10)
+        self.assertEqual([e for e, _ in regime.history], [0, 1, 2])
 
     def test_reseeding_moves_what_the_module_moves(self):
         module = structural_module(reseed_mode="dead")

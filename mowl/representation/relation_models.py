@@ -130,6 +130,10 @@ class Translation(Relations):
         sides. ``"row"``: the term :math:`|1 - \\cos(a, b)|` of EmEL++ (Mondal et al. 2021,
         Eq. 8-9) is added per row; ``"batch"``: the version of the authors' Keras code,
         normalised over the batch, one number added to every row.
+
+    Part (vocabulary value): ``translation``. Used by: ``eike``, ``elbe``, ``elem``, ``emelpp``,
+    ``multielbe``, ``octagon``, ``prism``, ``prism(reading=structural)``, ``regd``,
+    ``regd_elem``.
     """
 
     part = "translation"
