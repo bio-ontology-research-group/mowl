@@ -15,7 +15,7 @@ import mowl.geometric.membership as membership_mod
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
-from mowl.nn.el.canonical_mixture import (
+from mowl.baselines.nn.el.canonical_mixture import (
     MAX_SUPPORT_ENTRIES,
     CanonicalMixtureModule,
 )

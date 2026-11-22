@@ -1,4 +1,4 @@
-"""Tests for CanonicalMixtureModule in mowl.nn.el.canonical_mixture."""
+"""Internals of the direct CanonicalMixtureModule (mowl.baselines.nn.el.canonical_mixture), kept for comparison."""
 from __future__ import annotations
 
 import math
@@ -23,7 +23,7 @@ from org.semanticweb.owlapi.model import OWLOntology
 from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.membership import MembershipStructure
 from mowl.geometric.normal_forms import BOTTOM
-from mowl.nn.el.canonical_mixture import CanonicalMixtureModule
+from mowl.baselines.nn.el.canonical_mixture import CanonicalMixtureModule
 from mowl.owlapi import OWLAPIAdapter
 from tests.geometric.helpers import IND, NS, _dicts_for_abox_kb
 
@@ -1125,7 +1125,7 @@ def test_yeast_scale_training_step_peak_memory() -> None:
     # so prior tests' high-water mark does not mask the delta of ru_maxrss.
     repo_root = str(Path(__file__).resolve().parents[2])
     cpu_cmd = (
-        "from tests.nn.test_canonical_mixture import _run_yeast_scale_cpu_step_rss_delta; "
+        "from tests.baselines.test_canonical_mixture_direct import _run_yeast_scale_cpu_step_rss_delta; "
         "print(_run_yeast_scale_cpu_step_rss_delta())"
     )
     proc = subprocess.run(
