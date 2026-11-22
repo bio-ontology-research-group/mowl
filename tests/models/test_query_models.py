@@ -230,7 +230,7 @@ def test_collapse_of_conE_is_reported():
 
 
 def test_geometry_options_reach_the_geometry_from_the_model():
-    ds = _dataset()
+    ds = _dataset()[0]
     m = AConE(ds, embed_dim=8, signed_negation=True, aperture="clip")
     assert m.module.signed_negation is True and m.module.aperture_mode == "clip"
     m = AConE(ds, embed_dim=8)
