@@ -101,10 +101,18 @@ def _text_losses(model):
     from mowl.training.loop import RegimeTrained
     if isinstance(model, RegimeTrained):
         triplets = model.training_triplets()[:24]
-        return {"loss": model.batch_loss({"triplet": model.triplet_rows(triplets)})}
+        rows = model.triplet_rows(triplets)
+        loss = model.batch_loss({"triplet": rows})
+        # the terms of the step: the hierarchy loss of the triplets and the weighted terms
+        # of the sampled logical losses that the regime recorded
+        out = {"loss": loss, "hierarchy": model.score_rows("triplet", rows).mean().detach()}
+        regime = model.training_regime
+        for part in getattr(regime, "regimes", (regime,)):
+            out.update({k: th.tensor(v) for k, v in getattr(part, "terms", {}).items()})
+        return out
     triplets, negatives = _batch(model)
-    loss, _ = model.batch_loss(triplets, negatives)
-    return {"loss": loss}
+    loss, parts = model.batch_loss(triplets, negatives)
+    return {"loss": loss, **{k: th.tensor(v) for k, v in parts.items()}}
 
 
 def _text_scores(model):
