@@ -96,6 +96,34 @@ def _pair(key, cls_name, module, variant=None, **options):
                 parameters=_parameters)
 
 
+def _released_dataset():
+    """The family dataset with a few released training queries (1p and 2i structures), so that
+    both the path and the other group of the released sampler are drawn from."""
+    import copy
+    from mowl.datasets.builtin.query_sets import ReleasedTrainingQueries
+    from tests.baselines.harness import default_dataset
+    stand_in = copy.copy(default_dataset())
+    one = ("e", ("r",))
+
+    def training_queries(entity_id, relation_id):
+        return {
+            "1p": ReleasedTrainingQueries(one, [[0, 1], [1, 1], [2, 1]], [0, 1, 3, 7],
+                                          [1, 2, 3, 4, 5, 6, 0]),
+            "2i": ReleasedTrainingQueries((one, one), [[0, 1, 2, 1], [1, 1, 3, 1]], [0, 2, 3],
+                                          [4, 5, 6])}
+    stand_in.training_queries = training_queries
+    return stand_in
+
+
+def _released_losses(model):
+    """The weighted loss of one path batch and one other batch of the released sampler: the
+    combination through ``model.loss`` of the batch of its sampler, the direct model through
+    its own ``released_loss`` of its own batch."""
+    if hasattr(model, "_released_batch") and not hasattr(model, "sampler"):
+        return {g: model.released_loss(model._released_batch(g)) for g in ("path", "other")}
+    return {g: model.loss(model.sampler.batch(g)) for g in ("path", "other")}
+
+
 PAIRS = [
     _pair("query2box", "Query2Box", "query2box"),
     _pair("query2box", "Query2Box", "query2box", "softplus-clamped", activation="softplus",
@@ -110,5 +138,10 @@ PAIRS = [
     _pair("acone", "AConE", "acone", "authors-readings", signed_negation=True, aperture="wrap"),
     _pair("acone", "AConE", "acone", "clipped", aperture="clip"),
 ]
+PAIRS.append(Pair(
+    key="query2box/released", new=_new("Query2Box", "query2box", queries="released"),
+    old=_old("Query2Box", "query2box", queries="released"), copy=_copy("query2box"),
+    scores=_scores, losses=_released_losses, train=_train, parameters=_parameters,
+    dataset=_released_dataset))
 
 EXEMPT = {}

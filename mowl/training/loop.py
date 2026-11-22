@@ -85,6 +85,16 @@ class TrainingLoop:
 
     loop_style = "steps"
 
+    #: ``True``: the epoch hooks of a regime (``on_epoch_start``, ``additional_loss``,
+    #: ``on_epoch_end``, ``should_stop``) are called once per *epoch* with the epoch index,
+    #: although every step is one optimisation step (the query models: an epoch is a number of
+    #: updates, and a learning-rate schedule counts epochs). ``False``: they see steps.
+    epoch_hooks = False
+
+    def epoch_steps(self, regime):
+        """Optimisation steps of one epoch: what the batching regime declares (one without)."""
+        return steps_per_epoch(regime)
+
     #: ``validate_every`` of :meth:`run_training` when the call gives none (``None``: no
     #: validation).
     default_validate_every = None
@@ -204,7 +214,7 @@ class TrainingLoop:
         if regime is not None:
             datasets = regime.training_datasets(datasets)
         self.log_training_datasets(datasets)
-        per_epoch = steps_per_epoch(regime) if by_steps else 1
+        per_epoch = self.epoch_steps(regime) if by_steps else 1
         total = epochs * per_epoch
         self.training_steps = total
         optimizer = NotImplemented
@@ -217,9 +227,12 @@ class TrainingLoop:
         for step in (range(total) if by_steps else trange(total)):
             self.module.train()
             self.on_epoch_start(step, total)
-            if regime is not None:
-                regime.on_epoch_start(step, total)
-            loss = self._step_loss(datasets, step)
+            if regime is not None and (not self.epoch_hooks or step % per_epoch == 0):
+                if self.epoch_hooks:
+                    regime.on_epoch_start(step // per_epoch, epochs)
+                else:
+                    regime.on_epoch_start(step, total)
+            loss = self._step_loss(datasets, step // per_epoch if self.epoch_hooks else step)
             value = 0.0
             if regime is not None and regime.skips_empty_steps and not loss.requires_grad:
                 pass
@@ -237,8 +250,10 @@ class TrainingLoop:
                 history.append(running / max(counted, 1))
                 running, counted = 0.0, 0
                 self.record_epoch(epoch, history[-1])
-            if regime is not None:
+            if regime is not None and not self.epoch_hooks:
                 regime.on_epoch_end(step, {"total": value})
+            elif regime is not None and ends_epoch:
+                regime.on_epoch_end(epoch, {"total": history[-1]})
             if ends_epoch:
                 if verbose:
                     print(f"Epoch {epoch + 1}: loss {history[-1]:.6f}")
@@ -247,7 +262,9 @@ class TrainingLoop:
                 if not by_steps and (epoch + 1) % validate_every == 0 and not (
                         regime is not None and regime.replaces_validation):
                     self.validate_epoch(epoch, history[-1])
-            if regime is not None and regime.should_stop(step):
+            if regime is not None and (
+                    regime.should_stop(epoch) if self.epoch_hooks and ends_epoch
+                    else (not self.epoch_hooks and regime.should_stop(step))):
                 break
         if regime is not None:
             regime.on_train_end()

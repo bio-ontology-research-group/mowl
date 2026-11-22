@@ -30,6 +30,8 @@ from mowl.nn.query.expression import (Vocabulary, class_expression_to_query, fro
 from mowl.representation.library.query_objective import QueryObjective
 from mowl.representation.methods import METHODS
 
+from mowl.training.loop import RegimeTrained
+from mowl.training.query_sampler import UpdateStream
 from mowl.training.regime import SCHEDULE_HOOKS  # noqa: E402
 
 
@@ -46,7 +48,7 @@ def _check_options(method, builder, given):
                         f"{sorted(set(parameters) - skipped)}.")
 
 
-class QueryEmbeddingModel(Model):
+class QueryEmbeddingModel(RegimeTrained, Model):
     """A query embedding model of an ontology: :class:`~mowl.models.Query2Box`,
     :class:`~mowl.models.BetaE`, :class:`~mowl.models.ConE` and :class:`~mowl.models.AConE`
     are this class with a method named, and any other combination of parts is this class
@@ -261,59 +263,59 @@ class QueryEmbeddingModel(Model):
 
     released_loss = loss
 
-    def get_optimizer(self):
-        """The optimiser of :meth:`train` (Adam with ``learning_rate``)."""
-        return th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
+    # -- training: the shared loop (mowl.training.loop) ------------------------------------
+    #: An epoch is ``steps_per_epoch`` steps of the sampler; the epoch hooks of a regime
+    #: (schedules, stopping) count epochs.
+    epoch_hooks = True
 
-    def train(self, epochs=10, steps_per_epoch=None, **kwargs):
-        """Train with Adam. One epoch is ``steps_per_epoch`` steps (default: the value of
-        the constructor), each on ``batch_size`` queries (sampled afresh or drawn from the
-        released training queries, see the class). The mean loss per epoch is appended to
-        :attr:`loss_history`. If ``model_filepath`` was given the parameters are saved.
+    def epoch_steps(self, regime):
+        """Optimisation steps of one epoch: ``steps_per_epoch`` steps of the sampler, each
+        with its updates."""
+        return self.steps_per_epoch * self.sampler.updates_per_step
 
+    @property
+    def training_datasets(self):
+        """The data of the loop: the stream of updates of the query sampler (``"query"``).
         :raises ValueError: If no query structure can be sampled from the graph (an
-            ontology without subclass or role axioms).
-        """
-        steps_per_epoch = self.steps_per_epoch if steps_per_epoch is None else steps_per_epoch
+            ontology without subclass or role axioms)."""
         self.sampler.check()
-        regime = self.training_regime
-        opt = NotImplemented if regime is None else regime.optimizer()
-        if opt is NotImplemented:
-            opt = self.get_optimizer()
-        self.module.train()
-        for epoch in range(epochs):
-            if regime is not None:
-                regime.on_epoch_start(epoch, epochs)
-            total, updates = 0.0, 0
-            for _ in range(steps_per_epoch):
-                for batch in self.sampler.updates():
-                    loss = self.loss(batch)
-                    if regime is not None:
-                        extra = regime.additional_loss(epoch)
-                        if extra is not None:
-                            loss = loss + extra
-                    opt.zero_grad()
-                    loss.backward()
-                    opt.step()
-                    total += float(loss)
-                    updates += 1
-            self.loss_history.append(total / updates)
-            if regime is not None:
-                regime.on_epoch_end(epoch, {"total": self.loss_history[-1]})
-                if regime.should_stop(epoch):
-                    break
-        if regime is not None:
-            regime.on_train_end()
-        self.module.eval()
-        if abs(self.loss_history[-1] - math.log(2)) < 0.02 and epochs > 0:
+        return {"query": UpdateStream(self.sampler)}
+
+    def score_rows(self, form, rows, neg=False):
+        """The cost of an update (``rows``: the batch of the sampler): the objective of the
+        model (:attr:`objective`) on the module. Negatives are inside the batch."""
+        return self.loss(rows)
+
+    def combine_scores(self, form, pos_scores, neg_scores=None):
+        return pos_scores
+
+    def record_epoch(self, epoch, mean_loss):
+        self.loss_history.append(mean_loss)
+
+    def finish_training(self):
+        if self.loss_history and abs(self.loss_history[-1] - math.log(2)) < 0.02:
             import warnings
             warnings.warn(
                 f"{type(self).__name__}: the loss is log 2, i.e. every score is 0 and the "
                 f"model has collapsed (for ConE-type geometries the tanh of the projection "
                 f"output saturates: all queries get the same cone). Lower learning_rate.",
                 UserWarning, stacklevel=2)
-        if self._model_filepath is not None:
-            th.save(self.module.state_dict(), self._model_filepath)
+
+    def train(self, epochs=10, steps_per_epoch=None, **kwargs):
+        """Train with Adam (or the optimiser of the regime) through the shared loop. One
+        epoch is ``steps_per_epoch`` steps (default: the value of the constructor), each on
+        ``batch_size`` queries (sampled afresh or drawn from the released training queries,
+        see the class). The mean loss per epoch is appended to :attr:`loss_history`. If
+        ``model_filepath`` was given the parameters are saved.
+
+        :raises ValueError: If no query structure can be sampled from the graph.
+        """
+        kept = self.steps_per_epoch
+        self.steps_per_epoch = kept if steps_per_epoch is None else int(steps_per_epoch)
+        try:
+            return self.run_training(epochs, **kwargs)
+        finally:
+            self.steps_per_epoch = kept
 
     # -- queries ------------------------------------------------------------------------
     def query(self, class_expression):
