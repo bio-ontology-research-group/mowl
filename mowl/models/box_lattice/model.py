@@ -38,13 +38,16 @@ class BoxLattice(TaxonomyEmbeddingModel):
         setting).
     :param disjoint_weight: Weight of the disjoint-pair penalty (default :math:`-\log\varepsilon`),
         see :class:`~mowl.nn.el.box_lattice.BoxLatticeModule`.
+    :param zero_at_inclusion: The positive loss of an included pair is exactly 0 (default)
+        instead of :math:`-\log(1 + \varepsilon)`; see
+        :class:`~mowl.nn.el.box_lattice.BoxLatticeModule`.
     :param neg_columns: Columns to corrupt for negatives (default: both).
     """
 
     def __init__(self, dataset, embed_dim=50, learning_rate=0.001, min_delta=0.01,
                  unary_weight=0.0, max_regularization=0.0, eps=1e-6,
                  freeze_delta_negatives=True, disjoint_weight=None, batch_size=4096, model_filepath=None,
-                 device="cpu", neg_sampling_gcis=None, neg_columns=(0, 1)):
+                 device="cpu", neg_sampling_gcis=None, neg_columns=(0, 1), zero_at_inclusion=True):
         super().__init__(dataset, embed_dim, batch_size, model_filepath=model_filepath,
                          device=device, learning_rate=learning_rate,
                          neg_sampling_gcis=neg_sampling_gcis, neg_columns=neg_columns)
@@ -54,6 +57,7 @@ class BoxLattice(TaxonomyEmbeddingModel):
         self.eps = eps
         self.freeze_delta_negatives = freeze_delta_negatives
         self.disjoint_weight = disjoint_weight
+        self.zero_at_inclusion = zero_at_inclusion
         self._unary_target = None
         self.init_module()
 
@@ -62,7 +66,8 @@ class BoxLattice(TaxonomyEmbeddingModel):
             len(self.class_index_dict), embed_dim=self.embed_dim, min_delta=self.min_delta,
             max_regularization=self.max_regularization, eps=self.eps,
             freeze_delta_negatives=self.freeze_delta_negatives,
-            disjoint_weight=self.disjoint_weight).to(self.device)
+            disjoint_weight=self.disjoint_weight,
+            zero_at_inclusion=self.zero_at_inclusion).to(self.device)
 
     def additional_training_loss(self, epoch):
         if not self.unary_weight:

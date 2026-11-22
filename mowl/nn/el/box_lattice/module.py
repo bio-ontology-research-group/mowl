@@ -114,7 +114,7 @@ class BoxLatticeModule(UnitCubeBoxModule):
       cannot blow up for tiny boxes), because the paper's log of the bound is
       not defined when the bound is non-positive (the sign of the log term printed in
       Section 4.3 is also inconsistent with its own text, so we did not copy it). The loss
-      is zero up to :math:`-\log(1 + \varepsilon)` exactly when :math:`C \subseteq D`.
+      is zero exactly when :math:`C \subseteq D` (``zero_at_inclusion``).
     - negative loss :math:`-\log(1 - \min(\max(p, 0), 1 - \varepsilon))`, the cross entropy
       with target :math:`P(D \mid C) = 0`, computed with the delta of the boxes detached
       (``freeze_delta_negatives``).
@@ -126,12 +126,19 @@ class BoxLatticeModule(UnitCubeBoxModule):
         :math:`-\log\varepsilon`, so that the penalty of a disjoint stated pair has the same
         scale as the log term; with weight 1 its gradient is much smaller than that of the
         negatives and such a pair can stay disjoint.
+    :param zero_at_inclusion: ``True`` (default): the log term is
+        :math:`-\log((\min(\max(p, 0), 1) + \varepsilon) / (1 + \varepsilon))`, which is
+        exactly 0 for an included pair (:math:`p = 1`) and never negative. ``False``: the
+        log term of earlier versions, :math:`-\log(\max(p, 0) + \varepsilon)`, which is
+        :math:`-\log(1 + \varepsilon) < 0` for an included pair. The two differ by the
+        constant :math:`\log(1 + \varepsilon)`, so gradients are the same.
     """
 
     def __init__(self, nb_ont_classes, embed_dim=50, min_delta=0.01, init_side=(0.3, 0.9),
                  max_regularization=0.0, eps=1e-6, freeze_delta_negatives=True,
-                 disjoint_weight=None):
+                 disjoint_weight=None, zero_at_inclusion=True):
         super().__init__(nb_ont_classes, embed_dim, min_delta, init_side, max_regularization)
+        self.zero_at_inclusion = zero_at_inclusion
         self.eps = float(eps)
         self.disjoint_weight = -math.log(self.eps) if disjoint_weight is None \
             else float(disjoint_weight)
@@ -158,7 +165,11 @@ class BoxLatticeModule(UnitCubeBoxModule):
 
     def positive_loss(self, sub, sup):
         p, gap = self._estimate(sub, sup)
-        return (-th.log(p.clamp(min=0.0) + self.eps) + self.disjoint_weight * gap).float()
+        if self.zero_at_inclusion:
+            log_term = -th.log((p.clamp(min=0.0, max=1.0) + self.eps) / (1.0 + self.eps))
+        else:
+            log_term = -th.log(p.clamp(min=0.0) + self.eps)
+        return (log_term + self.disjoint_weight * gap).float()
 
     def negative_loss(self, sub, sup):
         p = self.conditional(sub, sup, detach_delta=self.freeze_delta_negatives)
