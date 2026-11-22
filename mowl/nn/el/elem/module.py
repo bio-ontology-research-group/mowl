@@ -47,6 +47,15 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
     def _dele_neg(self, neg):
         return neg and self.all_negative_losses
 
+    #: ``"slack"`` describes the inclusion losses (``gci0``, ``gci1``, ``gci2``, ``gci3``): a
+    #: positive margin relaxes them. The bottom losses are not of that form: ``gci1_bot`` is
+    #: :math:`\max(0, r_C + r_D - \lVert c - d\rVert + \gamma)` (zero iff the balls are
+    #: disjoint by a gap of at least :math:`\gamma`), so the same margin tightens it. This is
+    #: the form of the published loss and of the authors' code (Kulmanov et al. 2019), kept
+    #: as it is; training regimes that set the margin by meaning (``SlackMargin``,
+    #: ``StrictMargin``) set the inclusion sense only. The negative loss of DELE
+    #: (``all_negative_losses=True``) is the matching ``max(0, \lVert c - d\rVert - r_C - r_D -
+    #: \gamma)``.
     margin_semantics = "slack"
 
     #: Form of the negative loss of :math:`C \not\sqsubseteq \exists R.D`: ``"hinge"``
