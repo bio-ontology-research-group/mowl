@@ -5,6 +5,7 @@ import inspect
 import torch as th
 
 from mowl.base_models.alcmodel import EmbeddingALCModel
+from mowl.evaluation.validation import reached_parameters
 from mowl.representation import methods as M
 from mowl.representation.regions import ConstructorUnavailable
 from mowl.representation.swap import NO_PART, build_method, current_parts
@@ -330,22 +331,18 @@ class ComposedALC(EmbeddingALCModel):
             raise ConstructorUnavailable(reason)
         self._load_datasets()
         weighting = self.weighting
-        state = th.random.get_rng_state()
-        try:
+
+        def loss():
             context = self._entity_context(self.sample_anonymous_entities())
             first_rows = {axiom: [(data.tensors[0][:1],)]
                           for axiom, data in self._training_datasets.items() if len(data)}
-            total = weighting.loss(self.module, first_rows, context, self.device)
-            if total is not None and total.requires_grad:
-                total.backward()
-            reached = {id(p) for p in self.module.parameters() if p.grad is not None}
-            for p in self.module.parameters():
-                p.grad = None
+            return weighting.loss(self.module, first_rows, context, self.device)
+
+        def score():
             self.axiom_costs("gci0", th.zeros(1, 2, dtype=th.long))
             self.__dict__.pop("_axiom_scoring_context", None)
-        finally:
-            th.random.set_rng_state(state)
-        return reached
+
+        return reached_parameters(self.module, loss, after=score)
 
     @property
     def as_geometry(self):

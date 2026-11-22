@@ -21,6 +21,7 @@ import torch as th
 from mowl.base_models.model import Model
 from mowl.evaluation.score_ranking import rank_by_score
 from mowl.evaluation.subspace_violation import discretised_violations
+from mowl.evaluation.validation import summed_mean_cost
 from mowl.nn.alc.e2r.module import AXIOM_KINDS
 from mowl.owlapi import ClassExpressionType, Imports
 from mowl.representation import methods as M
@@ -341,9 +342,8 @@ class SubspaceAxiomModel(Model):
     def axiom_loss(self):
         """Sum over axiom kinds of the mean axiom loss (eqs. (4)-(9)) on all rows, without
         structure terms, regularisers and negatives (float)."""
-        with th.no_grad():
-            return float(sum(self.module(self._kind(k), r).mean()
-                             for k, r in self.training_rows.items()))
+        return summed_mean_cost(self.module, {self._kind(k): r
+                                              for k, r in self.training_rows.items()})
 
     # -- reasoning and scoring: the geometry computes, the model reads the expressions ----
     def _expression_tree(self, cexpr):

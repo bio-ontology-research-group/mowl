@@ -354,18 +354,3 @@ for _key in ("grounded", "grounded/translation", "grounded/all-forms",
         "TEMPORARY(r5-grounded): GroundedEL computes in mowl/nn/el/grounded/{queries,module,"
         "sampling}.py and mowl/models/grounded/{model,common,objective}.py; r5-grounded owns "
         "them this round. Remove this entry at merge.")
-for _key in ("dfalc", "dfalc/rule"):
-    TEMPORARY_EXPECTED_FAILURES[_key] = (
-        "TEMPORARY(r6-alc): hierarchical_loss in mowl/nn/alc/dfalc/module.py and the objective "
-        "and loop in mowl/base_models/alcmodel.py / mowl/models/composed/alc.py; r6-alc owns "
-        "them this round. Remove this entry at merge.")
-for _key in ("falcon", "falcon/minmax", "falcon/self-pairs", "falcon/learned-nothing",
-             "alcone", "alcone/old-constants"):
-    TEMPORARY_EXPECTED_FAILURES[_key] = (
-        "TEMPORARY(r6-alc): the FALCON objective in mowl/base_models/alcmodel.py "
-        "(EmbeddingALCModel) and the private loop in mowl/models/composed/alc.py; r6-alc owns "
-        "them this round. Remove this entry at merge.")
-TEMPORARY_EXPECTED_FAILURES["e2r"] = (
-    "TEMPORARY(r6-base): E2R-only scoring in mowl/models/composed/subspace.py "
-    "(SubspaceAxiomModel.concept_indicator / axiom_loss); r6-base owns it this round. Remove "
-    "this entry at merge.")
