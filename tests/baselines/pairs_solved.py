@@ -4,9 +4,13 @@
 BoxLitE is solved by a conic solver; the optional package ``cvxpy`` is not always installed.
 Its comparison therefore sets the embedding of the direct implementation by hand (the same
 random box interpretation in both), compares the losses, the scores and the verdicts on the
-TBox, and runs the solver run only if the solver is installed (a skip with a reason
-otherwise).
+TBox, and runs the solver run whenever cvxpy can be imported (a skip with a reason
+otherwise; with the environment variable ``MOWL_REQUIRE_CVXPY=1``, as set by the CI job that
+installs cvxpy, a missing solver is a failure, so the job cannot pass without the
+comparison). The solved boxes of both sides are compared as well as the scores.
 """
+import os
+
 import numpy as np
 import pytest
 import torch as th
@@ -150,6 +154,8 @@ def _boxlite_train(model, epochs):
     """The solver run: needs cvxpy."""
     from mowl.representation.library.solved_solver import CvxpySolver
     if not CvxpySolver.available():
+        if os.environ.get("MOWL_REQUIRE_CVXPY") == "1":
+            pytest.fail("MOWL_REQUIRE_CVXPY=1 but cvxpy is not installed")
         pytest.skip("the optional package cvxpy is not installed, so the BoxLitE programme "
                     "cannot be solved; install it to compare the solved embeddings")
     model.train(solver="CLARABEL" if "CLARABEL" in _installed() else None)
@@ -160,11 +166,19 @@ def _installed():
     return set(cvxpy.installed_solvers())
 
 
+def _boxlite_parameters(model):
+    """The boxes and positions of the embedding (solved ones after training)."""
+    e = model.module.snapshot() if _is_new(model) else model.embedding
+    return {name: th.as_tensor(np.asarray(getattr(e, name)), dtype=th.float64)
+            for name in e._ARRAYS}
+
+
 def _boxlite_pair(variant):
     key = "boxlite" if variant == "paper" else "boxlite/reference"
     return Pair(key=key, new=_boxlite_new(variant), old=_boxlite_old(variant),
                 copy=_boxlite_copy, scores=_boxlite_scores, losses=_boxlite_losses,
-                train=_boxlite_train, dataset=lambda: None, epochs=1)
+                train=_boxlite_train, parameters=_boxlite_parameters, dataset=lambda: None,
+                epochs=1)
 
 
 # ---------------------------------------------------------------------------------------

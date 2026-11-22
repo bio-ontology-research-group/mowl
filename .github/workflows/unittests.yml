@@ -19,6 +19,7 @@ jobs:
             env-file: envs/environment_3_11.yml
           - python-version: "3.12"
             env-file: envs/environment_3_12.yml
+            cvxpy: true
           - python-version: "3.13"
             env-file: envs/environment_3_13.yml
 
@@ -54,3 +55,12 @@ jobs:
 
       - name: Test with pytest
         run: pytest -m "not slow" -p no:faulthandler
+
+      - name: BoxLitE solver comparison (needs cvxpy)
+        # The one job that installs the optional solver package, so that the training run
+        # of BoxLitE is compared with the direct implementation (a missing cvxpy is a
+        # failure here, not a skip).
+        if: matrix.cvxpy
+        run: |
+          python -m pip install cvxpy
+          MOWL_REQUIRE_CVXPY=1 pytest tests/baselines/test_equivalence.py -k boxlite -p no:faulthandler

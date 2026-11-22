@@ -1,3 +1,6 @@
+# The ``*PPI`` and ``*GDA`` classes (``mowl/models/<method>/examples/``) are examples: a method
+# with the evaluation of one dataset family built in. They are not methods and have no card; each
+# is a subclass of a class that has one (checked in ``tests/catalog/test_catalog.py``).
 from mowl.models.elembeddings.model import ELEmbeddings
 from mowl.models.elembeddings.examples.model_ppi import ELEmPPI
 from mowl.models.elembeddings.examples.model_gda import ELEmGDA

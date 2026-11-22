@@ -4,12 +4,47 @@ from unittest import TestCase
 
 import torch as th
 
-from mowl.models import ComposedEL
+from mowl.models import AConE, BetaE, ComposedEL, ConE, Query2Box
 from mowl.representation import (BoxClasses, ComposedGeometry, Bounds, Objective,
                                  ConstructorUnavailable)
 from mowl.representation.library.query_methods import QueryClasses, query2box
 from mowl.representation.library.boxrel_relations import TranslationBoxes
 from tests.datasetFactory import FamilyDataset
+
+
+class TestQueryModelsTrain(TestCase):
+    """The classes users get (``mowl.models``): the loss of a fixed batch of queries falls
+    under Adam steps on it (the check that the bridge test makes for the direct classes)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = FamilyDataset()
+
+    def descend(self, cls, steps=60, lr=3e-3):
+        th.manual_seed(0)
+        model = cls(self.dataset, embed_dim=8, batch_size=24, negatives=4, seed=0)
+        groups = model.sampler.batch()
+        optimiser = th.optim.Adam(model.module.parameters(), lr=lr)
+        first = float(model.loss(groups))
+        for _ in range(steps):
+            optimiser.zero_grad()
+            loss = model.loss(groups)
+            loss.backward()
+            optimiser.step()
+        return first, float(model.loss(groups))
+
+    def test_the_loss_of_a_fixed_batch_falls_for_every_query_method(self):
+        for cls in (Query2Box, BetaE, ConE, AConE):
+            first, last = self.descend(cls)
+            self.assertLess(last, first, cls.__name__)
+
+    def test_the_loss_history_of_a_training_run_is_recorded_and_falls(self):
+        th.manual_seed(0)
+        model = Query2Box(self.dataset, embed_dim=8, batch_size=24, negatives=4, seed=0,
+                          learning_rate=1e-2, steps_per_epoch=10)
+        model.train(epochs=6)
+        self.assertEqual(len(model.loss_history), 6)
+        self.assertLess(model.loss_history[-1], model.loss_history[0])
 
 
 def _loss(model):

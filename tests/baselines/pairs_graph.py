@@ -45,7 +45,9 @@ def axiom_scores(model):
 
 
 def triple_loss(model):
-    """The loss of the whole training graph against one draw of corrupted triples."""
+    """The loss of the whole training graph against one draw of corrupted triples, and the
+    scores (higher: more plausible) of the positive and of the corrupted triples, each
+    compared on its own."""
     from mowl.models.graph_kge.triple_model import TripleGraphModel
     factory = model.triples_factory
     positives = model.training_triples() if isinstance(model, TripleGraphModel) \
@@ -58,6 +60,7 @@ def triple_loss(model):
         neg = module.triple_cost(flat[:, 0], flat[:, 1], flat[:, 2]).reshape(
             *negatives.shape[:-1])
         loss = module.loss(-pos, -neg)
+        pos, neg = -pos, -neg                # costs to scores
     else:
         from pykeen.sampling import BasicNegativeSampler
         kge = model.kge_method
@@ -70,7 +73,8 @@ def triple_loss(model):
         loss = kge.loss.process_slcwa_scores(
             positive_scores=pos, negative_scores=neg, label_smoothing=0.0, batch_filter=None,
             num_entities=factory.num_entities)
-    return {"loss": loss}
+    return {"loss": loss, "positive scores": pos.reshape(-1),
+            "negative scores": neg.reshape(-1)}
 
 
 @contextlib.contextmanager
