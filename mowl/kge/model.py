@@ -1,7 +1,6 @@
 # PyKEEN imports
 from pykeen.triples.triples_factory import TriplesFactory
 from pykeen.models import ERModel
-from pykeen.training import SLCWATrainingLoop
 
 import tempfile
 import torch as th
@@ -137,14 +136,30 @@ Please train the model first.")
         self.model.eval()
 
     def train(self):
-        optimizer = self.optimizer(params=self.model.get_grad_params(), lr=self.lr)
+        """Train the PyKEEN model on the triples for :attr:`epochs` epochs and save it.
 
-        training_loop = SLCWATrainingLoop(model=self.model, triples_factory=self.triples_factory,
-                                          optimizer=optimizer)
-
-        _ = training_loop.train(triples_factory=self.triples_factory, num_epochs=self.epochs,
-                                batch_size=self.batch_size)
-
+        Training is that of every model of triples in mOWL
+        (:func:`mowl.training.triples.train_on_triples`: the regime
+        :class:`~mowl.training.triples.TripleBatches` in the shared loop of
+        :mod:`mowl.training.loop`): shuffled batches of ``batch_size`` triples, one corrupted
+        triple per positive (head or tail), the loss of the PyKEEN model, its regularisation
+        term, and its constraints after every step (``post_parameter_update``). The parameters
+        are drawn again first, as PyKEEN's own training loop does."""
+        from types import SimpleNamespace
+        from mowl.representation.library.other_graph import PyKEENGeometry
+        from mowl.training.triples import positive_triples, train_on_triples
+        factory = self.triples_factory
+        inverse = bool(getattr(factory, "create_inverse_triples", False))
+        view = SimpleNamespace(
+            kge_method=self.model, triples_factory=factory,
+            class_index_dict=self.class_index_dict, individual_index_dict={},
+            object_property_index_dict=self.object_property_index_dict,
+            SUBCLASS_RELATION="http://subclassof", create_inverse_triples=inverse,
+            num_negs_per_pos=None, projector=None)
+        geometry = PyKEENGeometry(view)
+        train_on_triples(geometry, positive_triples(factory.mapped_triples, inverse),
+                         factory.num_entities, factory.num_relations, self.optimizer, self.lr,
+                         self.batch_size, self.epochs, device=self.device, reinitialise=True)
         th.save(self.model.state_dict(), self.model_filepath)
         self._trained = True
 

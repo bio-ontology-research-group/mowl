@@ -6,9 +6,11 @@ what that takes, independent of any method:
 
 * :func:`positive_triples`: the training triples in model ids, with the inverse triples when
   the model has them;
-* :func:`train_on_triples`: the loop (shuffled batches, corrupted triples from the sampler of
-  the geometry or the regime, loss of the geometry or the regime, regularisation, the
-  constraints applied after every step, every hook of :class:`~mowl.training.TrainingRegime`);
+* :class:`TripleBatches`: the training regime of a triple geometry (shuffled batches,
+  corrupted triples from the sampler of the geometry or the regime, loss of the geometry or
+  the regime, regularisation); :func:`train_on_triples` trains a geometry with it in the
+  shared loop of :mod:`mowl.training.loop` (the constraints applied after every step, every
+  hook of :class:`~mowl.training.TrainingRegime`);
 * :func:`carry_rows`: copy the table rows of the keys two graphs share, when the ontology
   changes;
 * :func:`extend_embeddings`: table rows for the nodes of a new graph, from earlier embeddings
@@ -22,10 +24,11 @@ import copy
 import numpy as np
 import torch as th
 
-from mowl.training.regime import TrainingRegime
+from mowl.training.loop import Rows, TrainingLoop
+from mowl.training.regime import ComposedRegime, TrainingRegime
 
-__all__ = ["positive_triples", "train_on_triples", "carry_rows", "extend_embeddings",
-           "forward_id", "HitsEarlyStopping"]
+__all__ = ["positive_triples", "train_on_triples", "TripleBatches", "carry_rows",
+           "extend_embeddings", "forward_id", "HitsEarlyStopping"]
 
 
 def positive_triples(mapped_triples, inverse=False):
@@ -50,15 +53,132 @@ def _regularization(module, regime):
     return term
 
 
+class TripleBatches(TrainingRegime):
+    """The training regime of a geometry of triples: every epoch visits the triples
+    (form ``"triple"``) in random batches; the corrupted triples of a batch (the sampler of
+    the geometry, or the ``negatives`` of the regimes in front of this one) are scored with
+    the same triple cost, the objective of the geometry (or the regimes' ``loss``) turns the
+    scores into the loss, plus the regularisation of the geometry (or the regimes'
+    ``regularization``). It computes the loss of every step
+    (:meth:`~mowl.training.TrainingRegime.step_loss`) of the shared loop.
+
+    :param module: A geometry with ``triple_cost``, ``sampler``, ``loss``,
+        ``regularization_loss``
+        (:class:`~mowl.representation.library.other_graph.TripleGeometry`).
+    :param num_entities, num_relations: Sizes of the graph (for the sampler).
+    :param batch_size: Triples per batch.
+    :param drop_last: Drop the last, smaller batch.
+    :param device: Device of the batches.
+    """
+
+    key = "triple-batches"
+
+    def __init__(self, module, num_entities, num_relations, batch_size, drop_last=False,
+                 device="cpu"):
+        super().__init__()
+        self.module, self.num_entities, self.num_relations = module, num_entities, \
+            num_relations
+        self.batch_size, self.drop_last, self.device = batch_size, drop_last, device
+        #: The regimes in front of this one (their negatives, loss and regularisation).
+        self.outer = None
+        self._batches, self._iterator = None, None
+
+    def _sample(self, positives):
+        outer = self.outer
+        negatives = NotImplemented
+        if outer is not None:
+            negatives = outer.negatives("triple", positives)
+        if negatives is NotImplemented:
+            negatives = self.module.sampler(positives, self.num_entities, self.num_relations)
+        if outer is not None:
+            negatives = outer.filter_negatives("triple", positives, negatives)
+        return negatives
+
+    def training_datasets(self, datasets):
+        from mowl.representation.library.other_graph import _TripleBatches
+        self._batches = th.utils.data.DataLoader(
+            dataset=_TripleBatches(datasets["triple"][:], self.batch_size, self.drop_last,
+                                   self._sample),
+            batch_size=None, batch_sampler=None)
+        if len(self._batches) == 0:
+            raise ValueError("There is no training batch: the graph has no triples.")
+        return datasets
+
+    @property
+    def steps_per_epoch(self):
+        return len(self._batches)
+
+    def on_epoch_start(self, epoch, epochs):
+        self._iterator = iter(self._batches)
+
+    def _regularization(self):
+        term = self.module.regularization_loss()
+        if self.outer is not None:
+            out = self.outer.regularization(term)
+            if out is not NotImplemented:
+                term = out
+        return term
+
+    def step_loss(self, step):
+        module, outer = self.module, self.outer
+        positives, negatives = next(self._iterator)
+        positives = positives.to(self.device)
+        negatives = negatives.to(self.device)
+        shape = negatives.shape[:-1]
+        positive_scores = -module.triple_cost(positives[:, 0], positives[:, 1], positives[:, 2])
+        flat = negatives.reshape(-1, 3)
+        negative_scores = -module.triple_cost(flat[:, 0], flat[:, 1],
+                                              flat[:, 2]).reshape(*shape)
+        loss = NotImplemented
+        if outer is not None:
+            loss = outer.loss("triple", positive_scores, negative_scores)
+        if loss is NotImplemented:
+            loss = module.loss(positive_scores, negative_scores)
+        loss = loss + self._regularization()
+        if not th.isfinite(loss):
+            raise FloatingPointError("The loss is not finite.")
+        return loss
+
+
+class _TripleRun(TrainingLoop):
+    """The shared loop configured for a geometry of triples: an epoch is a pass over the
+    batches of :class:`TripleBatches`, the epoch hooks of the regimes see epochs and get the
+    sum of the losses of the epoch, the constraints of the geometry are applied after every
+    step (``module.project()``, then the regimes' ``after_step``); nothing is saved and the
+    module stays in training mode."""
+
+    epoch_hooks = True
+    epoch_loss = "sum"
+    eval_after_training = False
+
+    def __init__(self, module, triples, regime, batches, optimizer, lr, device):
+        self.module, self.device = module, device
+        self.training_regime, self.batches = regime, batches
+        self._triples, self._optimizer, self._lr = triples, optimizer, lr
+
+    def epoch_steps(self, regime):
+        return self.batches.steps_per_epoch
+
+    @property
+    def training_datasets(self):
+        return {"triple": Rows(self._triples)}
+
+    def get_optimizer(self):
+        return self._optimizer(params=self.module.trainable_parameters(), lr=self._lr)
+
+    def step_regularization_loss(self):
+        return 0
+
+    def after_optimizer_step(self):
+        self.module.project()
+        self.training_regime.after_step()
+
+
 def train_on_triples(module, triples, num_entities, num_relations, optimizer, lr, batch_size,
                      epochs, regime=None, device="cpu", drop_last=False, reinitialise=False):
-    """Train a geometry on the triples of a graph.
-
-    Every epoch visits the triples in random batches; the corrupted triples of a batch (the
-    sampler of the geometry, or the regime's ``negatives``) are scored with the same triple
-    cost, the objective of the geometry (or the regime's ``loss``) turns the scores into the
-    loss, plus the regularisation of the geometry; after the optimiser step the geometry's
-    constraints are applied (``module.project()``).
+    """Train a geometry on the triples of a graph: :class:`TripleBatches` (with ``regime``
+    in front of it) in the shared loop (:meth:`~mowl.training.loop.TrainingLoop.run_training`);
+    after the optimiser step the geometry's constraints are applied (``module.project()``).
 
     :param module: A geometry with ``triple_cost``, ``sampler``, ``loss``,
         ``regularization_loss``, ``project``, ``trainable_parameters`` and ``reset_parameters``
@@ -67,67 +187,16 @@ def train_on_triples(module, triples, num_entities, num_relations, optimizer, lr
     :param optimizer: A class of :mod:`torch.optim` (the regime's ``optimizer`` replaces it).
     :param regime: A :class:`~mowl.training.TrainingRegime` or ``None``.
     :param reinitialise: Draw the parameters again before training.
+    :return: The sum of the losses of every epoch.
     """
-    from mowl.representation.library.other_graph import _TripleBatches
     if reinitialise:
         module.reset_parameters()
-    chosen = NotImplemented
-    if regime is not None:
-        chosen = regime.optimizer()
-    if chosen is NotImplemented:
-        chosen = optimizer(params=module.trainable_parameters(), lr=lr)
-    optimizer = chosen
-
-    def sample(positives):
-        negatives = NotImplemented
-        if regime is not None:
-            negatives = regime.negatives("triple", positives)
-        if negatives is NotImplemented:
-            negatives = module.sampler(positives, num_entities, num_relations)
-        if regime is not None:
-            negatives = regime.filter_negatives("triple", positives, negatives)
-        return negatives
-
-    batches = th.utils.data.DataLoader(
-        dataset=_TripleBatches(triples, batch_size, drop_last, sample),
-        batch_size=None, batch_sampler=None)
-    if len(batches) == 0:
-        raise ValueError("There is no training batch: the graph has no triples.")
-    for epoch in range(1, 1 + epochs):
-        module.train()
-        if regime is not None:
-            regime.on_epoch_start(epoch - 1, epochs)
-        total = 0.0
-        for positives, negatives in batches:
-            optimizer.zero_grad(set_to_none=True)
-            positives = positives.to(device)
-            negatives = negatives.to(device)
-            shape = negatives.shape[:-1]
-            positive_scores = -module.triple_cost(positives[:, 0], positives[:, 1],
-                                                  positives[:, 2])
-            flat = negatives.reshape(-1, 3)
-            negative_scores = -module.triple_cost(flat[:, 0], flat[:, 1],
-                                                  flat[:, 2]).reshape(*shape)
-            loss = NotImplemented
-            if regime is not None:
-                loss = regime.loss("triple", positive_scores, negative_scores)
-            if loss is NotImplemented:
-                loss = module.loss(positive_scores, negative_scores)
-            loss = loss + _regularization(module, regime)
-            if not th.isfinite(loss):
-                raise FloatingPointError("The loss is not finite.")
-            loss.backward()
-            optimizer.step()
-            module.project()
-            if regime is not None:
-                regime.after_step()
-            total += loss.item()
-        if regime is not None:
-            regime.on_epoch_end(epoch - 1, {"total": total})
-            if regime.should_stop(epoch - 1):
-                break
-    if regime is not None:
-        regime.on_train_end()
+    batches = TripleBatches(module, num_entities, num_relations, batch_size, drop_last, device)
+    batches.outer = regime
+    run_regime = batches if regime is None else ComposedRegime(regime, batches)
+    run_regime.model = getattr(regime, "model", None)
+    return _TripleRun(module, triples, run_regime, batches, optimizer, lr,
+                      device).run_training(epochs)
 
 
 def carry_rows(old, new, before, after, doubled):

@@ -14,6 +14,7 @@ from mowl.representation.library.membership_structure import MEMBERSHIP_CODE_TAG
 from mowl.nn.el.canonical_mixture import CanonicalMixtureModule
 from mowl.representation.construction import READINGS, SOURCES
 from mowl.representation.library.mixture_training import IndividualBatches
+from mowl.training.regime import SCHEDULE_HOOKS
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +68,11 @@ class CanonicalMixture(EmbeddingELModel):
         :data:`~mowl.representation.construction.READINGS`, or instances).
     """
 
-    #: :meth:`train` is the loop of the training regime ``self.training``; it consults no hook
-    #: of a :class:`~mowl.training.TrainingRegime`.
-    training_hooks = frozenset()
+    #: :meth:`train` runs the shared loop with the batching regime ``self.training`` (it
+    #: computes the steps); a regime assigned to ``training_regime`` is put in front of it
+    #: and may schedule the optimiser, act at the start and end of an epoch, stop, add a loss
+    #: term, project after a step or replace the step itself.
+    training_hooks = SCHEDULE_HOOKS | frozenset({"after_step", "step_loss"})
 
     def __init__(
         self,

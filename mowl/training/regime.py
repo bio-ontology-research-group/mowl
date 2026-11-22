@@ -29,7 +29,7 @@ method paper (like a particular negative sampling scheme).
 #: consult is refused when it is assigned, instead of being ignored.
 HOOKS = ("training_datasets", "negatives", "filter_negatives", "loss", "optimizer",
          "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss",
-         "regularization", "after_step")
+         "regularization", "after_step", "step_loss")
 
 #: Hooks that concern the optimiser and the course of training only, not the data, the
 #: negatives or the loss. A loop with an objective of its own can still consult these.
@@ -55,6 +55,24 @@ def check_compatible(regime, model):
             f"{sorted(missing)}, which the training loop of {name} does not consult "
             f"(it consults {supported if supported else 'no regime hooks'}). "
             f"The regime would be ignored.")
+
+
+class Accumulated:
+    """What :meth:`TrainingRegime.step_loss` returns when the regime has computed the
+    gradient of a step itself, in as many backward passes as it needed (chunk by chunk, so
+    that a step never holds more than a bounded number of rows): the training loop then
+    only takes the optimiser step.
+
+    :param value: The loss of the step as a float (what the loop records).
+    :param terms: Optional ``{name: float}`` of the terms of the step, handed to
+        ``on_epoch_end`` (``"total"`` is added if missing).
+    """
+
+    __slots__ = ("value", "terms")
+
+    def __init__(self, value, terms=None):
+        self.value = float(value)
+        self.terms = terms
 
 
 class TrainingRegime:
@@ -192,6 +210,27 @@ class TrainingRegime:
         """Return the optimiser, or ``NotImplemented`` to use the model's."""
         return NotImplemented
 
+    def step_loss(self, step):
+        """The loss of one optimisation step, when the regime computes it instead of the
+        training loop (which otherwise scores the rows of every form, with negatives and the
+        combination of :meth:`loss`). Called after ``on_epoch_start`` and with the gradients
+        of the optimiser zeroed. Return
+
+        * a scalar tensor: the loop adds the additional losses, calls ``backward`` and takes
+          the optimiser step;
+        * a mapping of terms with a ``"total"`` tensor: as a tensor, and the terms (as floats)
+          are what ``on_epoch_end`` receives (a method whose step has several named terms);
+        * :class:`Accumulated`: the regime has back-propagated the step itself, in chunks
+          (:func:`mowl.training.loop.accumulate_backward`; memory bounded by the chunk); the loop adds the
+          gradient of the additional losses and takes the optimiser step;
+        * ``None``: nothing to supervise in this step: no optimiser step, and the step does
+          not count in the mean loss of the epoch;
+        * ``NotImplemented`` (default): the loop's own step.
+
+        :param step: The step (or, for a loop whose epoch hooks see epochs, the epoch).
+        """
+        return NotImplemented
+
 
 class ComposedRegime(TrainingRegime):
     """Combination of several regimes.
@@ -255,6 +294,9 @@ class ComposedRegime(TrainingRegime):
 
     def optimizer(self):
         return self._first("optimizer")
+
+    def step_loss(self, step):
+        return self._first("step_loss", step)
 
     @property
     def score_negatives_like_positives(self):
