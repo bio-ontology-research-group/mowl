@@ -553,6 +553,13 @@ class GradientFit:
     :param steps: Number of steps.
     :param lr: Learning rate.
     :param penalty: Weight of the squared violations.
+
+    It is an inner solver, not a training loop: it minimises the program it is given (the
+    same contract as the convex solver it replaces, ``fit(program, tables)`` returning a
+    :class:`SolveResult`), with a fixed number of steps of its own, and the model that holds
+    the program calls it once per solve. A training regime has nothing to hook into here
+    (no epochs, data batches, negatives or validation), so it does not run in the shared
+    training loop (:mod:`mowl.training.loop`).
     """
 
     key = "gradient-fit"

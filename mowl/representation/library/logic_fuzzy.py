@@ -1164,8 +1164,8 @@ class FuzzyObjective(ExpressionReading, Objective):
             return None
         return (f"{type(self).__name__}(abox='sampled'), the reading of assertions against "
                 "corrupted ones (FALCON), needs " + ", ".join(missing) + " (the semantic "
-                f"reading, objective_options={{'abox': 'semantic'}}, reads assertions as "
-                f"memberships and needs none of these)")
+                "reading, objective_options={'abox': 'semantic'}, reads assertions as "
+                "memberships and needs none of these)")
 
     def attach_assertions(self, heads, tails, n_individuals):
         """The role assertions of the training ontology, so that the corrupted assertions of

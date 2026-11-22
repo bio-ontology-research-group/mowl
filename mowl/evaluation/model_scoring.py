@@ -145,6 +145,11 @@ class PairClassifierHead:
     :param learning_rate: Adam step size.
     :param batch_size: Pairs per step.
     :param seed: Seed of initialisation, negatives and shuffling.
+
+    Its fit is an inner fit of the evaluation, not a training loop of the model: it trains
+    the head's own network on vectors that stay fixed (the model is not changed), the way an
+    evaluation fits a probe, so it does not run in the shared training loop
+    (:mod:`mowl.training.loop`) and takes no training regime.
     """
 
     key = "pair-classifier-head"
