@@ -57,4 +57,3 @@ class ELEmbeddings(EmbeddingELModel):
             margin=self.margin,
             gci1_radius_term=self.gci1_radius_term
         ).to(self.device)
-

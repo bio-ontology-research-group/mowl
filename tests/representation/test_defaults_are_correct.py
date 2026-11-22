@@ -184,7 +184,7 @@ PUBLISHED = [
 # never in this list. Per part ("kind:name" or the class name), plus GENERIC for all.
 GENERIC = {"size", "embed_dim", "dim", "centres", "offsets", "radii", "table", "tables", "seed",
            "bumps", "vectors", "base", "host", "init_std", "init_scale", "init_max_norm",
-           "init_radius", "init", "scale_init", "eps", "epsilon", "margin", "bound", "generator"}
+           "init_radius", "radii_init", "init", "scale_init", "eps", "epsilon", "margin", "bound", "generator"}
 NEUTRAL = {
     "class:ball": set(),
     "class:box with fixed classes": {"bot_mask", "top_mask", "big"},

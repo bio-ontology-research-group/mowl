@@ -263,7 +263,6 @@ def test_regd_with_another_host_measure_and_relation_model(dataset):
 
 def test_regd_with_a_regulariser_and_the_plain_bounds_measure(dataset):
     model = build("regd", dataset)
-    g = model.module
     with_parts(model, regularizers=(NormPenalty(parameters=("class_embed",), target=1.0),))
     trains_and_evaluates(model)
     model = build("regd", dataset)
@@ -275,7 +274,6 @@ def test_regd_with_a_regulariser_and_the_plain_bounds_measure(dataset):
 
 def test_regd_elem_with_another_objective_and_measure(dataset):
     model = build("regd_elem", dataset)
-    g = model.module
     objective = RegDObjective(Objective.elem(0.05), regd_forms=("gci0", "gci2", "gci3"),
                               flip_gci2=True)
     with_parts(model, objective=objective)

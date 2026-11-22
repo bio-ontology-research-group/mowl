@@ -59,9 +59,9 @@ class EmELPPModule(ELEmModule):
         self._build(nb_ont_classes, nb_rels, nb_inds, embed_dim, margin)
 
     def _build(self, nb_ont_classes, nb_rels, nb_inds, embed_dim, margin, **options):
-        geometry = METHODS[self._method](nb_ont_classes, nb_rels, nb_inds or 0,
-                                        embed_dim=embed_dim, margin=margin,
-                                        gci0_shift=self._subclass_shift, **options)
+        geometry = METHODS[self._method](
+            nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=margin,
+            gci0_shift=self._subclass_shift, **options)
         self._assemble(geometry, nb_ont_classes, nb_rels, nb_inds or 0, embed_dim, 1)
 
     def _rad(self, idx):

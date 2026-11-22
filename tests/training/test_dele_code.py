@@ -7,7 +7,7 @@ from unittest import TestCase
 import numpy as np
 import torch as th
 
-import mowl.nn.el.elem.losses as EL
+import mowl.nn.el.elem.dele_losses as EL
 import mowl.nn.el.elbe.losses as LB
 from mowl.models import BoxSquaredEL, ELBE, ELEmbeddings
 from mowl.nn import ELBEModule, ELEmModule

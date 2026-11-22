@@ -21,7 +21,7 @@ class TestRegularizers(TestCase):
         self.holder.class_embed = self.table
 
     def test_norm_penalty_is_elem_regularisation(self):
-        from mowl.nn.el.elem.losses import regularization_loss
+        from mowl.baselines.nn.el.elem.losses import regularization_loss
         expected = regularization_loss(self.table, None, 1)
         self.assertTrue(th.allclose(NormPenalty().penalty(self.holder), expected))
 
