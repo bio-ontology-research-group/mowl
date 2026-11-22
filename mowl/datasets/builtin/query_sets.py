@@ -399,7 +399,7 @@ class QueryAnsweringDataset(PathDataset):
 
         :param split: ``"valid"`` or ``"test"``.
         :param entity_id: ``f(iri) -> id`` of a class entity in the model that is evaluated
-            (e.g. :meth:`mowl.models.query.model.QueryEmbeddingModel.entity_id`).
+            (e.g. :meth:`mowl.models.composed.query.QueryEmbeddingModel.entity_id`).
         :param relation_id: ``f(role_iri, inverse) -> id`` of a relation of the model.
         :param names: Structure names to return (default: all the split has, except the
             De Morgan forms ``2u-DM`` and ``up-DM``).

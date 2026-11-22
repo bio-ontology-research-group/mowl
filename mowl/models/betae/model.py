@@ -1,5 +1,5 @@
 """BetaE (Ren, Leskovec, NeurIPS 2020) on ontologies."""
-from mowl.models.query.model import QueryEmbeddingModel
+from mowl.models.composed.query import QueryEmbeddingModel
 from mowl.representation.library.query_methods import BetaEGeometry
 
 
@@ -12,7 +12,7 @@ class BetaE(QueryEmbeddingModel):
     extra keyword arguments (``intersection="mean"``, ``distance="reverse kl"``,
     ``negation=None``, ``hidden``, ``layers``).
 
-    See :class:`~mowl.models.query.model.QueryEmbeddingModel` for the graph, the training
+    See :class:`~mowl.models.composed.query.QueryEmbeddingModel` for the graph, the training
     and the class expression queries. The direct implementation of the paper is
     ``mowl.baselines.models.betae.BetaE``.
     """

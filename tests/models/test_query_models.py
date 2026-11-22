@@ -268,7 +268,7 @@ def test_axiom_costs_are_vectorised_and_equal_the_per_query_costs(cls, extension
 def test_axiom_costs_build_no_query_object_per_row(monkeypatch):
     """Scoring many rows must not go through the per-row query objects (that path took
     about 20 microseconds per candidate axiom, two hours for the anatomy inferences)."""
-    import mowl.models.query.model as qm
+    import mowl.evaluation.query_scoring as qm
     ds, c, eats = _dataset()
     m = Query2Box(ds, embed_dim=8)
     calls = [0]

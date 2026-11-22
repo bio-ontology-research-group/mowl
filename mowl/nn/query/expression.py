@@ -353,7 +353,7 @@ class AnswerSet(Set):
 def answer_mask(node, graph):
     """The exact answers of a query as a boolean mask over the entities of ``graph``, which
     must offer ``num_entities`` and ``project_mask(entities, relation)`` (a
-    :class:`~mowl.models.query.graph.QueryGraph`). Same semantics as :func:`answers`; the cost
+    :class:`~mowl.projection.query_graph.QueryGraph`). Same semantics as :func:`answers`; the cost
     is that of the array operations of the query, a few numpy passes over the entities and the
     edges leaving the intermediate answers."""
     k = node.kind

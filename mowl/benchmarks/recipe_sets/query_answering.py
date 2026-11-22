@@ -3,7 +3,7 @@
 Training of every recipe: **the released training queries** (``queries="released"``), not
 queries sampled from the graph by mOWL's own sampler. All four papers train on them (the
 codebases of BetaE, ConE and AConE share one loop, KGReasoning ``main.py``; see
-:class:`mowl.models.query.model.QueryEmbeddingModel`). One mOWL epoch is 1000 steps of that
+:class:`mowl.models.composed.query.QueryEmbeddingModel`). One mOWL epoch is 1000 steps of that
 loop, so ``epochs=450`` is ``--max_steps 450001``. The learning rate is divided by 5 at half
 and at three quarters of the steps (the loop's ``warm_up_steps`` rule), the regime
 ``step-lr-decay``.

@@ -61,7 +61,7 @@ From an ontology to a graph (an adaptation)
 -------------------------------------------
 
 The methods were published for knowledge graphs. mOWL reads an ontology as one
-(:func:`mowl.models.query.graph.extract_graph`): the entities are the named classes and
+(:func:`mowl.projection.query_graph.extract_graph`): the entities are the named classes and
 the individuals, and
 
 * ``A ⊑ B``, ``A ≡ B`` and ``a : B`` give the relation ``isa``;
@@ -79,7 +79,7 @@ answers of ``A`` are its subclasses and instances, and ``A ⊑ B`` is "``A`` is 
 Training samples queries of the structures 1p, 2p, 3p, 2i, 3i, ip, pi (and, with negation,
 2in, 3in, inp, pin, pni) from the graph and minimises the negative sampling loss of the
 reference codes. This loop is shared by the four methods
-(:class:`~mowl.models.query.model.QueryEmbeddingModel`). Default sizes are small.
+(:class:`~mowl.models.composed.query.QueryEmbeddingModel`). Default sizes are small.
 
 The four methods are combinations of parts
 ------------------------------------------
@@ -93,7 +93,7 @@ operator, a negation operator and a distance (the builders
 :data:`mowl.representation.METHODS` as trained on queries), plus the other parts of the
 training and evaluation regimes: the objective
 (:class:`~mowl.representation.library.query_objective.QueryObjective`), the query sampler
-(:mod:`mowl.models.query.sampler`) and the evaluation regime. ``model.module`` is the
+(:mod:`mowl.training.query_sampler`) and the evaluation regime. ``model.module`` is the
 geometry built from the parts; the keyword arguments of a model class go to the builder, so
 any part can be swapped. Parts of different region families do not fit and are refused with
 an error that says which.
@@ -134,7 +134,7 @@ Tasks and evaluation
   :class:`mowl.evaluation.LogicalQueryAnswering` rank the answers of logical queries (the
   protocol of the three query embedding papers). ``model.triples`` is the training graph,
   with the ids the queries use;
-* :meth:`~mowl.models.query.model.QueryEmbeddingModel.answer` ranks the entities for a
+* :meth:`~mowl.models.composed.query.QueryEmbeddingModel.answer` ranks the entities for a
   class expression.
 
 Differences from the papers: the graph (above), small default networks (the papers use

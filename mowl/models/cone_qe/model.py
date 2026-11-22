@@ -1,5 +1,5 @@
 """ConE (Zhang et al., NeurIPS 2021) on ontologies."""
-from mowl.models.query.model import QueryEmbeddingModel
+from mowl.models.composed.query import QueryEmbeddingModel
 from mowl.representation.library.query_methods import ConEGeometry
 
 
@@ -12,7 +12,7 @@ class ConE(QueryEmbeddingModel):
     through the extra keyword arguments (``relations="rotation"``, ``signed_negation``,
     ``negation=None``, ``distance``, ``hidden``, ``layers``, ``dropout``, ``center_weight``).
 
-    See :class:`~mowl.models.query.model.QueryEmbeddingModel` for the graph, the training
+    See :class:`~mowl.models.composed.query.QueryEmbeddingModel` for the graph, the training
     and the class expression queries. The direct implementation of the paper is
     ``mowl.baselines.models.cone_qe.ConE``.
     """
