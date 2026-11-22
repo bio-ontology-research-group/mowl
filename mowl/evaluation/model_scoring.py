@@ -171,7 +171,20 @@ class PairClassifierHead:
     def _features(x, y):
         return th.cat([x, y, x * y, (x - y).abs()], dim=1)
 
+    @staticmethod
+    def _in_order(pairs):
+        """The pairs sorted (by first, then second class): the axioms come from the
+        normaliser in an order that changes from call to call, and the shuffling of
+        :meth:`fit` must not depend on it, or the same seed trains another network."""
+        if len(pairs) < 2:
+            return pairs
+        key = pairs[:, 0] * (int(pairs[:, 1].max()) + 1) + pairs[:, 1]
+        return pairs[th.argsort(key, stable=True)]
+
     def _pairs(self, model, gci_name, relation):
+        return self._in_order(self._unordered_pairs(model, gci_name, relation))
+
+    def _unordered_pairs(self, model, gci_name, relation):
         rows = self._training_rows(model).get(gci_name)
         if rows is None or len(rows) == 0:
             return th.zeros((0, 2), dtype=th.long)

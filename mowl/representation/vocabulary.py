@@ -14,6 +14,11 @@ are described by regimes (:mod:`mowl.training`, :mod:`mowl.evaluation`); what is
 * how "inside" is scored (:class:`Measure`), and
 * how the embedding of a name is produced (:class:`Parametrisation`).
 
+Methods that learn from sequences (random walks, sentences) have no region; their parts
+are the graph :class:`Projection` or the :class:`Corpus` they read, the :class:`Walker`,
+the :class:`Encoder` of the sequences, the :class:`Reading` of an entity's vector and the
+:class:`Scorer` of candidate axioms (see :mod:`mowl.representation.sequence`).
+
 A :class:`Representation` states these for one method. The catalogue has one for every
 method (:attr:`mowl.catalog.MethodCard.representation`); the parts that exist as code of
 their own are in :mod:`mowl.representation`.
@@ -228,6 +233,66 @@ class Parametrisation(_Part):
     REASONER = "reasoner"
 
 
+class Projection(_Part):
+    """The graph a sequence method walks on: which projection of :mod:`mowl.projection`
+    turns the axioms into edges."""
+
+    #: Subclass edges between named classes.
+    TAXONOMY = "taxonomy"
+    #: Subclass edges and an ``r`` edge for every :math:`A \sqsubseteq \exists r.B`.
+    TAXONOMY_WITH_RELATIONS = "taxonomy with relations"
+    DL2VEC = "DL2Vec projection"
+    OWL2VEC_STAR = "OWL2Vec* projection"
+    CATEGORICAL = "categorical projection"
+    GDA = "GDA projection"
+
+
+class Corpus(_Part):
+    """What a sentence of a corpus is."""
+
+    #: An axiom of the ontology, written in Manchester syntax.
+    AXIOMS = "axioms as sentences"
+    #: An annotation (label, definition, synonym) of a class or individual: the entity, the
+    #: annotation property and the text.
+    ANNOTATIONS = "annotations as sentences"
+
+
+class Walker(_Part):
+    """How sequences are drawn from a graph."""
+
+    #: Uniform random walks with restarts (DeepWalk).
+    DEEPWALK = "DeepWalk walks"
+    #: Second-order biased walks (node2vec, parameters p and q).
+    NODE2VEC = "node2vec walks"
+
+
+class Encoder(_Part):
+    """What turns sequences into one vector per token."""
+
+    WORD2VEC_SKIPGRAM = "word2vec skip-gram"
+    WORD2VEC_CBOW = "word2vec CBOW"
+    FASTTEXT_SKIPGRAM = "fastText skip-gram"
+    FASTTEXT_CBOW = "fastText CBOW"
+
+
+class Reading(_Part):
+    """Which vector of the encoder an entity gets."""
+
+    #: The vector of the token that is the entity's IRI.
+    TOKEN = "vector of the entity's token"
+
+
+class Scorer(_Part):
+    """How a candidate axiom is scored for the ranking of an evaluation regime, for methods
+    that only give vectors."""
+
+    #: The similarity of the vectors of the two entities (symmetric).
+    SIMILARITY = "similarity of the two vectors"
+    #: A classifier on the pair of vectors, trained on the training axioms, one per
+    #: relation (asymmetric).
+    PAIR_CLASSIFIER = "classifier on pairs of vectors"
+
+
 class Composable(_Part):
     """Whether the method is a combination of independent parts."""
 
@@ -265,6 +330,13 @@ class Representation:
     :param notes: What does not fit the vocabulary.
     :param operators: :class:`OperatorFamily`, for methods whose constructors are fuzzy
         operators: the family the method was published with, then others it can use.
+    :param projection: For methods that learn from sequences: the
+        :class:`Projection` of the graph they walk on.
+    :param corpus: :class:`Corpus`: what the sentences of the corpus are.
+    :param walker: :class:`Walker`: how sequences are drawn from the graph.
+    :param encoder: :class:`Encoder`: what turns the sequences into vectors.
+    :param reading: :class:`Reading`: which vector an entity gets.
+    :param scorer: :class:`Scorer`: how a candidate axiom is scored for ranking.
     """
 
     view: tuple
@@ -281,6 +353,12 @@ class Representation:
     composable: Composable = Composable.NO
     notes: str = ""
     operators: tuple = ()
+    projection: tuple = ()
+    corpus: tuple = ()
+    walker: tuple = ()
+    encoder: tuple = ()
+    reading: tuple = ()
+    scorer: tuple = ()
 
     def __post_init__(self):
         for name, kind in _MULTI.items():
@@ -326,6 +404,9 @@ class Representation:
                 ("Combination of independent parts", self.composable.value)]
         if self.operators:
             rows.append(("Fuzzy operators", join(self.operators)))
+        for name, label in _SEQUENCE_LABELS.items():
+            if getattr(self, name):
+                rows.append((label, join(getattr(self, name))))
         if self.notes:
             rows.append(("Remarks on the parts", self.notes))
         return rows
@@ -337,4 +418,10 @@ _LABELS = {"conjunction": "and", "existential": "exists", "negation": "not",
            "disjunction": "or"}
 _MULTI = {"view": View, "space": Space, "classes": ClassModel, "relations": RelationModel,
           "individuals": IndividualModel, "measure": Measure,
-          "parametrisation": Parametrisation, "operators": OperatorFamily}
+          "parametrisation": Parametrisation, "operators": OperatorFamily,
+          "projection": Projection, "corpus": Corpus, "walker": Walker, "encoder": Encoder,
+          "reading": Reading, "scorer": Scorer}
+#: The parts of methods that learn from sequences, with their labels for display.
+_SEQUENCE_LABELS = {"projection": "Graph projection", "corpus": "Sentences are",
+                    "walker": "Walks", "encoder": "Sequences are encoded by",
+                    "reading": "An entity is", "scorer": "Candidate axioms are scored by"}
