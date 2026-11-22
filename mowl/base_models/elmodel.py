@@ -416,13 +416,15 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
 
     def _attach_default_regimes(self):
         """The training regimes that belong to the method (``module.default_regimes``: a tuple
-        of functions that make one regime each, for example the negatives of the paper or its
-        loss), unless a regime is attached already. A named model calls this once its module
-        exists."""
+        of functions that make one regime each, or ``None`` when the option that asks for it is
+        off; for example the negatives of the paper or its loss), unless a regime is attached
+        already. A named model calls this once its module exists."""
         factories = getattr(self.module, "default_regimes", ())
         if factories and self.training_regime is None:
             from mowl.training.regime import ComposedRegime
-            regimes = [make() for make in factories]
+            regimes = [r for r in (make() for make in factories) if r is not None]
+            if not regimes:
+                return
             self.training_regime = regimes[0] if len(regimes) == 1 else ComposedRegime(*regimes)
 
     def get_negative_sampling_config(self):
@@ -834,11 +836,14 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
             # Add regularization loss
             loss = loss + self.step_regularization_loss()
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            self.after_optimizer_step()
-            train_loss += loss.detach().item()
+            if regime is not None and regime.skips_empty_steps and not loss.requires_grad:
+                pass    # every batch of this step is empty: no optimisation step
+            else:
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                self.after_optimizer_step()
+                train_loss += loss.detach().item()
             if regime is not None:
                 regime.on_epoch_end(epoch, {"total": train_loss})
 

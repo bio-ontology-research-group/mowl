@@ -57,7 +57,7 @@ def test_conditionals_are_compiled_with_and_exists_and_top_is_refused():
         (("some", NS + "applies", DEPT), APP, 0.1, 0.3)])
     groups = m._compiled_groups()
     assert len(groups) == 4                       # PNF1, PNF2, PNF3, PNF4 patterns
-    assert m.additional_training_loss(0).ndim == 0
+    assert m.training_regime.additional_loss(0).ndim == 0   # the regime ConditionalStatements
     for c in m.conditionals:
         p = m.probability(c.conclusion, c.premise)
         assert 0.0 <= p <= 1.0

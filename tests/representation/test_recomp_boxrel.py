@@ -240,7 +240,7 @@ def test_boxsel_conditionals_are_read_by_the_geometry(dataset):
     assert isinstance(model.module.objective, BoxSELObjective)
     model.train(epochs=1)
     assert isinstance(model.probability("http://Mother", "http://Female"), float)
-    loss = model.additional_training_loss(0)
+    loss = model.training_regime.additional_loss(0)     # the regime ConditionalStatements
     assert loss is not None and th.isfinite(loss)
 
 

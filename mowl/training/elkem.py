@@ -378,42 +378,73 @@ class LexicalRegularisation(TrainingRegime):
         return self.weight * lex
 
 
+def validation_loss_of_eval_form(model):
+    """Mean loss (margin-free reading of the module in evaluation mode) of the validation
+    axioms of ``model.eval_gci_name``, or ``None`` if there are none or the form is not set."""
+    if model.dataset.validation is None or model.eval_gci_name is None:
+        return None
+    data = model.validation_datasets.get(model.eval_gci_name)
+    if data is None or len(data) == 0:
+        return None
+    was_training = model.module.training
+    with th.no_grad():
+        model.module.eval()
+        value = th.mean(model.module(data[:], model.eval_gci_name)).item()
+    model.module.train(was_training)
+    return value
+
+
 class ValidationCheckpoint(TrainingRegime):
     """Model selection that saves the best checkpoint to the model's ``model_filepath``:
-    every ``every`` epochs the module is evaluated by ``metric(model)`` (lower is better;
-    default: the median rank of the validation subsumptions,
-    :func:`subsumption_median_rank`) and its parameters are saved when it improves
-    (``model.best_validation_median_rank`` records the best value); without validation
-    axioms, or if no evaluation improved, the final parameters are saved. The module keeps
-    its final parameters: ``model.load_best_model()`` (and ``get_embeddings``) load the
-    checkpoint. This replaces the built-in validation of the generic loop (by a loss), which is
-    skipped while this regime is attached.
+    every ``every`` epochs the module is evaluated by ``metric(model)`` (lower is better) and
+    its parameters are saved when it improves; without validation axioms, or if no evaluation
+    improved, the final parameters are saved. The module keeps its final parameters:
+    ``model.load_best_model()`` (and ``get_embeddings``) load the checkpoint. This replaces
+    the built-in validation of the generic loop, which is skipped while this regime is
+    attached.
 
-    :param metric: ``f(model) -> float``, or ``None`` for the median rank.
-    :param every: Epochs between evaluations (the paper: 100); ``None``: the ``validate_every``
-        of the call of ``train``.
+    :param metric: ``None`` or ``"rank"``: the median rank of the validation subsumptions
+        (:func:`subsumption_median_rank`; the value is also stored in
+        ``model.best_validation_median_rank``); ``"loss"``: the mean loss of the validation
+        axioms of ``model.eval_gci_name`` (:func:`validation_loss_of_eval_form`; no
+        evaluation while that is unset); or ``f(model) -> float or None`` (``None``: nothing
+        to evaluate).
+    :param every: Epochs between evaluations (the paper: 100); ``None``: the
+        ``validate_every`` of the call of ``train``.
+    :param steps_per_epoch: Steps of the generic loop per epoch (:class:`ShuffledSplits` has
+        several); ``every`` counts epochs.
     """
 
     key = "validation-checkpoint"
     replaces_validation = True
 
-    def __init__(self, metric=None, every=None):
+    def __init__(self, metric=None, every=None, steps_per_epoch=1):
         super().__init__()
-        self.metric = metric or subsumption_median_rank
+        if metric in (None, "rank"):
+            metric = self._rank
+        elif metric == "loss":
+            metric = validation_loss_of_eval_form
+        elif not callable(metric):
+            raise ValueError("metric must be 'rank', 'loss' or a callable.")
+        self.metric = metric
         self.every = None if every is None else max(1, int(every))
+        self.steps_per_epoch = max(1, int(steps_per_epoch))
         self.best = float("inf")
         self.history = []
+
+    @staticmethod
+    def _rank(model):
+        if model.dataset.validation is None:
+            return None
+        data = model.validation_datasets.get("gci0")
+        if data is None or len(data) == 0:
+            return None
+        value = subsumption_median_rank(model)
+        return value
 
     def attach(self, model):
         super().attach(model)
         self.best, self.history = float("inf"), []
-
-    def _has_validation(self):
-        dataset = self.model.dataset
-        if dataset.validation is None:
-            return False
-        data = self.model.validation_datasets.get("gci0")
-        return data is not None and len(data) > 0
 
     def training_datasets(self, datasets):
         self.best, self.history = float("inf"), []
@@ -421,17 +452,21 @@ class ValidationCheckpoint(TrainingRegime):
 
     def on_epoch_end(self, epoch, losses):
         every = self.every or max(1, int(getattr(self.model, "_train_validate_every", 1)))
-        if not self._has_validation() or (epoch + 1) % every:
+        if (epoch + 1) % (every * self.steps_per_epoch):
             return
-        value = float(self.metric(self.model))
-        self.history.append((epoch + 1, value))
+        value = self.metric(self.model)
+        if value is None:
+            return
+        value = float(value)
+        self.history.append(((epoch + 1) // self.steps_per_epoch, value))
         if value < self.best:
             self.best = value
-            self.model.best_validation_median_rank = value
+            if self.metric == self._rank:
+                self.model.best_validation_median_rank = value
             th.save(self.model.module.state_dict(), self.model.model_filepath)
 
     def on_train_end(self):
-        if not self._has_validation() or self.best == float("inf"):
+        if self.best == float("inf"):
             th.save(self.model.module.state_dict(), self.model.model_filepath)
 
 
