@@ -135,11 +135,12 @@ REPRESENTATIONS = {
         existential=K.EXACT, negation=K.EXACT, parametrisation=P.SOLVER, composable=Y.NO,
         notes="The boxes are the solution of a convex programme; negation is the convex "
               "complement box of DL-Lite."),
-    "grounded": _el((C.MULTI_BOX,), R.PAIR_REGION, I.CANONICAL_ELEMENT, M.BOUNDS,
-                    composable=Y.NO, view=(V.NORMAL_FORMS, V.CANONICAL_MODEL),
-                    notes="Elements of the canonical model are positioned first and "
-                          "classes and relations are regions around them; the parts are "
-                          "designed together."),
+    "grounded": _el((C.MULTI_BOX,), (R.PAIR_REGION, R.TRANSLATION_BOX), I.CANONICAL_ELEMENT,
+                    M.BOUNDS, composable=Y.PARTLY, view=(V.NORMAL_FORMS, V.CANONICAL_MODEL),
+                    notes="Elements of a finite domain (one per class, one per individual) "
+                          "are positioned, and classes and relations are regions around them; "
+                          "the element domain is the part the class and relation models "
+                          "share, the constraints are rules in a fuzzy logic (Łukasiewicz)."),
     "canonical_mixture": Representation(
         view=V.CANONICAL_MODEL, space=S.SIMPLEX, classes=C.FIXED, relations=R.FIXED,
         individuals=(I.CANONICAL_ELEMENT, I.DISTRIBUTION), measure=M.EXACT,

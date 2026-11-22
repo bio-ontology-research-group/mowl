@@ -24,7 +24,7 @@ from mowl.nn.el.grounded import (
     sample_role_region,
 )
 from mowl.nn.el.grounded.module import _EMPTY_DEPTH_FLOOR, _TOP_DEPTH_CEIL, _validate_int_ge
-from mowl.nn.el.grounded.losses import _validate_nonneg_weight
+from mowl.representation.library.grounded_logic import validate_nonneg_weight as _validate_nonneg_weight
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 from mowl.models.grounded.common import _TOL_DEPTH_LEVELS, _ToleranceCountDict, _short_iri_map
 

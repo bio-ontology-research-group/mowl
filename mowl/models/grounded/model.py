@@ -57,7 +57,8 @@ from mowl.nn.el.grounded.module import (
     _validate_int_ge,
     _validate_positive_float,
 )
-from mowl.nn.el.grounded.losses import _validate_margin, _validate_nonneg_weight
+from mowl.representation.library.grounded_logic import (validate_margin as _validate_margin,
+                                                        validate_nonneg_weight as _validate_nonneg_weight)
 from mowl.nn.el.structural import Regions
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 from mowl.models.grounded.common import _resolve_inverse_of, _validate_index_dict, _coerce_gci_table
@@ -221,6 +222,10 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         hinges and `gci2_dead` filler-dead propagation). When ``False``,
         reproduces the ablation behaviour where violated `gci0` hinges also route
         gradient to :math:`\\delta_x`.
+    logic : str, default "lukasiewicz"
+        The fuzzy logic in which the element constraints are read (a part,
+        :data:`~mowl.representation.library.grounded_logic.RULES`): ``"lukasiewicz"`` (the
+        published reading, linear inside the hinge), ``"godel"`` or ``"product"``.
     """
 
     scored_forms = ("class_assertion",)
@@ -290,6 +295,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         role_chain: Optional[Any] = None,
         class_assertion: Optional[Any] = None,
         object_property_assertion: Optional[Any] = None,
+        logic: str = "lukasiewicz",
     ) -> None:
         _validate_int_ge("embed_dim", embed_dim, 1)
         _validate_int_ge("n_components", n_components, 1)
@@ -508,6 +514,10 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         self.region_lhs_grad = bool(region_lhs_grad)
         self.dead_from_bot_only = bool(dead_from_bot_only)
         self.role_mode = role_mode
+        # The logic of the element constraints (a part: Łukasiewicz is the published reading).
+        from mowl.representation.library.grounded_logic import get_rules
+        self.rules = get_rules(logic)
+        self.logic = self.rules.name
         self.agg = agg
         self.agg_tau = agg_tau_f
         self.reseed_every = int(reseed_every)

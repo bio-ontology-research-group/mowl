@@ -52,8 +52,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn.el.grounded import (
-    GroundedELModule,
+from mowl.baselines.nn.el.grounded.module import GroundedELModule
+from mowl.nn.el.grounded.sampling import (
     RegionSample,
     sample_class_region,
     sample_elements,
@@ -94,7 +94,7 @@ from mowl.baselines.nn.el.grounded.losses import (
     role_inclusion_region,
     role_inclusion_region_trans,
 )
-from mowl.nn.el.grounded.module import (
+from mowl.baselines.nn.el.grounded.module import (
     _DEAD_LOGIT,
     _EMPTY_DEPTH_FLOOR,
     _INACTIVE_RAW_WIDTH,

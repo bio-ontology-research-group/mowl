@@ -166,13 +166,14 @@ def test_corrupted_fact_negatives_loss_gradients_and_neg_k_scaling(
             assert rk.shape == (expected_base * k_mult,)
 
             call_sizes: List[int] = []
-            orig_rm = m_k.module.role_membership
+            # the objective asks the relation model (a part of the module) for degrees
+            orig_rm = m_k.module.relation_model.membership
 
             def _tracked_rm(px: th.Tensor, py: th.Tensor, r: th.Tensor, *args, **kwargs):
                 call_sizes.append(int(px.shape[0]))
                 return orig_rm(px, py, r, *args, **kwargs)
 
-            monkeypatch.setattr(m_k.module, "role_membership", _tracked_rm)
+            monkeypatch.setattr(m_k.module.relation_model, "membership", _tracked_rm)
             m_k.compute_batch_losses(generator=th.Generator(device="cpu").manual_seed(77))
             # Call 0 is positive object_property_assertion (expected_base), Call 1 is corrupted negatives (expected_base * k_mult)
             assert call_sizes == [expected_base, expected_base * k_mult]

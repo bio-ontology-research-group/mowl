@@ -45,6 +45,16 @@ import torch as th
 from mowl.nn.el.grounded.module import GroundedELModule
 from mowl.nn.el.structural import Regions
 
+#: What the samplers read of a geometry. They are general machinery over this interface (a
+#: finite domain of elements with positions, classes and relations as unions of boxes): the
+#: part-built :class:`~mowl.nn.GroundedELModule` and any other geometry that answers these.
+GROUNDED_INTERFACE = ("positions", "class_regions", "role_regions", "depth")
+
+
+def is_grounded_geometry(module) -> bool:
+    """Whether ``module`` answers what the samplers read (:data:`GROUNDED_INTERFACE`)."""
+    return all(callable(getattr(module, name, None)) for name in GROUNDED_INTERFACE)
+
 __all__ = [
     "RegionSample",
     "sample_elements",
@@ -277,7 +287,7 @@ def sample_inside_elements(
         2-D ``torch.long`` tensor of shape ``(B, I)`` with ``I <= n_inside_elements``.
     """
     _validate_generator(generator)
-    if not isinstance(module, GroundedELModule):
+    if not is_grounded_geometry(module):
         raise TypeError(
             f"module must be a GroundedELModule, got {type(module).__name__}"
         )
