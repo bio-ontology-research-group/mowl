@@ -84,7 +84,6 @@ they use as relations?
 
 .. testoutput::
 
-   composed - translation
    box2el - head and tail boxes
    boxel - affine map
    boxsel - affine map
@@ -92,6 +91,7 @@ they use as relations?
    elkem - affine map with range and error box
    transbox - box of translations
    regd - translation
+   composed - translation
 
 The same relation model appears in methods that are trained on different views:
 
