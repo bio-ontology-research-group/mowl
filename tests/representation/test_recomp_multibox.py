@@ -379,10 +379,10 @@ class TestVolumeMultiBoxEL(Case):
         self.assertEqual(module.parts["measure"], "sampled volume")
 
     def test_another_training_regime(self):
-        """The loop of the model is the batching of the thesis (it takes no regime: its
-        ``training_hooks`` are empty); the same parts train in the generic loop of
+        """The batching of the thesis is the regime ShuffledSplits, so the model takes every
+        regime (it consults all the hooks); the same parts train in the generic loop of
         ``ComposedEL`` with another regime."""
-        self.assertEqual(frozenset(VolumeMultiBoxEL.training_hooks), frozenset())
+        self.assertTrue(frozenset(VolumeMultiBoxEL.training_hooks))
         model = ComposedEL(self.dataset, method="mcmultibox", embed_dim=3, num_boxes=2,
                            num_points=128, point_chunk_size=64)
         self.assertIsInstance(model.module, ComposedGeometry)

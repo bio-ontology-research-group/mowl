@@ -186,12 +186,15 @@ def test_box_batch_regulariser_with_boxsel_and_the_code_training():
     assert finite(boxel)
 
 
-def test_pearson_term_refuses_a_module_without_scores_clearly():
+def test_pearson_term_works_with_a_geometry_without_a_score_method():
+    """The margin-free score is exp(-loss with margin 0), read from the objective of any
+    geometry, so the term is not specific to the ELK-Em module."""
     from mowl.models import ELBE
-    model = ELBE(tiny_dataset(), embed_dim=4)
-    model.training_regime = PearsonContrastiveTerm()
-    with pytest.raises(AttributeError):
-        model.train(epochs=1)
+    model = ELBE(tiny_dataset(), embed_dim=4, margin=0.1)
+    model.training_regime = ComposedRegime(PerNormalFormMiniBatches(batch_size=4),
+                                           PearsonContrastiveTerm(weight=1.0, num_negatives=2))
+    with_validation_form(model).train(epochs=2)
+    assert finite(model)
 
 
 # ------------------------------------------- the regimes equal the direct training
