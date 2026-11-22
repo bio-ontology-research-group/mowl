@@ -202,6 +202,33 @@ The classes of :mod:`mowl.geometric` that build these models
 :mod:`mowl.baselines.geometric`, and ``tests/baselines/pairs_construct.py`` checks that both
 give the same regions and the same truth values.
 
+A constructed part of a trained method
+--------------------------------------
+
+The canonical mixture (``canonical_mixture``) constructs the canonical model and trains only
+its individuals (:mod:`mowl.representation.library.mixture_methods`). Its constructed part
+comes from a source and a reading of this interface: the source ``canonical completion``
+builds the canonical model as the completion leaves it, and the reading ``membership``
+restricts it to the elements of the named classes and the individuals, as sparse sets of
+elements, without a dense matrix over the elements. With the probability-mass measure of the
+method, the constructed part alone decides subsumptions exactly:
+
+.. testcode::
+
+   from mowl.representation.library.mixture_measures import ProbabilityMass
+
+   c = model.class_index_dict
+   names = [n for n, _ in sorted(c.items(), key=lambda kv: kv[1])]
+   g = construct(dataset.ontology, "canonical completion", "membership", names=names,
+                 roles=[], individuals=[], measure=ProbabilityMass())
+   print(g.parts["source"], "/", g.parts["reading"])
+   print(g.cost("gci0", rows).flatten().tolist())
+
+.. testoutput::
+
+   canonical completion / membership
+   [0.0, 1.0]
+
 Guarantees as data
 ------------------
 

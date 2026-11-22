@@ -659,6 +659,28 @@ on :math:`S_a` and scores ``+inf``:
 
    tmpdir.cleanup()
 
+The method is a combination of parts (:mod:`mowl.representation.library.mixture_methods`):
+the canonical model is constructed (a source and a reading of
+:mod:`mowl.representation.construction`), classes and roles are its sets of elements and
+pairs, and only the individual model is trained. Any part can be replaced, here the training
+regime (minibatches of assertions instead of batches of individuals); the guarantees hold
+whatever is trained:
+
+.. testcode::
+
+   from mowl.representation.library.mixture_training import AssertionBatches
+
+   print(model.module.parts["source"], "/", model.module.parts["reading"], "/",
+         model.module.parts["individuals"])
+   model.training = AssertionBatches(batch_size=2)
+   model.train(epochs=1, validate_every=0)
+   assert float(model.module.class_assertion_score(
+       torch.tensor([[bob_idx, parent_idx]], dtype=torch.long)).item()) == 0.0
+
+.. testoutput::
+
+   canonical completion / membership / distribution
+
 
 Soft component aggregation and diversity regularisation
 -------------------------------------------------------

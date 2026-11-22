@@ -77,8 +77,8 @@ class MixtureGeometry(ComposedGeometry):
         self.margin_semantics = None
         self.structure = structure
         self.source, self.reading = source, reading
-        from mowl.representation.library.mixture_training import (NonEntailedClasses,
-                                                                   UniformTails)
+        from mowl.representation.library.mixture_training import (
+            NonEntailedClasses, UniformTails)
         self.class_negatives = class_negatives or NonEntailedClasses()
         self.role_negatives = role_negatives or UniformTails()
 

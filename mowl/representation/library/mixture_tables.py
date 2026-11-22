@@ -272,8 +272,8 @@ class CanonicalRoles(Relations):
         return {}
 
     def preimage(self, ids, region):
-        from mowl.representation.library.mixture_individuals import (ElementMixture,
-                                                                      RelatedMixture)
+        from mowl.representation.library.mixture_individuals import (
+            ElementMixture, RelatedMixture)
         if isinstance(region, ElementMixture):
             return RelatedMixture(self, ids, region)
         if not isinstance(region, SparseElementSets):

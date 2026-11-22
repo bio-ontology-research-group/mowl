@@ -13,7 +13,8 @@ assertion with a class that the constructed model does not entail for the indivi
 object of a role assertion with a uniformly drawn individual.
 
 Losses and regularisers are evaluated in chunks of bounded size (the support entries of the
-individuals, :meth:`~mowl.representation.library.mixture_individuals.MixtureIndividuals.pair_chunks`)
+individuals, :meth:`MixtureIndividuals.pair_chunks
+<mowl.representation.library.mixture_individuals.MixtureIndividuals.pair_chunks>`)
 and their gradients accumulated, so that a batch never holds more than a bounded number of
 entries.
 """
