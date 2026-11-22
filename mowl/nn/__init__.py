@@ -27,6 +27,7 @@ from .el.eike.module import EIKEModule
 from .el.boxsel.module import BoxSELModule
 from .alc.e2r.module import E2RModule
 from .el.concept2box.module import Concept2BoxModule
+from . import order  # noqa: F401  (its modules are loaded on first use, see below)
 
 
 def __getattr__(name):

@@ -24,8 +24,7 @@ class TextRotation(Relations):
     The map goes one way, so there is no :meth:`image`; the rotation is an isometry of the
     ball, so the order of the regions is preserved.
 
-    :param role_model: A :class:`mowl.nn.lm.ont.RoleTransformation` (its parameters are
-        shared).
+    :param role_model: A :class:`RoleTransformation` (its parameters are shared).
     :param encoder: The encoder of the role names (that of the class model, normally).
     :param curvature: The curvature parameter :math:`c` of the ball.
     :param role_texts: The name of every relation id, to look relations up by id; without it

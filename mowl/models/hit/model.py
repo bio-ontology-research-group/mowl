@@ -26,9 +26,10 @@ class HiT(Model):
     encoder with the Poincare ball it is read in (the encoder is a part: any module that maps a
     list of strings to vectors, see :mod:`mowl.nn.lm.encoders`), the measure is
     ``distance and depth`` (:math:`d_c + \\lambda\\,\\Delta\\lVert\\cdot\\rVert`), the losses
-    are the triplet losses of its geometry (:class:`~mowl.representation.library.hierarchy_geometry.TextGeometry`),
-    and there is no relation model. The reference implementation that the combination is
-    tested against is ``mowl.baselines.models.hit``.
+    are the triplet losses of its geometry
+    (:class:`~mowl.representation.library.hierarchy_geometry.TextGeometry`), and there is no
+    relation model. The reference implementation that the combination is tested against is
+    ``mowl.baselines.models.hit``.
 
     A text encoder (a sentence-transformers model with mean pooling and no normalisation
     layer) is re-trained so that the embeddings of class labels, read as points of the

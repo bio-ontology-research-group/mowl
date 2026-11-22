@@ -3,8 +3,13 @@ HiT (Hierarchy Transformer)
 
 HiT [he2024hit]_ turns a pre-trained sentence encoder into an encoder of a class hierarchy.
 The catalogue key is ``hit``; its card in the :doc:`method catalogue <catalogue>` lists the
-(few) claims with their sources. The model is :class:`mowl.models.hit.HiT`, the losses are
-in :mod:`mowl.nn.lm.hit` and the Poincaré-ball operations in :mod:`mowl.nn.lm.hyperbolic`.
+(few) claims with their sources. The model is :class:`mowl.models.hit.HiT`. It is a combination of parts (the function
+``hit`` in :mod:`mowl.representation.library.hierarchy_methods`): the encoder with the
+Poincaré ball it is read in is the class model, ``distance and depth`` is the measure, and the
+triplet losses are those of the geometry. The module is :class:`mowl.nn.lm.hit.HiTModule`
+and the Poincaré-ball operations are in :mod:`mowl.nn.lm.hyperbolic`; the earlier direct
+implementation is kept in :mod:`mowl.baselines.models.hit` as the reference the combination is
+tested against.
 HiT belongs to the ``language_model`` family: concepts are not regions but the encodings
 of their labels.
 

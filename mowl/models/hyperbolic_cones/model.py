@@ -5,6 +5,14 @@ from mowl.nn.order.module import HyperbolicConesModule
 class HyperbolicCones(OrderEmbeddingModel):
     r"""Hyperbolic entailment cones ([ganea2018]_) for the subclass order of an ontology.
 
+    The model is the combination of parts that the method ``hyperbolic_cones`` defines
+    (:func:`mowl.representation.library.hierarchy_methods.hyperbolic_cones`): the class model
+    is a point of the Poincare ball with its geodesic cone, the measure is the angle against
+    the aperture, the objective is the hierarchy objective (a hinge of margin ``margin`` for a
+    pair that is not ordered); ``model.module`` is that
+    :class:`~mowl.representation.ComposedGeometry`. The direct implementation it is tested
+    against is ``mowl.baselines.models.hyperbolic_cones``.
+
     Each named class is a point :math:`x` of the Poincare ball with a cone of half-aperture
     :math:`\psi(x) = \arcsin(K(1 - \lVert x\rVert^2)/\lVert x\rVert)`; :math:`C \sqsubseteq D`
     holds when the point of :math:`C` lies in the cone of :math:`D`. The score of an axiom is

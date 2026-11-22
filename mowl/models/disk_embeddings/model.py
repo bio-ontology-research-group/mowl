@@ -7,6 +7,13 @@ from mowl.nn.order.module import DiskEmbeddingsModule
 class DiskEmbeddings(OrderEmbeddingModel):
     r"""Hyperbolic disk embeddings ([suzuki2019]_) for the subclass order of an ontology.
 
+    The model is the combination of parts that the method ``disk_embeddings`` defines
+    (:func:`mowl.representation.library.hierarchy_methods.disk_embeddings`): the class model is
+    a disk (a point of the chosen space and a radius), the measure is the protrusion, the
+    objective is the hierarchy objective; ``model.module`` is that
+    :class:`~mowl.representation.ComposedGeometry`. The direct implementation it is tested
+    against is ``mowl.baselines.models.disk_embeddings``.
+
     Each named class is a generalised formal disk :math:`(x, r)`: a centre in a hyperbolic
     (default), spherical or Euclidean space and a real radius that may be negative.
     :math:`C \sqsubseteq D` holds when the disk of :math:`D` contains that of :math:`C`,

@@ -24,12 +24,8 @@ published models treat it as 1. :class:`RoleTransformation` follows the code by 
 (``use_scaling=False``); with ``use_scaling=True`` it applies Eq. 4 literally.
 """
 
-import math
-
 import torch as th
-from torch import nn
 
-from mowl.nn.lm import hyperbolic as hb
 from mowl.baselines.nn.lm.hit import HiTModule, hierarchy_loss
 from mowl.representation.library.hierarchy_relations import RoleTransformation
 

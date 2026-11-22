@@ -41,6 +41,9 @@ class OrderModule(ComposedGeometry):
             geometry.objective, regularizers=geometry.regularizers,
             supported_forms=geometry.supported_forms,
             neg_capable_gcis=geometry.neg_capable_gcis)
+        # the margin is that of the negative loss, not an inclusion margin: stated pairs have
+        # none (the hierarchy objective), so the module declares no margin semantics
+        self.margin_semantics = None
 
     @property
     def nb_classes(self):
@@ -66,7 +69,10 @@ class OrderModule(ComposedGeometry):
             raise NotImplementedError(
                 f"{type(self).__name__} embeds the subclass order between named classes "
                 f"and has a score for 'gci0' only, not for {gci_name!r}.")
-        return super().forward(gci, gci_name, neg)
+        out = super().forward(gci, gci_name, neg)
+        if not self.per_axiom_column and getattr(out, "ndim", 0) == 2 and out.shape[1] == 1:
+            return out.reshape(-1)       # the shape of the formula (PerAxiomColumn)
+        return out
 
     def points(self, idx):
         return self.class_embed(idx)

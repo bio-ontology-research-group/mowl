@@ -372,7 +372,7 @@ def ont(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margi
     (:meth:`TextGeometry.compound`) and trained to coincide with it
     (:meth:`TextGeometry.existential_loss`).
 
-    :param role_model: A :class:`~mowl.nn.lm.ont.RoleTransformation`; ``None`` builds the
+    :param role_model: A :class:`~.hierarchy_relations.RoleTransformation`; ``None`` builds the
         ablation OnT(w/o r), a geometry without relations.
     :param tables: A module with ``encoder``, ``c``, ``role_model``, ``use_roles``, the margins
         and the weights (the direct module of :mod:`mowl.baselines.nn.lm`) to share parameters
