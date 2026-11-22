@@ -1,5 +1,6 @@
 """Query2Box on ontologies."""
 from mowl.models.query.model import QueryEmbeddingModel
+from mowl.representation.library.query_methods import Query2BoxGeometry
 
 
 class Query2Box(QueryEmbeddingModel):
@@ -17,4 +18,5 @@ class Query2Box(QueryEmbeddingModel):
     """
 
     method = "query2box"
+    geometry_class = Query2BoxGeometry
     default_gamma = 24.0

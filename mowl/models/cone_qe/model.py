@@ -1,5 +1,6 @@
 """ConE (Zhang et al., NeurIPS 2021) on ontologies."""
 from mowl.models.query.model import QueryEmbeddingModel
+from mowl.representation.library.query_methods import ConEGeometry
 
 
 class ConE(QueryEmbeddingModel):
@@ -17,4 +18,5 @@ class ConE(QueryEmbeddingModel):
     """
 
     method = "cone_qe"
+    geometry_class = ConEGeometry
     default_gamma = 20.0

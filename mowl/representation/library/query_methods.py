@@ -210,8 +210,6 @@ class ComposedQueryGeometry(QueryGeometry, Geometry):
     def parts(self):
         return {"classes": self.entities.part, "relations": self.relations.part,
                 "measure": self.measure.part,
-                "intersection": type(self.intersection).__name__,
-                "distance": type(self.distance_part).__name__,
                 "conjunction": "exact" if self.intersection.exact else "approximate",
                 "negation": "none" if self.negation_part is None
                 else ("exact" if getattr(self.negation_part, "exact", False)

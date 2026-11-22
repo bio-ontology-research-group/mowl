@@ -7,7 +7,8 @@ class Query2Box(QueryEmbeddingModel):
     """Query2Box as a query embedding model of an ontology.
 
     See :class:`~mowl.baselines.models.query.model.QueryEmbeddingModel` for the graph, the training
-    and the class expression queries, and :class:`mowl.baselines.nn.query.geometry.Query2BoxGeometry`
+    and the class expression queries, and
+    :class:`mowl.baselines.nn.query.geometry.Query2BoxGeometry`
     for the geometry. Extra keyword arguments go to the geometry.
     """
 

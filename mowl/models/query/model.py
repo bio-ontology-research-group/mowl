@@ -9,7 +9,8 @@ negation operator and distance make up the geometry (``model.module``, a
 the other parts of a training and evaluation regime: the objective
 (:class:`~mowl.representation.library.query_objective.QueryObjective`), the query sampler
 (:mod:`mowl.models.query.sampler`), the training regime hooks
-(:mod:`mowl.training.regime`) and the evaluation regimes (:class:`mowl.evaluation.LogicalQueryAnswering`
+(:mod:`mowl.training.regime`) and the evaluation regimes
+(:class:`mowl.evaluation.LogicalQueryAnswering`
 through :meth:`QueryEmbeddingModel.score_query`, and the rank-based regimes through
 :meth:`QueryEmbeddingModel.axiom_costs`). The class expression to query translation is
 :mod:`mowl.nn.query.expression`.
@@ -103,6 +104,8 @@ class QueryEmbeddingModel(Model):
     training_hooks = SCHEDULE_HOOKS
     #: The key of the named combination (a :data:`mowl.representation.METHODS` entry).
     method = None
+    #: The module class that the builder of the method returns (named classes only).
+    geometry_class = None
     default_gamma = 24.0
     #: Options of the builder that this named method sets to its published or earlier
     #: reading when the caller does not choose.
@@ -182,6 +185,8 @@ class QueryEmbeddingModel(Model):
         """The combination: ``{"method": key, **module.parts}`` and the other parts of the
         regime."""
         return {"method": self.method, **self.module.parts,
+                "intersection": type(self.module.intersection).__name__,
+                "distance": type(self.module.distance_part).__name__,
                 "objective": f"{self.objective.kind} negative sampling",
                 "sampler": type(self.sampler).__name__}
 
@@ -200,6 +205,14 @@ class QueryEmbeddingModel(Model):
     def released(self):
         """The released training queries by structure (``queries="released"``)."""
         return self.sampler.queries
+
+    @property
+    def _released_columns(self):
+        return self.sampler._columns
+
+    def _released_batch(self, group):
+        """One batch of the released sampler (``"path"`` or ``"other"``)."""
+        return self.sampler.batch(group)
 
     # -- ids ----------------------------------------------------------------------------
     def entity_id(self, iri):

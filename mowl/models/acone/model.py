@@ -1,5 +1,6 @@
 """AConE (He et al., 2024) on ontologies."""
 from mowl.models.query.model import QueryEmbeddingModel
+from mowl.representation.library.query_methods import AConEGeometry
 
 
 class AConE(QueryEmbeddingModel):
@@ -20,5 +21,6 @@ class AConE(QueryEmbeddingModel):
     """
 
     method = "acone"
+    geometry_class = AConEGeometry
     default_gamma = 20.0
     geometry_defaults = {"signed_negation": False}

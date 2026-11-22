@@ -33,7 +33,8 @@ from mowl.representation.relation_models import Relations
 
 __all__ = ["PointBoxes", "BetaPoints", "ConePoints", "BetaNetwork",
            "ConeNetwork", "ConeRotation", "BoxAttentionIntersection",
-           "BoxExactIntersection", "BetaAttentionIntersection", "BetaMeanIntersection", "ConeAttentionIntersection",
+           "BoxExactIntersection", "BetaAttentionIntersection", "BetaMeanIntersection",
+           "ConeAttentionIntersection",
            "BetaInversion", "ConeComplement", "BoxDistance", "BetaDistance", "ConeDistance",
            "embedding"]
 

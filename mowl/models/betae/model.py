@@ -1,5 +1,6 @@
 """BetaE (Ren, Leskovec, NeurIPS 2020) on ontologies."""
 from mowl.models.query.model import QueryEmbeddingModel
+from mowl.representation.library.query_methods import BetaEGeometry
 
 
 class BetaE(QueryEmbeddingModel):
@@ -17,4 +18,5 @@ class BetaE(QueryEmbeddingModel):
     """
 
     method = "betae"
+    geometry_class = BetaEGeometry
     default_gamma = 24.0

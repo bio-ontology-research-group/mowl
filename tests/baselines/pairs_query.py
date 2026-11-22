@@ -12,6 +12,7 @@ _STEPS = 3
 _COMMON = dict(embed_dim=8, learning_rate=3e-3, batch_size=24, negatives=4, seed=0,
                steps_per_epoch=_STEPS)
 
+
 def _builder(key):
     from mowl.representation.library import query_methods as qm
     return {"query2box": qm.query2box, "betae": qm.betae, "cone_qe": qm.cone_qe,
