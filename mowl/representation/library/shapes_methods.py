@@ -232,11 +232,12 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
                                  radius_raw=t.class_radius_raw)
         second = VectorClasses(centres=t.class_intensional)
         points = Points(centres=t.ind_embed)
-        matrix = t.M
+        matrix = None
         relations = Translation(vectors=t.rel_embed)
         alpha = t.alpha
     classes = LinkedClasses(first, second)
-    individuals = LinkedClasses(points, MappedVectors(points.centres, matrix))
+    individuals = LinkedClasses(points, MappedVectors(
+        points.centres, matrix, owner=None if t is None else (t, "M")))
     measure = LinkedMeasure(EllipsoidMeasure(containment), CosineOrder(norm_term), alpha)
     objective = ShapeObjective(
         0.0, negatives="gci2", strict_negatives=False,
