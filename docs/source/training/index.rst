@@ -42,6 +42,27 @@ training design is the composition :class:`~mowl.training.GroundedELTraining` of
 model must provide (a temperature, ``reseed_components``, ``dual_weights``) and refuses
 other models when it is attached. See :doc:`../methods/grounded`.
 
+The readings of :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE` other
+than ``"axiom"`` are regimes of :mod:`mowl.training.structural`:
+:class:`~mowl.training.structural.StructuralTables` (the definition table and the targets of
+the structural reading, compiled when training starts),
+:class:`~mowl.training.structural.ExtraPenalties` (its existence, size and witness penalties)
+and :class:`~mowl.training.structural.SampledPointLoss` (the point loss on a sample of the
+canonical elements). The models attach them (``model.method_regimes()``); a regime assigned
+to ``training_regime`` is added to them, and one of the same class replaces one of them:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import MultiBoxEL
+   from mowl.training import IdleComponentReseeding
+   from mowl.training.structural import ExtraPenalties, StructuralTables
+
+   model = MultiBoxEL(FamilyDataset(), embed_dim=4, objective="structural")
+   model.training_regime = IdleComponentReseeding(every=1)
+   kinds = {type(r) for r in model.training_regime.regimes}
+   assert {StructuralTables, ExtraPenalties, IdleComponentReseeding} <= kinds
+
 Strict and slack margins
 ------------------------
 

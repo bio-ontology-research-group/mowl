@@ -1,15 +1,14 @@
 """MultiELBE model class."""
 from __future__ import annotations
 
-from typing import Optional
-
 import torch as th
 
 from mowl.models.multielbe.common import MultiELBEOptions
 from mowl.nn import MultiELBEModule
+from mowl.training.structural import MethodRegimes
 
 
-class MultiELBE(MultiELBEOptions):
+class MultiELBE(MethodRegimes, MultiELBEOptions):
     """Multi-component ELBE embedding model.
 
     Represents every ontology class as a union of ``n_components`` (:math:`k`)
@@ -125,24 +124,22 @@ class MultiELBE(MultiELBEOptions):
 
     module_class = MultiELBEModule
 
-    def additional_training_loss(self, epoch: int) -> Optional[th.Tensor]:
-        """The extra training loss of a point reading, from the parts of the module.
+    def init_module(self):
+        """Make the module (:class:`~mowl.nn.MultiELBEModule`) and attach the regimes of the
+        reading (:meth:`method_regimes`) unless a regime is attached."""
+        super().init_module()
+        self._attach_method_regimes()
 
-        ``None`` under ``objective="axiom"``; under ``"point"``, ``"mixed"`` and ``"hybrid"``
-        the point terms of the module
-        (:class:`~mowl.representation.library.structural_points.PointTerms`) on the sample
-        of the epoch (at most ``points_per_epoch`` pairs, seed ``points_seed + epoch``):
-        membership, role, and ``volume_reg`` times the volume penalty of the named classes
-        other than ``owl:Thing`` and ``owl:Nothing``.
-
-        :param epoch: Zero-based training epoch index used to seed per-epoch sampling.
-        """
+    def method_regimes(self):
+        """The training regimes of the reading, which a regime assigned to
+        :attr:`training_regime` is added to (one of the same class replaces one of them):
+        under ``"point"``, ``"mixed"`` and ``"hybrid"``
+        :class:`~mowl.training.structural.SampledPointLoss` (the point terms on a sample of
+        ``points_per_epoch`` pairs, seed ``points_seed + epoch``); none under ``"axiom"``."""
+        from mowl.training.structural import SampledPointLoss
         if self.objective == "axiom":
-            return None
-        batch = self._point_batch(epoch)
-        terms = self.module.point_terms
-        terms.volume_classes = self._volume_classes()
-        return terms.loss(self.module, batch)
+            return []
+        return [SampledPointLoss(self.points_per_epoch, self.points_seed)]
 
     def compute_loss(self, pos_scores, neg_scores=None):
         """Compute MSE loss for MultiELBE (matching ELBE).

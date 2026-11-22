@@ -448,6 +448,12 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
                 total = total + term
         return total
 
+    def extra_penalties(self):
+        """The penalties of the structural reading (existence, size, witness): the
+        regularisers of the geometry that :meth:`regularization_loss` does not count; the
+        regime :class:`~mowl.training.structural.ExtraPenalties` adds them to training."""
+        return self._structural_penalties()
+
     def _structural_penalties(self):
         base = self.__dict__.get("base_regularizers", self.regularizers)
         return tuple(r for r in self.regularizers if r not in base)

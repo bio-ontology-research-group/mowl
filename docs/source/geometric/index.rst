@@ -590,9 +590,9 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
       * - :math:`C \sqsubseteq \exists r.D`, :math:`\exists r.C \sqsubseteq D`, :math:`\exists r.C \sqsubseteq \bot`, and ABox assertions (``gci2``, ``gci3``, ``gci3_bot``, ``class_assertion``, ``object_property_assertion``)
         - Existing Box²EL multibox scores (hard aggregation, with ``gci3`` and ``gci3_bot`` squared) evaluated on the materialised slots :math:`(c, |w|)` with inactive or empty slots (:math:`\neg\text{active} \vee \text{ne}(w) \le 0`) masked out (source slots excluded from means, target slots excluded from minima); because Box²EL ``gamma`` loosens inclusions (:math:`\operatorname{relu}(\text{dist} + 2o - \gamma)`), positive role and assertion scores pass ``gamma = -m`` (tightening inclusion by :math:`m`), whereas negative scores (:func:`~mowl.baselines.nn.el.multiboxel.losses.gci2_score_neg` and negative ``object_property_assertion``) keep Box²EL's convention (``gamma = +margin``, which relaxes them by the margin), so the negative-sampling term is unchanged between the axiom and structural objectives; class bumps remain per-class embedding rows
 
-   Additional per-epoch terms returned by
-   :meth:`~mowl.models.MultiBoxEL.additional_training_loss` via
-   :meth:`~mowl.nn.MultiBoxELModule.structural_extra_loss`:
+   Additional per-step terms, added by the regime
+   :class:`~mowl.training.structural.ExtraPenalties` of the reading (the penalties of
+   :meth:`~mowl.nn.MultiBoxELModule.structural_extra_loss`):
 
    * *Existence* (weight ``existence_weight``, default ``1.0``,
      :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`):

@@ -1,16 +1,12 @@
 """MultiBoxEL model class."""
 from __future__ import annotations
 
-from typing import Optional
-
-import torch as th
-
 from mowl.models.multiboxel.common import MultiBoxELOptions
 from mowl.nn import MultiBoxELModule
-from mowl.nn.el.structural import build_structural_tables
+from mowl.training.structural import MethodRegimes
 
 
-class MultiBoxEL(MultiBoxELOptions):
+class MultiBoxEL(MethodRegimes, MultiBoxELOptions):
     """Multi-component Box\\ :math:`^2`\\ EL embedding model.
 
     Represents every ontology class as a union of ``n_components`` (:math:`k`)
@@ -194,78 +190,31 @@ class MultiBoxEL(MultiBoxELOptions):
 
     module_class = MultiBoxELModule
 
-    def additional_training_loss(self, epoch: int) -> Optional[th.Tensor]:
-        """The extra training loss of the reading, from the parts of the module.
+    def init_module(self):
+        """Make the module (:class:`~mowl.nn.MultiBoxELModule`) and attach the regimes of the
+        reading (:meth:`method_regimes`) unless a regime is attached."""
+        super().init_module()
+        self._attach_method_regimes()
 
-        - ``objective="axiom"``: ``None``.
-        - ``objective="structural"``: the penalties of the structural reading
-          (:meth:`~mowl.nn.MultiBoxELModule.structural_extra_loss`).
-        - ``objective`` ``"point"``, ``"mixed"``, ``"hybrid"``: the point terms of the module
-          (:class:`~mowl.representation.library.structural_points.PointTerms`) on the sample
-          of the epoch (at most ``points_per_epoch`` pairs, seed ``points_seed + epoch``):
-          membership, role, and ``volume_reg`` times the volume penalty of the named classes
-          other than ``owl:Thing`` and ``owl:Nothing``.
+    def method_regimes(self):
+        """The training regimes of the reading, which a regime assigned to
+        :attr:`training_regime` is added to (one of the same class replaces one of them):
 
-        :param epoch: Zero-based training epoch index used to seed per-epoch sampling.
+        - ``objective="structural"``: :class:`~mowl.training.structural.StructuralTables`
+          (definition table and targets compiled from the training data when training
+          starts) and :class:`~mowl.training.structural.ExtraPenalties` (the existence,
+          size and witness penalties at every step);
+        - ``"point"``, ``"mixed"``, ``"hybrid"``:
+          :class:`~mowl.training.structural.SampledPointLoss` (the point terms on a sample
+          of ``points_per_epoch`` pairs, seed ``points_seed + epoch``);
+        - ``"axiom"``: none.
         """
-        if self.objective == "axiom":
-            return None
+        from mowl.training.structural import ExtraPenalties, SampledPointLoss, StructuralTables
         if self.objective == "structural":
-            return self.module.structural_extra_loss()
-        batch = self._point_batch(epoch)
-        terms = self.module.point_terms
-        terms.volume_classes = self._volume_classes()
-        return terms.loss(self.module, batch)
-
-    def train(self, epochs, validate_every=1, epoch_callback=None):
-        """Build structural tables when ``objective='structural'``, then run the training loop.
-
-        Guarantees:
-
-        - When ``objective="structural"``, compiles a
-          :class:`~mowl.nn.el.structural.DefinitionTable` and
-          :class:`~mowl.nn.el.structural.ExistenceTargets` via
-          :func:`~mowl.nn.el.structural.build_structural_tables`, caches them on
-          the model so :meth:`init_module`, :meth:`load_best_model`, and
-          :meth:`from_pretrained` preserve them, and attaches them via
-          :meth:`~mowl.nn.MultiBoxELModule.set_structural_tables` before
-          delegating to ``super().train(...)``.
-        - Raises :class:`ValueError` if any required training GCI tensor has
-          fewer columns than expected by its normal form.
-        - When ``objective != "structural"``, delegates directly to
-          ``super().train(...)``.
-
-        Non-guarantees:
-
-        - Gradient-based training is non-convex and is not guaranteed to reach a
-          global minimum from arbitrary random initialisations.
-
-        Parameters
-        ----------
-        epochs : int
-            Number of training epochs.
-        validate_every : int, default 1
-            Validation frequency in epochs.
-        epoch_callback : callable, optional
-            Optional callback ``epoch_callback(epoch, model)`` invoked at the end
-            of each 0-based epoch.
-
-        Returns
-        -------
-        None
-            Trains the model in place and returns ``None``.
-        """
-        if self.objective == "structural":
-            self._structural_tables = build_structural_tables(
-                self,
-                k=self.n_components,
-                max_components=self.max_components,
-                enabled=self.structural_definitions,
-                cm=self.canonical_model,
-            )
-            table, targets, top_idx = self._structural_tables
-            self.module.set_structural_tables(table, targets, top_idx=top_idx)
-
-        return super().train(
-            epochs, validate_every=validate_every, epoch_callback=epoch_callback
-        )
+            return [StructuralTables(lambda model: dict(
+                k=model.n_components, max_components=model.max_components,
+                enabled=model.structural_definitions, cm=model.canonical_model)),
+                ExtraPenalties()]
+        if self.objective in ("point", "mixed", "hybrid"):
+            return [SampledPointLoss(self.points_per_epoch, self.points_seed)]
+        return []
