@@ -472,7 +472,13 @@ CONCEPT2BOX = MethodCard(
         "and concept linking, published numbers and a recipe of the Appendix settings; the "
         "split of the paper is not released and the public data are smaller than its "
         "Table 1, so the numbers are indicative targets only. The relation isa of the "
-        "ontology view is a relation like the 19 others, as in the paper."),
+        "ontology view is a relation like the 19 others, as in the paper. Direction: gci0 is "
+        "the triple (D, subclass, C), so the box of C lies inside that of D, while gci2 is "
+        "the triple (C, r, D) as a plain KG triple, so the box of D lies inside that of C; "
+        "the direction is kept as implemented (a reversal for gci2 was proposed but the "
+        "paper's convention could not be checked). As in Equations 8-9 the vector-to-box distance is positive inside the "
+        "box (the inside part is weighted by alpha), so a true cross-view link costs more "
+        "than 0."),
     references=(
         Reference("huang2023",
                   "Huang, Z., Wang, D., Huang, B., Zhang, C., Shang, J., Liang, Y., Wang, Z., "
