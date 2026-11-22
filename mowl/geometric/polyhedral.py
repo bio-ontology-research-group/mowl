@@ -5,6 +5,7 @@ Gutiérrez-Basulto & Schockaert (KR 2018, Proposition 3) restated in standard
 simplex coordinates (Lacerda, Ozaki & Guimarães, TGDK 2024, §5).
 
 Construction:
+
 - Given a :class:`~mowl.geometric.completion.CanonicalModel` with
   :math:`n = |\\text{cm.names}|` satisfiable concept names (including
   :math:`\\top`), let :math:`k = n - 1` be the ambient dimension and
@@ -38,6 +39,7 @@ Construction:
   for satisfiable concepts.
 
 Guarantees:
+
 - **Exact model of the normalised ontology**: satisfies every normalised axiom
   (:class:`~mowl.geometric.normal_forms.NF1`–:class:`~mowl.geometric.normal_forms.NF4`,
   :class:`~mowl.geometric.normal_forms.NF6`,
@@ -62,6 +64,7 @@ Guarantees:
   inconsistent.
 
 References:
+
 - V. Gutiérrez-Basulto & S. Schockaert, *From Knowledge Graph Embedding to
   Ontology Embedding? An Analysis of the Compatibility between Vector Space
   Representations and Rules*, KR 2018 (arXiv:1805.10461), Propositions 3, 4.
@@ -107,6 +110,7 @@ class ConvexPolyhedralModel(GeometricInterpretation):
     where :math:`n = |\\text{cm.names}|`.
 
     Guarantees:
+
     - Exact model of the normalised ontology (``cm.axioms``), verified on
       construction via :class:`~mowl.geometric.checker.ModelChecker`.
     - Non-degenerate (non-empty, lower-dimensional simplex faces) on all

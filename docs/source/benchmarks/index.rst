@@ -560,7 +560,7 @@ Inductive link prediction
 -------------------------
 
 The twelve ``kg-inductive-*`` benchmarks are the inductive knowledge graph completion
-datasets of Teru et al. (ICML 2020), derived from FB15k-237, WN18RR and NELL-995 (versions
+datasets of Teru et al. [teru2020]_ (ICML 2020), derived from FB15k-237, WN18RR and NELL-995 (versions
 ``v1`` to ``v4``), with the protocol of RESHUFFLE [pavlovic2025]_: a model is trained on one
 graph and tested on a second graph that has other entities and the same relations.
 
@@ -581,24 +581,6 @@ graph and tested on a second graph that has other entities and the same relation
 * The published numbers (Hits@10, Table 2 and Table 3 of the paper) and the settings of the
   authors' code are registered for the method ``reshuffle`` (three variants: ``reshuffle``,
   ``no-loop``, ``square``).
-
-Logical query answering benchmarks
-----------------------------------
-
-The ``query-<kg>-betae`` and ``query-<kg>-q2b`` benchmarks (``kg`` is ``fb15k``,
-``fb15k237`` or ``nell995``) are the released query sets of BetaE and Query2Box, on which
-Query2Box, BetaE, ConE and AConE report their results. ``query-wn18rr-qa`` is the
-WN18RR-QA set that AConE adds; mOWL does not download it (pass the directory as
-``dataset_kwargs={"data_dir": ...}``).
-
-The dataset (:class:`mowl.datasets.builtin.query_sets.QueryAnsweringDataset`) downloads the
-archive ``KG_data.zip`` (1.4 GB, checksum pinned) once and converts it. The training graph is
-an ontology of axioms :math:`h \sqsubseteq \exists r.t` between entity classes; the released
-validation and test queries, with easy and hard answers and including the negation
-structures 2in, 3in, inp, pin, pni and the unions 2u, up, are read with the entity and
-relation ids of the model that is evaluated, and ranked by
-:class:`mowl.evaluation.ReleasedQueryAnswering`, which reports one subset per structure and
-the averages ``average_epfo`` and ``average_negation`` that the papers print.
 
 .. testcode::
 
@@ -622,6 +604,29 @@ the averages ``average_epfo`` and ``average_negation`` that the papers print.
 
    python -m mowl.benchmarks run kg-inductive-nell995-v1 --method reshuffle \
        --recipe pavlovic2025:reshuffle --seed 0 --device cuda --out nell_v1_s0.json
+
+
+Logical query answering benchmarks
+----------------------------------
+
+The ``query-<kg>-betae`` and ``query-<kg>-q2b`` benchmarks (``kg`` is ``fb15k``,
+``fb15k237`` or ``nell995``) are the released query sets of BetaE and Query2Box, on which
+Query2Box, BetaE, ConE and AConE report their results. ``query-wn18rr-qa`` is the
+WN18RR-QA set that AConE adds; mOWL does not download it (pass the directory as
+``dataset_kwargs={"data_dir": ...}``).
+
+The dataset (:class:`mowl.datasets.builtin.query_sets.QueryAnsweringDataset`) downloads the
+archive ``KG_data.zip`` (1.4 GB, checksum pinned) once and converts it. The training graph is
+an ontology of axioms :math:`h \sqsubseteq \exists r.t` between entity classes; the released
+validation and test queries, with easy and hard answers and including the negation
+structures 2in, 3in, inp, pin, pni and the unions 2u, up, are read with the entity and
+relation ids of the model that is evaluated, and ranked by
+:class:`mowl.evaluation.ReleasedQueryAnswering`, which reports one subset per structure and
+the averages ``average_epfo`` and ``average_negation`` that the papers print.
+
+.. testcode::
+
+   from mowl.benchmarks import get_benchmark, get_recipe, published_results
 
    b = get_benchmark("query-nell995-betae")
    print(b.assumption.value, b.target.value)

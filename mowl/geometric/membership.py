@@ -4,6 +4,7 @@ Constructs :class:`MembershipStructure` from a :class:`~mowl.geometric.completio
 for the canonical-element mixture model.
 
 Guarantees:
+
 - Support :math:`S` consists of the canonical elements of satisfiable named
   concepts in ``class_index_dict`` (excluding ``TOP``, ``BOTTOM``, and auxiliary
   concept names not in ``class_index_dict``) together with the canonical elements
@@ -21,6 +22,7 @@ Guarantees:
   input tensor is empty.
 
 Non-guarantees:
+
 - Satisfiable individuals present in ``cm.individuals`` but missing from
   ``individual_index_dict`` are still appended to support :math:`S` (they have
   no entry in ``individual_element``).

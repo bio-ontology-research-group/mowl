@@ -6,7 +6,6 @@ from mowl.error import messages as msg
 
 import logging
 from deprecated.sphinx import versionchanged
-import logging
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
@@ -42,7 +41,7 @@ class BaseRankingEvaluator():
         assert (tails == sorted_tails).all(), "Tails must be sorted."
 
         if len(heads) != len(tails):
-            logger.warning(f"Detected a different number of evaluation heads and tails. AUC metric will not be accurate in this case if you evaluate in mode='both'")
+            logger.warning("Detected a different number of evaluation heads and tails. AUC metric will not be accurate in this case if you evaluate in mode='both'")
 
         
          
@@ -52,7 +51,7 @@ class BaseRankingEvaluator():
         tail_idx = th.arange(len(tails), dtype=th.long, device=self.device)
 
         if not (heads == head_idx).all():
-            logger.info(f"Head indices are incomplete. This is normal if you are predicting over a subset of entities.")
+            logger.info("Head indices are incomplete. This is normal if you are predicting over a subset of entities.")
             max_head = heads.max().item() + 1
             self.mapped_heads = - th.ones(max_head, dtype=th.long, device=self.device)
             self.mapped_heads[heads] = head_idx
@@ -60,7 +59,7 @@ class BaseRankingEvaluator():
             self.mapped_heads = heads
             
         if not (tails == tail_idx).all():
-            logger.info(f"Tail indices are incomplete. This is normal if you are predicting over a subset of entities.")
+            logger.info("Tail indices are incomplete. This is normal if you are predicting over a subset of entities.")
             max_tail = tails.max().item() + 1
             self.mapped_tails = - th.ones(max_tail, dtype=th.long, device=self.device)
             self.mapped_tails[tails] = tail_idx

@@ -10,6 +10,7 @@ an unweighted :math:`L_2^2` anchor loss pulling class centres and half-widths
 initial configuration during training.
 
 Guarantees:
+
 - **Containment guarantee (projected mode, k = 1):** When ``method="projected"``
   and ``n_components=1``, every canonical domain element :math:`e \\in \\Delta^{\\mathcal{I}}`
   is mapped to a Gaussian point :math:`p_e = \\text{scale} \\cdot g_e / \\sqrt{d} \\in \\mathbb{R}^d`
@@ -78,6 +79,7 @@ Guarantees:
   :meth:`ExactBoxInit.anchor_loss`.
 
 Non-guarantees:
+
 - **Unsatisfiable-subclass ``gci0`` axioms:** Axioms :math:`U \\sqsubseteq A`
   whose subclass :math:`U` is unsatisfiable are not covered by the zero-loss
   ``gci0`` guarantee: unsatisfiable names are placed as points at the origin,

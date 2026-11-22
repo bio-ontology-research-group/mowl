@@ -17,6 +17,7 @@ are the :class:`~mowl.geometric.regions.Face` and
 :class:`~mowl.geometric.checker.ModelChecker` decides exactly.
 
 Guarantees:
+
 - ``φ(η) = M`` (:meth:`ConvexRegionModel.phi`), checked geometrically by convex-hull
   membership and not by reading the construction back.
 - Consequently ``η`` satisfies a normal-form axiom iff ``M`` does (for the forms

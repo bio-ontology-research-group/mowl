@@ -22,8 +22,9 @@ Two examples
 **A role that turns a box inside out.** In BoxEL a role scales the boxes of its fillers. The
 authors' code lets the scale have any sign. A negative scale then maps a box to an *inverted*
 box, one whose half-width is negative, and everything computed from it is meaningless. The
-part ``Affine`` takes the absolute value by default, and the box stays a box. The published
-method keeps the signed scale, because the paper's numbers were obtained with it:
+part ``Affine`` takes the absolute value by default, and the box stays a box. The signed scale
+of the authors stays available as ``scale="signed"``, and the method ``boxel`` takes the same
+option:
 
 .. testcode::
 
@@ -38,24 +39,26 @@ method keeps the signed scale, because the paper's numbers were obtained with it
    ids = th.tensor([0])
 
    print("part, default:   ", relation.image(ids, box).offset.round().tolist())
-   relation.signed = True                         # the authors' reading
+   relation.scale = "signed"                      # the authors' reading
    print("part, as BoxEL:  ", relation.image(ids, box).offset.round().tolist())
-   print("method 'boxel':  signed =", inspect.signature(METHODS["boxel"]).parameters["signed"].default)
+   print("method 'boxel':  scale =", inspect.signature(METHODS["boxel"]).parameters["scale"].default)
 
 .. testoutput::
 
    part, default:    [[1.0, 1.0]]
    part, as BoxEL:   [[-1.0, -1.0]]
-   method 'boxel':  signed = True
+   method 'boxel':  scale = positive
 
 The module of BoxEL itself was changed in the same way. ``BoxEL(..., positive_scale=True)`` is
 the default, and ``positive_scale=False`` restores the signed scale (BoxSEL follows).
+The method ``boxel`` reads ``scale="positive"`` by default and ``scale="signed"`` for the
+released code.
 
 **A loss that goes below zero.** Shadow cones score a pair by the signed distance to the cone
 of the parent. The authors' loss for a pair that does *not* belong together is that raw
 number, so it is smallest, and most negative, deep inside the cone, which is the wrong way
-round for a loss. The part scores a wrong pair with a hinge, :math:`\max(0, \gamma - E)`. The
-method ``shadow_cones`` reads the energy as published:
+round for a loss. The part scores a wrong pair with a hinge, :math:`\max(0, \gamma - E)`, and
+so does the method ``shadow_cones``; the raw energy is the option ``negative_form="energy"``:
 
 .. testcode::
 
@@ -69,7 +72,7 @@ method ``shadow_cones`` reads the energy as published:
 .. testoutput::
 
    part:   signed = False  negative = hinge
-   method: signed = True  negative = energy
+   method: signed = True  negative = hinge
 
 The module ``ShadowConesModule`` behaves in the same way: ``negative="hinge"`` is its default
 and ``negative="energy"`` gives the old loss. For the numbers of the paper (its Equation 1) the
