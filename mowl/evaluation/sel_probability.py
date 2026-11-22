@@ -48,7 +48,7 @@ def batch_probabilities(model, conditionals):
         idx = [i for i, _, _ in items]
         ld = th.tensor([d for _, d, _ in items], dtype=th.long, device=model.device)
         lc = th.tensor([c for _, _, c in items], dtype=th.long, device=model.device)
-        out[idx] = model.module.probability(sd, sc, ld, lc).detach().cpu().numpy()
+        out[idx] = model.module.probability(sd, sc, ld, lc).detach().cpu().numpy().reshape(-1)
     return out
 
 
