@@ -99,6 +99,8 @@ class ELKEmModule(_PartBuiltModule):
     :param abox_threshold: Target-score threshold :math:`\tau` of corrupted assertions.
     :param epsilon: Lower bound added to class half-widths and role slopes.
     :param variant: ``"paper"`` (default) or ``"reference"`` (see *Variants*).
+    :param size_weight: Weight of the box-size penalty of the authors' code in
+        :meth:`regularization_loss` (``0``: none; the earlier module had it in the model).
     """
 
     VARIANTS = ("paper", "reference")
@@ -124,13 +126,15 @@ class ELKEmModule(_PartBuiltModule):
                           "ind_embedding.weight": "individual_model.centres.weight"}
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
-                 bot_ids=(), top_ids=(), abox_threshold=0.4, epsilon=1e-5, variant="paper"):
+                 bot_ids=(), top_ids=(), abox_threshold=0.4, epsilon=1e-5, variant="paper",
+                 size_weight=0.0):
         from mowl.representation.library.boxrel_methods import elkem
         if variant not in self.VARIANTS:
             raise ValueError(f"variant must be one of {self.VARIANTS}, got {variant!r}.")
         built = elkem(nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim,
                       margin=margin, bot_ids=bot_ids, top_ids=top_ids,
-                      abox_threshold=abox_threshold, epsilon=epsilon, variant=variant)
+                      abox_threshold=abox_threshold, epsilon=epsilon, variant=variant,
+                      size_weight=size_weight)
         super().__init__(built)
         self.variant = variant
         self.nb_ont_classes = nb_ont_classes

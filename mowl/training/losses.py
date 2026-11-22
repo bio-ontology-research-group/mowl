@@ -121,18 +121,20 @@ class SumLoss(_ScoreLoss):
     EmEL++ (Section 3.3) and DELE (Mashkova et al., Eq. 23). BoxEL (Xiong et al.,
     Section 5.2) multiplies its non-subsumption loss by :math:`\\phi = 0.05`
     (``neg_weight=0.05``). Attach it to ELBE to replace ELBE's MSE loss by the plain sum.
-    Negatives are scored by the module's negative loss.
+    Negatives are scored by the module's negative loss. ``pos_weight`` weights the mean
+    positive loss (ELK-Em weights its assertion losses, ``abox_pos_weight``).
     """
 
     key = "loss-sum"
     needs_positive_form = False
 
-    def __init__(self, neg_weight=1.0, normal_forms=None):
+    def __init__(self, neg_weight=1.0, normal_forms=None, pos_weight=1.0):
         super().__init__(normal_forms=normal_forms, neg_scores="module")
         self.neg_weight = float(neg_weight)
+        self.pos_weight = float(pos_weight)
 
     def combine(self, gci_name, pos, neg):
-        loss = pos.mean()
+        loss = pos.mean() if self.pos_weight == 1.0 else self.pos_weight * pos.mean()
         if neg is not None:
             loss = loss + self.neg_weight * neg.mean()
         return loss
