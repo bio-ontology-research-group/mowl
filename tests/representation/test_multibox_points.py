@@ -11,7 +11,8 @@ import mowl
 mowl.init_jvm("1g")
 
 from mowl.datasets.el.points import PointSupervision
-from mowl.nn import MultiBoxELModule, MultiELBEModule
+from mowl.baselines.nn.el.multiboxel.module import MultiBoxELModule
+from mowl.baselines.nn.el.multielbe.module import MultiELBEModule
 from mowl.nn.el.pointloss import volume_penalty
 from mowl.representation import Ball, Box, Objective, compose, geometry_of, MEASURES
 from mowl.representation.library.structural_points import (PointPenalty, PointReading,

@@ -5,6 +5,10 @@ model, individual model, constructors, measure, parametrisation);
 :mod:`mowl.representation.catalog` states them for every catalogued method.
 """
 
+# The public modules of :mod:`mowl.nn` are combinations of the parts below, and the parts use
+# the base class of the modules: loading :mod:`mowl.nn` first fixes the order of the two.
+import mowl.nn  # noqa: F401
+
 from mowl.representation.vocabulary import (
     View, Space, ClassModel, RelationModel, IndividualModel, Construction, Measure,
     Parametrisation, Composable, Representation, CONSTRUCTORS)

@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from mowl.nn import BoxSquaredELModule, MultiBoxELModule
-import mowl.nn.el.multiboxel.losses as MBL
+import mowl.baselines.nn.el.multiboxel.losses as MBL
 
 
 def make_pair(
@@ -384,18 +384,6 @@ def test_exact_box_init_and_gradients_with_multiboxel() -> None:
         mb(torch.tensor([[0, 1]]), "class_assertion")
     with pytest.raises(ValueError):
         mb(torch.tensor([[0, 0, 1]]), "object_property_assertion")
-
-
-def test_resolve_n_components_rejects_ambiguous_embedding() -> None:
-    bare_emb = torch.nn.Embedding(6, 8)
-    with pytest.raises(ValueError):
-        MBL._resolve_n_components(bare_emb)
-    with pytest.raises(ValueError):
-        MBL._resolve_n_components(bare_emb, embed_dim=4)
-    assert MBL._resolve_n_components(bare_emb, embed_dim=8) == 1
-    assert MBL._resolve_n_components(bare_emb, n_components=2, embed_dim=4) == 2
-    bare_emb.embed_dim = 8
-    assert MBL._resolve_n_components(bare_emb) == 1
 
 
 def test_multiboxel_soft_aggregation_and_diversity_reg() -> None:

@@ -16,7 +16,7 @@ import mowl
 mowl.init_jvm("1g")
 
 from mowl.models import ComposedEL
-from mowl.nn import MultiBoxELModule
+from mowl.baselines.nn.el.multiboxel.module import MultiBoxELModule
 from mowl.nn.el.structural import (DefinitionTable, ExistenceTargets, WitnessTargets,
                                    build_structural_tables)
 from mowl.representation import (Bounds, BoxClasses, ComposedGeometry, METHODS, geometry_of)

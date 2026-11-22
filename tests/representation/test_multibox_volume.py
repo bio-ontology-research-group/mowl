@@ -5,7 +5,7 @@ import numpy as np
 import torch as th
 
 from mowl.models import ComposedEL
-from mowl.nn import VolumeMultiBoxELModule
+from mowl.baselines.nn.el.mcmultibox.module import VolumeMultiBoxELModule
 from mowl.representation import (
     Ball, Box, BallClasses, BoxClasses, ConstructorUnavailable, ComposedGeometry, Objective,
     Translation, geometry_of, METHODS)

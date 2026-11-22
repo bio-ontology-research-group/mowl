@@ -396,16 +396,16 @@ def test_ranking_distance_equals_the_row_by_row_loss(gci_name):
     assert got.shape == (len(data), 1)
 
 
-def test_ranking_computes_each_distinct_operand_once():
+def test_ranking_computes_each_distinct_operand_once(monkeypatch):
     m = make_module(n_classes=40, n_rels=2, d=2, n=2, points=512, point_chunk_size=128)
     calls = []
-    original = m._chi
+    original = V.soft_membership
 
-    def counting(p, c, o):
+    def counting(p, c, o, *args, **kwargs):
         calls.append(len(c))
-        return original(p, c, o)
+        return original(p, c, o, *args, **kwargs)
 
-    m._chi = counting
+    monkeypatch.setattr(V, "soft_membership", counting)
     data = th.stack([th.zeros(40, dtype=th.long), th.zeros(40, dtype=th.long),
                      th.arange(40)], dim=1)
     m.distance(data, "gci2")

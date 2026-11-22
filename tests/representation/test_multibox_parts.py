@@ -5,9 +5,10 @@ from unittest import TestCase
 import torch as th
 
 from mowl.models import ComposedEL
-from mowl.nn import BoxSquaredELModule, ELBEModule
-from mowl.nn.el.multiboxel.module import MultiBoxELModule
-from mowl.nn.el.multielbe.module import MultiELBEModule
+from mowl.nn import ELBEModule
+from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
+from mowl.baselines.nn.el.multiboxel.module import MultiBoxELModule
+from mowl.baselines.nn.el.multielbe.module import MultiELBEModule
 from mowl.representation import (
     Ball, BallClasses, Bounds, Box, BoxClasses, CentreDistance, ComposedGeometry,
     Objective, Translation, compose, geometry_of, METHODS)

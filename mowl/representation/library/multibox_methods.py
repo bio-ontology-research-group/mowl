@@ -37,6 +37,23 @@ from mowl.representation.library.structural_regions import SlotClasses
 __all__ = ["box2el", "multiboxel", "multielbe", "mcmultibox"]
 
 
+#: The forms that have a negative loss with ``all_negatives=True`` (DELE: the concept forms,
+#: not the class assertion).
+_DELE_NEGATIVES = ("gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
+                   "object_property_assertion")
+
+
+def _build(geometry_class, into, *args, **kwargs):
+    """The geometry of a method: a new ``geometry_class``, or, with ``into``, the existing
+    uninitialised public module (a subclass of ``geometry_class``, such as
+    :class:`~mowl.nn.BoxSquaredELModule`) initialised with these parts, so that the module
+    *is* the combination."""
+    if into is None:
+        return geometry_class(*args, **kwargs)
+    geometry_class.__init__(into, *args, **kwargs)
+    return into
+
+
 def _BOUNDS():
     """Bounds as the union methods use them (the published readings)."""
     return Bounds(separation="every", extent="norm", conjunction="nonempty")
@@ -51,7 +68,7 @@ def _head_tail(nb_relations, embed_dim, t):
 
 @register_method("box2el")
 def box2el(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0, delta=2.0,
-           reg_factor=0.05, all_negatives=False, epsilon=0.01, tables=None):
+           reg_factor=0.05, all_negatives=False, epsilon=0.01, tables=None, into=None):
     """Box2EL (Jackermeier et al. 2024) with the negative losses of DELE.
 
     Boxes with a bump vector, relations as a head box and a tail box, bounds per coordinate
@@ -65,7 +82,10 @@ def box2el(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
     ``object_property_assertion`` and, with ``all_negatives=True``, the DELE negative losses
     of all forms, and the regularisation loss.
 
-    :param tables: A :class:`~mowl.nn.BoxSquaredELModule` to share parameters with.
+    :param tables: A module with the tables of Box2EL (such as the direct implementation in
+        :mod:`mowl.baselines`) to share parameters with.
+    :param into: The public module (:class:`~mowl.nn.BoxSquaredELModule`) to initialise with
+        these parts.
     """
     t = tables
     individuals = None
@@ -81,12 +101,11 @@ def box2el(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
                                            bumps=t.bump_individuals)
     objective = Objective(
         margin, slack=True, epsilon=epsilon, gci3="inclusion", gci2_negative="delta",
-        negatives="all" if all_negatives else "gci2", squared=True, delta=delta,
+        negatives=_DELE_NEGATIVES if all_negatives else "gci2", squared=True, delta=delta,
         gci3_bot_negative="filler", strict_negatives=False)
-    return ComposedGeometry(classes, _head_tail(nb_relations, embed_dim, t),
-                            _BOUNDS(),
-                            objective, individuals=individuals,
-                            regularizers=(bump_penalty(reg_factor),))
+    return _build(ComposedGeometry, into, classes, _head_tail(nb_relations, embed_dim, t),
+                  _BOUNDS(), objective, individuals=individuals,
+                  regularizers=(bump_penalty(reg_factor),))
 
 
 def _union_parts(nb_classes, embed_dim, n_components, individuals_count, t, names, bump):
@@ -137,7 +156,7 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
                reading="axiom", beta=0.1, neg_weight=0.1, ind_halfwidth=None, volume_reg=0.0,
                max_components=None, existence_weight=1.0, size_reg=1e-3, bot_agg="mean",
                witness_weight=0.0, supervision=None, size_reg_without_tables=False,
-               tables=None):
+               structural_definitions=True, tables=None, into=None):
     """MultiBoxEL (Federico, Leemhuis and Kutz 2026): Box2EL with every class a union of
     ``n_components`` boxes (one bump vector per class), in the five readings of the module's
     ``objective`` (here ``reading``):
@@ -168,8 +187,13 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
 
     The DELE negative losses of the other forms are not offered (the module has none).
 
-    :param tables: A :class:`~mowl.nn.MultiBoxELModule` to share parameters with (and, for
-        ``"structural"``, its definition table and targets).
+    :param structural_definitions: ``"structural"``: whether the rows that state a definition
+        :math:`A \\equiv X \\sqcap Y` are skipped by the losses (the objective's ``definitions``).
+    :param tables: A module with the tables of MultiBoxEL (the direct implementation in
+        :mod:`mowl.baselines`) to share parameters with (and, for ``"structural"``, its
+        definition table and targets).
+    :param into: The public module (:class:`~mowl.nn.MultiBoxELModule`) to initialise with
+        these parts.
     """
     t = tables
     if reading not in ("axiom", "structural", "point", "mixed", "hybrid"):
@@ -197,14 +221,18 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
             individuals = UnionClasses(components=1, centres=ind_centres,
                                        offsets=ind_offsets, bumps=ind_bumps)
         objective = StructuralReading(
-            margin, bot_agg=bot_agg, epsilon=epsilon, gci2_negative="delta", delta=delta,
-            squared=("gci3", "gci3_bot"), gci3_bot_negative="filler")
-        geometry = StructuralGeometry(
-            classes, _head_tail(nb_relations, embed_dim, t),
+            margin, bot_agg=bot_agg, definitions=structural_definitions, epsilon=epsilon,
+            gci2_negative="delta", delta=delta, squared=("gci3", "gci3_bot"),
+            gci3_bot_negative="filler")
+        geometry = _build(
+            StructuralGeometry, into, classes, _head_tail(nb_relations, embed_dim, t),
             SlotMeasure(_BOUNDS(), reading="structural"), objective, individuals=individuals,
             base_regularizers=regularizers, existence_weight=existence_weight,
             size_reg=size_reg, witness_weight=witness_weight,
             size_reg_without_tables=size_reg_without_tables)
+        if into is not None:
+            geometry.point_terms = _points(reading, t, embed_dim, beta, neg_weight,
+                                           ind_halfwidth, volume_reg, supervision)
         if t is not None:
             geometry.tables_installed = bool(getattr(t, "_tables_installed", False))
             geometry.reseed_options.update(mode=t.reseed_mode, size=t.reseed_size,
@@ -224,15 +252,17 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
     terms = None
     if reading == "axiom":
         objective = Objective(margin, **options)
-    else:
+    if reading != "axiom" or into is not None:
         terms = _points(reading, t, embed_dim, beta if t is None else t.beta, neg_weight
                         if t is None else t.neg_weight, ind_halfwidth if t is None
                         else t.ind_halfwidth, volume_reg if t is None else t.volume_reg,
                         supervision)
+    if reading != "axiom":
         objective = PointReading(terms, reading, margin, **options)
     measure = UnionMeasure(_BOUNDS(), component_aggregation, tau, meets_reading="every")
-    geometry = ComposedGeometry(classes, _head_tail(nb_relations, embed_dim, t), measure,
-                                objective, individuals=individuals, regularizers=regularizers)
+    geometry = _build(ComposedGeometry, into, classes,
+                      _head_tail(nb_relations, embed_dim, t), measure, objective,
+                      individuals=individuals, regularizers=regularizers)
     if terms is not None:
         geometry.point_terms = terms
     return geometry
@@ -243,7 +273,7 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
               n_components=1, component_reg=0.0, component_aggregation="hard", tau=1.0,
               diversity_reg=0.0, epsilon=0.01, gci3="overlap", reading="axiom", beta=0.1,
               neg_weight=0.1, ind_halfwidth=None, volume_reg=0.0, supervision=None,
-              tables=None):
+              tables=None, into=None):
     """MultiELBE (Federico, Leemhuis and Kutz 2026): ELBE with every class a union of
     ``n_components`` boxes (translations as relations, strict margin, overlap reading of
     :math:`\\exists r.C \\sqsubseteq D`).
@@ -261,7 +291,10 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
     the membership of :math:`x + r` in the target for a role triple; ``beta``, ``neg_weight``,
     ``ind_halfwidth``, ``volume_reg``). There is no structural reading of this module.
 
-    :param tables: A :class:`~mowl.nn.MultiELBEModule` to share parameters with.
+    :param tables: A module with the tables of MultiELBE (the direct implementation in
+        :mod:`mowl.baselines`) to share parameters with.
+    :param into: The public module (:class:`~mowl.nn.MultiELBEModule`) to initialise with
+        these parts.
     """
     t = tables
     if reading not in ("axiom", "point", "mixed", "hybrid"):
@@ -279,17 +312,17 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
     terms = None
     if reading == "axiom":
         objective = Objective(margin, **options)
-    else:
+    if reading != "axiom" or into is not None:
         terms = _points(reading, t, embed_dim, beta if t is None else t.beta, neg_weight
                         if t is None else t.neg_weight, ind_halfwidth if t is None
                         else t.ind_halfwidth, volume_reg if t is None else t.volume_reg,
                         supervision)
+    if reading != "axiom":
         objective = PointReading(terms, reading, margin, **options)
     measure = UnionMeasure(_BOUNDS(), component_aggregation, tau, meets_reading="every")
-    geometry = ComposedGeometry(classes, relations, measure, objective,
-                                individuals=individuals,
-                                regularizers=_union_regularizers(component_reg,
-                                                                 diversity_reg))
+    geometry = _build(ComposedGeometry, into, classes, relations, measure, objective,
+                      individuals=individuals,
+                      regularizers=_union_regularizers(component_reg, diversity_reg))
     if terms is not None:
         geometry.point_terms = terms
     return geometry
@@ -298,7 +331,7 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
 @register_method("mcmultibox")
 def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0.0,
                num_boxes=5, bound=1.0, num_points=20000, temperature=1.0, aggregate="min",
-               seed=0, point_chunk_size=2048, init_seed=None, tables=None):
+               seed=0, point_chunk_size=2048, init_seed=None, tables=None, into=None):
     """The volume-based MultiBoxEL (Aharoni 2024): classes are unions of boxes, relations are
     unions of boxes over pairs, and every loss is :math:`1 - \\mathrm{Vol}(A \\cap B) /
     \\mathrm{Vol}(A)` estimated on a fixed set of sampled points.
@@ -320,8 +353,10 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
     covered by :math:`D`; the inclusion of the individual boxes), because the measure has
     ``apart`` and the geometry has individuals. They are not verified against anything.
 
-    :param tables: A :class:`~mowl.nn.VolumeMultiBoxELModule` to share parameters (and
-        point sets) with.
+    :param tables: A module with the tables of the volume-based MultiBoxEL (the direct
+        implementation in :mod:`mowl.baselines`) to share parameters (and point sets) with.
+    :param into: The public module (:class:`~mowl.nn.VolumeMultiBoxELModule`) to initialise
+        with these parts.
     """
     t = tables
     if t is not None:
@@ -346,8 +381,8 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
         measure = SampledVolume(points, bound=bound, temperature=temperature,
                                 aggregate=aggregate, chunk_size=point_chunk_size)
     objective = Objective(negatives="gci2", strict_negatives=False)
-    geometry = ComposedGeometry(classes, relations, measure, objective,
-                                individuals=individuals, neg_capable_gcis=frozenset())
+    geometry = _build(ComposedGeometry, into, classes, relations, measure, objective,
+                      individuals=individuals, neg_capable_gcis=frozenset())
     geometry.margin_semantics = None
     return geometry
 
@@ -380,6 +415,7 @@ def _multiboxel(module):
                       existence_weight=module.existence_weight, size_reg=module.size_reg,
                       bot_agg=module.bot_agg, witness_weight=module.witness_weight,
                       size_reg_without_tables=getattr(module, "size_reg_without_tables", False),
+                      structural_definitions=getattr(module, "structural_definitions", True),
                       tables=module)
 
 
