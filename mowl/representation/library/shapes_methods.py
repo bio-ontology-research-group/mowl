@@ -255,11 +255,12 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
                                  radius_raw=t.class_radius_raw)
         second = VectorClasses(centres=t.class_intensional)
         points = Points(centres=t.ind_embed)
-        matrix = t.M
+        matrix = None
         relations = Translation(vectors=t.rel_embed)
         alpha = t.alpha
     classes = LinkedClasses(first, second)
-    individuals = LinkedClasses(points, MappedVectors(points.centres, matrix))
+    individuals = LinkedClasses(points, MappedVectors(
+        points.centres, matrix, owner=None if t is None else (t, "M")))
     measure = LinkedMeasure(EllipsoidMeasure(containment), CosineOrder(norm_term), alpha)
     objective = ShapeObjective(
         0.0, negatives="gci2", strict_negatives=False,
@@ -280,20 +281,23 @@ def _eike(module):
 @register_method("concept2box")
 def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin=0.0,
                 beta=1.0, alpha=0.5, kge_margin=0.3, cross_margin=0.15, hidden_dim=None,
-                instance_weight=1.0, cross_weight=1.0, tables=None):
+                instance_weight=1.0, cross_weight=1.0, gci2_reading="axiom", tables=None):
     r"""Concept2Box (Huang et al. 2023): classes are Gumbel boxes that depend on a context
     (a relation), individuals are points translated by relations, a class assertion links
     the two by the distance of a point to a box.
 
-    Published options set here: the axioms are read as the triples of the paper
-    (``context_axioms=True``: boxes in the context of the relation, and for
-    :math:`C \sqsubseteq \exists r.D` the box of :math:`D` inside that of :math:`C`), the
+    Published options set here: the axioms are read as triples with boxes in the context of
+    the relation (``context_axioms=True``); for :math:`C \sqsubseteq \exists r.D` the box of
+    :math:`C` inside that of :math:`D` (``gci2_reading="axiom"``, the default) or the paper's
+    triple :math:`(C, r, D)` with the box of :math:`D` inside that of :math:`C`
+    (``"triple"``). The
     deviation of the volume ratio is squared (``power=2``), the distance of a point is
     weighted by the volume and squashed by a sigmoid, and the negative losses have their own
     margins (``kge_margin``, ``cross_margin``) and weights.
 
+    :param gci2_reading: ``"axiom"`` or ``"triple"``, see above.
     :param tables: A :class:`~mowl.nn.el.concept2box.module.Concept2BoxModule` to share
-        parameters with.
+        parameters with (its ``gci2_reading`` is used).
     """
     t = tables
     if t is None:
@@ -307,6 +311,7 @@ def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin
         beta, alpha = t.beta, t.alpha
         kge_margin, cross_margin = t.kge_margin, t.cross_margin
         instance_weight, cross_weight = t.instance_weight, t.cross_weight
+        gci2_reading = t.gci2_reading
         classes = ContextualSoftBoxClasses(beta=beta, centres=t.class_embed,
                                            contexts=t.ontology_rel_embed, project=t.project)
         translations = Translation(vectors=t.rel_embed)
@@ -318,7 +323,7 @@ def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin
         (Point, Box, PointToRegion(alpha, beta, weighted=True, squash=True)),
         (Point, Point, PointDistance(1))])
     objective = ShapeObjective(
-        margin, negatives="all", context_axioms=True,
+        margin, negatives="all", context_axioms=True, gci2_reading=gci2_reading,
         neg_margins={"class_assertion": cross_margin,
                      "object_property_assertion": kge_margin},
         weights={"class_assertion": cross_weight,

@@ -111,7 +111,8 @@ class TestALConeModel:
 def test_family_ontology_training():
     """Longer run on a small family ontology with disjunction, disjointness, an
     equivalence with ∃ and a ∀ axiom. Gradient training can stop in a local minimum (with
-    the default settings 6 of 8 seeds reached zero loss in our runs); this seed does, and
+    the default settings, dim 8, 1000 epochs, 6 of the seeds 0-7 reached zero loss when
+    re-measured with constant_logit=1.0); seed 4 does, and
     the exact checker confirms the discretised model."""
     th.manual_seed(4)
     model = ALConeModel(_family_ontology(), dim=8, learning_rate=0.05, temperature=0.3)

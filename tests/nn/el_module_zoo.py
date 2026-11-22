@@ -61,7 +61,9 @@ def _kwargs(cls):
     if name in ("OrderModule", "HyperbolicConesModule", "ShadowConesModule",
                 "DiskEmbeddingsModule"):
         return dict(nb_classes=N, embed_dim=D)
-    if name in ("EIKEModule", "Concept2BoxModule"):
+    if name == "Concept2BoxModule":      # the golden values are those of the paper's triple
+        return dict(nb_classes=N, nb_rels=R, nb_inds=I, embed_dim=D, gci2_reading="triple")
+    if name == "EIKEModule":
         return dict(nb_classes=N, nb_rels=R, nb_inds=I, embed_dim=D)
     return dict(nb_ont_classes=N, nb_rels=R, nb_inds=I, embed_dim=D)
 

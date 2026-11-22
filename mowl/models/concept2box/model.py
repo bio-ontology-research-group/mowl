@@ -33,6 +33,10 @@ class Concept2Box(EmbeddingELModel):
     :param cross_margin: Margin of the cross view.
     :param instance_weight: :math:`\lambda_1`.
     :param cross_weight: :math:`\lambda_2`.
+    :param gci2_reading: ``"axiom"`` (default): ``C ⊑ ∃r.D`` puts the box of ``C`` inside
+        the box of ``D`` in the context of ``r``; ``"triple"``: the paper's triple
+        ``(C, r, D)``, the box of ``D`` inside that of ``C``
+        (see :class:`~mowl.nn.Concept2BoxModule`).
     """
 
     axiom_scoring = "module"
@@ -42,13 +46,14 @@ class Concept2Box(EmbeddingELModel):
     def __init__(self, dataset, embed_dim=32, beta=1.0, alpha=0.5, kge_margin=0.3,
                  cross_margin=0.15, instance_weight=1.0, cross_weight=1.0,
                  learning_rate=0.005, batch_size=4096, model_filepath=None, device="cpu",
-                 neg_sampling_gcis=None):
+                 neg_sampling_gcis=None, gci2_reading="axiom"):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis)
         self.beta, self.alpha = beta, alpha
         self.kge_margin, self.cross_margin = kge_margin, cross_margin
         self.instance_weight, self.cross_weight = instance_weight, cross_weight
+        self.gci2_reading = gci2_reading
         self._warned = False
         self.init_module()
 
@@ -60,6 +65,7 @@ class Concept2Box(EmbeddingELModel):
             embed_dim=self.embed_dim, beta=self.beta, alpha=self.alpha,
             kge_margin=self.kge_margin, cross_margin=self.cross_margin,
             instance_weight=self.instance_weight, cross_weight=self.cross_weight,
+            gci2_reading=self.gci2_reading,
         ).to(self.device)
 
     @property

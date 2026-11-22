@@ -164,6 +164,22 @@ class TestEIKE(TestCase):
             module = self.make(instance_map=instance_map)
             _same(self, module, geometry_of(module), self.forms, (False, True))
 
+    def test_geometry_follows_the_fixed_matrix_when_the_module_is_cast(self):
+        """M of ``instance_map="eye"`` is a buffer, which a cast replaces: the geometry must
+        read it from the module, not hold the old tensor."""
+        module = self.make(instance_map="eye")
+        geometry = geometry_of(module)
+        module.double()
+        self.assertEqual(module.M.dtype, th.float64)
+        rows = _rows("class_assertion")
+        got = geometry(rows, "class_assertion")
+        self.assertEqual(got.dtype, th.float64)
+        self.assertTrue(th.allclose(got, module(rows, "class_assertion").reshape(-1, 1)))
+        # the matrix is the module's, also after a change of its value
+        module.M.copy_(2 * th.eye(D, dtype=th.float64))
+        self.assertTrue(th.allclose(got.new_tensor(0.0) + geometry(rows, "class_assertion"),
+                                    module(rows, "class_assertion").reshape(-1, 1)))
+
     def test_text_vectors(self):
         init = th.randn(N, D).numpy()
         init[2] = float("nan")
@@ -213,6 +229,15 @@ class TestConcept2Box(TestCase):
     def test_adapter_positive_and_negative(self):
         module = self.make()
         _same(self, module, geometry_of(module), self.forms, (False, True))
+
+    def test_gci2_readings(self):
+        for reading in ("axiom", "triple"):
+            module = self.make(gci2_reading=reading)
+            geometry = geometry_of(module)
+            _same(self, module, geometry, ("gci2",), (False, True))
+        rows = _rows("gci2")
+        self.assertFalse(th.allclose(self.make(gci2_reading="axiom")(rows, "gci2"),
+                                     self.make(gci2_reading="triple")(rows, "gci2")))
 
     def test_options(self):
         module = self.make(beta=0.5, alpha=0.3, kge_margin=0.6, cross_margin=0.2,

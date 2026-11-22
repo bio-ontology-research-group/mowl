@@ -169,3 +169,55 @@ def test_gumbel_intersection_volume_against_monte_carlo():
     softplus = th.exp(L.gumbel_log_volume(lo_t, hi_t, beta)).item()
     assert sampled == pytest.approx(exact, abs=0.02)
     assert softplus == pytest.approx(sampled, abs=0.0617 * beta + 0.02)
+
+
+def _gci2_inside_phi(m, c, r, d):
+    """phi of the box of C inside the box of D in the context of r (hand-built)."""
+    cc = th.tensor([c]), th.tensor([r])
+    dd = th.tensor([d]), th.tensor([r])
+    lo_c, hi_c = m._corners(*cc)
+    lo_d, hi_d = m._corners(*dd)
+    return L.conditional_probability(lo_d, hi_d, lo_c, hi_c, m.beta)   # tail C inside head D
+
+
+def test_gci2_reads_the_axiom_by_default_and_the_paper_triple_on_request():
+    """C ⊑ ∃r.D: the box of C inside the box of D (as for gci0); the paper's triple
+    (C, r, D) is the reverse and stays an option."""
+    row = th.tensor([[0, 1, 2]])
+    default = _module()
+    assert default.gci2_reading == "axiom"
+    expected = (_gci2_inside_phi(default, 0, 1, 2) - 1) ** 2
+    assert default(row, "gci2").item() == pytest.approx(expected.item(), rel=1e-5)
+    old = _module(gci2_reading="triple")
+    reverse = (_gci2_inside_phi(old, 2, 1, 0) - 1) ** 2
+    assert old(row, "gci2").item() == pytest.approx(reverse.item(), rel=1e-5)
+    assert default(row, "gci2").item() != pytest.approx(old(row, "gci2").item())
+    # same parameters: the two readings differ exactly by swapping C and D
+    assert old(row[:, [2, 1, 0]], "gci2").item() == pytest.approx(
+        default(row, "gci2").item(), rel=1e-5)
+    with pytest.raises(ValueError):
+        _module(gci2_reading="other")
+
+
+def test_training_gci2_puts_c_inside_d_in_the_context_of_r():
+    m = _module(beta=0.2)
+    data = th.tensor([[0, 1, 2]])
+    opt = th.optim.Adam(m.parameters(), lr=0.05)
+    before = _gci2_inside_phi(m, 0, 1, 2).item()
+    for _ in range(150):
+        opt.zero_grad()
+        m(data, "gci2").mean().backward()
+        opt.step()
+    assert _gci2_inside_phi(m, 0, 1, 2).item() > max(before, 0.9)
+
+
+def test_cross_view_cost_of_a_point_inside_a_box_is_not_zero():
+    """Published (Equation 8): the inside distance to the centre is weighted by alpha(c)."""
+    m = _module(alpha=0.5)
+    cls = th.tensor([1])
+    center, offset = m.box(cls, th.full_like(cls, m.null_id))
+    m.ind_embed.weight.data[0] = center[0].detach()      # a point at the centre: zero
+    m.ind_embed.weight.data[1] = (center[0] + 0.5 * offset[0]).detach()   # inside, off centre
+    at_centre = m.cross_distance(th.tensor([0]), cls).item()
+    inside = m.cross_distance(th.tensor([1]), cls).item()
+    assert at_centre == pytest.approx(0.0, abs=1e-6) and inside > 0.0

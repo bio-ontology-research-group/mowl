@@ -244,22 +244,38 @@ class MappedVectors(Classes):
 
     :param points: The table of the points (``nn.Embedding``).
     :param matrix: ``(d, d)``: a fixed tensor (identity), or a ``Parameter`` to learn.
+    :param owner: ``(module, name)`` of a module that holds the matrix (a parameter or a
+        buffer): it is then read from the module each time it is used, so that it follows the
+        module when this is moved to another device or cast to another dtype (a buffer is
+        replaced then, and a reference taken earlier would keep the old tensor). ``matrix`` is
+        not used in that case.
     """
 
     region = Vector
     part = "point"
     exact_conjunction = False
 
-    def __init__(self, points, matrix):
+    def __init__(self, points, matrix=None, owner=None):
         super().__init__()
         self.centres = points
-        if isinstance(matrix, nn.Parameter):
+        # a plain tuple in a list: the owner is not registered as a child of this module
+        self._owner = None if owner is None else [owner]
+        if owner is not None:
+            pass
+        elif isinstance(matrix, nn.Parameter):
             self.matrix = matrix
         else:
             self.register_buffer("matrix", matrix)
 
+    def _matrix(self, like):
+        if self._owner is None:
+            return self.matrix
+        module, name = self._owner[0]
+        return getattr(module, name).to(device=like.device, dtype=like.dtype)
+
     def forward(self, ids):
-        return Vector(self.centres(ids) @ self.matrix.T)
+        e = self.centres(ids)
+        return Vector(e @ self._matrix(e).T)
 
 
 class LinkedClasses(Classes):

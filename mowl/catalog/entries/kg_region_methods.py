@@ -477,10 +477,12 @@ CONCEPT2BOX = MethodCard(
         "split of the paper is not released and the public data are smaller than its "
         "Table 1, so the numbers are indicative targets only. The relation isa of the "
         "ontology view is a relation like the 19 others, as in the paper. Direction: gci0 is "
-        "the triple (D, subclass, C), so the box of C lies inside that of D, while gci2 is "
-        "the triple (C, r, D) as a plain KG triple, so the box of D lies inside that of C; "
-        "the direction is kept as implemented (a reversal for gci2 was proposed but the "
-        "paper's convention could not be checked). As in Equations 8-9 the vector-to-box distance is positive inside the "
+        "the triple (D, subclass, C), so the box of C lies inside that of D; gci2 is read the "
+        "same way by default (gci2_reading='axiom': the box of C inside that of D in the "
+        "context of r). The paper's own triple (C, r, D) puts the box of D inside that of C "
+        "(its phi is near 1 when the tail box is inside the head box), the reverse of the "
+        "axiom; gci2_reading='triple' keeps it and the recipes of the paper select it. "
+        "As in Equations 8-9 the vector-to-box distance is positive inside the "
         "box (the inside part is weighted by alpha), so a true cross-view link costs more "
         "than 0."),
     references=(
