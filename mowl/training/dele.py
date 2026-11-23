@@ -466,11 +466,15 @@ _REFERENCE_READING = (
 )
 
 
-def _apply_reference_reading(objective):
+def _apply_reference_reading(objective, keep=()):
     """Set the options of :data:`_REFERENCE_READING` the objective has and that read the
-    other way; return the names of the options changed."""
+    other way; return the names of the options changed. The options named in ``keep`` are
+    left as they are (a module whose losses are the reference's already names them in
+    ``reference_reading_keeps``)."""
     changed = []
     for name, value, replaces in _REFERENCE_READING:
+        if name in keep:
+            continue
         current = getattr(objective, name, None)
         if current is None and not hasattr(objective, name):
             continue
@@ -497,7 +501,9 @@ class DELECodeLosses(TrainingRegime):
       the GCI2 negative loss penalises overlap of the translated box of :math:`C` and the box of
       :math:`D` instead of their separation. The GCI1-BOT loss keeps its original form
       (``+ margin``).
-    * **Box2EL**: the loss functions agree with the reference, but mOWL's objective squares
+    * **Box2EL**: the loss functions agree with the reference (the margin of its negative
+      and disjointness losses included: the module keeps it, ``reference_reading_keeps``),
+      but mOWL's objective squares
       the positive losses (other than GCI2) itself, whereas the reference module returns
       the unsquared scores and squares them in the training loop. The positives are
       switched to the unsquared scores (the GCI3-BOT one taking the offset of the filler
@@ -546,7 +552,7 @@ class DELECodeLosses(TrainingRegime):
                 "DELECodeLosses switches the objective of a module that is a geometry built "
                 f"from parts (every method of the library); got {type(module).__name__}.")
         had_squares = bool(objective.squared)
-        _apply_reference_reading(objective)
+        _apply_reference_reading(objective, getattr(module, "reference_reading_keeps", ()))
         if had_squares:
             # the reference module returns unsquared scores; DELECodeLoss squares them
             objective.squared = ()

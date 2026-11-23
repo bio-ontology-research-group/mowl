@@ -217,6 +217,11 @@ Behaviour that changed, and how to get the 2.1.0 behaviour back:
 
 ### Fixed
 
+- Box2EL trained with the design of the DELE code (`dele-code-training`,
+  `DELECodeLosses`) keeps the margin of its negative and disjointness losses, which are the
+  reference's already. The reading switched it to a strict margin as for ELEmbeddings and
+  ELBE; on FoodOn the validation loss then rose from the first step and training stopped
+  after about twenty steps (Hits@10 0.0005 instead of 0.034).
 - `Concept2Box` learns at the dimensions it is used with: the Gumbel scale defaults to
   `0.25 / embed_dim` and the initial vectors to a standard deviation of `1 / embed_dim`
   (new argument `init_scale`). With the earlier values (1 and 0.5, still those of

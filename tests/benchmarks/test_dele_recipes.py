@@ -76,3 +76,30 @@ class TestDELERecipes(TestCase):
                 self.assertNotIn("dele-closure-filtered-negatives", keys)
             if r.regime_kwargs.get("negatives") == "all":
                 self.assertIn("dele-all-normal-form-negatives", keys)
+
+
+def test_the_reference_reading_keeps_the_margin_of_the_box2el_negatives():
+    """The losses of Box2EL are those of the DELE reference code already: with the reference
+    reading switched on, the negative and disjointness losses of the combination of parts are
+    those of the direct module (squared, which the reading leaves to the training loss).
+    Switching their margin to a strict one, as for ELEmbeddings and ELBE, made the model stop
+    after about twenty steps on FoodOn (Hits@10 0.0005 instead of 0.034)."""
+    import types
+    import torch as th
+    from mowl.nn import BoxSquaredELModule
+    from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule as Direct
+    from mowl.training.dele import DELECodeLosses
+    th.manual_seed(0)
+    direct = Direct(30, 3, embed_dim=16, gamma=0.1, delta=4, all_negative_losses=True)
+    parts = BoxSquaredELModule(30, 3, embed_dim=16, gamma=0.1, delta=4,
+                               all_negative_losses=True)
+    parts.load_state_dict(direct.state_dict())
+    DELECodeLosses().attach(types.SimpleNamespace(module=parts))
+    pairs, triples = th.randint(0, 30, (40, 2)), th.randint(0, 30, (40, 3))
+    triples[:, 1] %= 3
+    for form, rows, neg, squared in (("gci0", pairs, True, False), ("gci1", triples, True, False),
+                                     ("gci1_bot", triples, False, True)):
+        ours = parts(rows, form, neg=True) if neg else parts(rows, form)
+        theirs = direct(rows, form, neg=True) if neg else direct(rows, form)
+        ours = ours.flatten() ** 2 if squared else ours.flatten()
+        assert th.allclose(ours, theirs.flatten(), atol=1e-5), form

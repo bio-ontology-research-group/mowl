@@ -71,8 +71,7 @@ class Concept2Box(ComposedEL):
     @property
     def beta(self):
         """The Gumbel scale in use (``0.25 / embed_dim`` unless one was given)."""
-        given = self.method_options["beta"]
-        return 0.25 / self.embed_dim if given is None else given
+        return self.module.class_model.beta
     alpha = property(lambda self: self.method_options["alpha"])
     kge_margin = property(lambda self: self.method_options["kge_margin"])
     cross_margin = property(lambda self: self.method_options["cross_margin"])

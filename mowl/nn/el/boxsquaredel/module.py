@@ -55,6 +55,11 @@ forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01`
 
     margin_attribute = "gamma"
 
+    #: Options of the objective that the reading of the DELE reference code
+    #: (:class:`~mowl.training.DELECodeLosses`) leaves alone: the negative and disjointness
+    #: losses of this module take the margin as the reference code of Box2EL does.
+    reference_reading_keeps = ("negative_margin",)
+
     #: The order in which the tables were initialised (a seeded module has its numbers).
     released_order = (
         "class_model.centres", "class_model.offsets", "relation_model.head_centres",
