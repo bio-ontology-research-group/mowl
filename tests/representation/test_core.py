@@ -326,19 +326,19 @@ class TestComposedEL(TestCase):
         model.train(epochs=3)
 
     def test_geometry_of_looks_up_the_model_class_first(self):
-        from mowl.representation.adapters import ADAPTERS, register_adapter
+        from mowl.representation.adapters import ADAPTERS, qualified_name, register_adapter
 
         class Marker:
             module = object()      # not a usable module
 
-        @register_adapter("Marker")
+        @register_adapter(Marker)
         def _marker(model):
             return "found by the model's own class"
 
         try:
             self.assertEqual(geometry_of(Marker()), "found by the model's own class")
         finally:
-            del ADAPTERS["Marker"]
+            del ADAPTERS[qualified_name(Marker)]
         with self.assertRaises(NotImplementedError):
             geometry_of(Marker())
         self.assertIn("elbe", METHODS)

@@ -1412,33 +1412,29 @@ class PyKEENGeometry(Geometry):
 
     @property
     def relation_part(self):
-        from mowl.representation.library.graph_interactions import ReshuffleInteraction
-        if _is_pykeen_model(self.kge, "BoxE"):
-            return "head and tail boxes"
-        if _is_pykeen_model(self.kge, "ExpressivE"):
-            return "region over pairs"
-        if isinstance(getattr(self.kge, "interaction", None), ReshuffleInteraction):
-            return "matrix"
-        return "model of PyKEEN"
+        return {"boxe": "head and tail boxes", "expressive": "region over pairs",
+                "reshuffle": "matrix"}.get(_parts_kind(self.kge), "model of PyKEEN")
 
     def as_parts(self):
         """The same model as a :func:`triple_geometry` of parts that share its tables
         (``BoxE`` and ``ExpressivE`` only), indexed by *graph* ids: classes are the nodes,
         relations the relation ids of the graph."""
-        if _is_pykeen_model(self.kge, "BoxE"):
-            return boxe(0, 0, tables=self.kge, subclass_id=self._subclass)
-        if _is_pykeen_model(self.kge, "ExpressivE"):
-            return expressive(0, 0, tables=self.kge, subclass_id=self._subclass)
+        build = {"boxe": boxe, "expressive": expressive}.get(_parts_kind(self.kge))
+        if build is not None:
+            return build(0, 0, tables=self.kge, subclass_id=self._subclass)
         raise NotImplementedError(f"{type(self.kge).__name__} is not a combination of the parts of this "
                                   f"module.")
 
 
-def _is_pykeen_model(model, name):
-    """Whether ``model`` is an instance of the PyKEEN model class ``name`` (``False`` for a
-    class that the installed PyKEEN does not have)."""
-    import pykeen.models
-    cls = getattr(pykeen.models, name, None)
-    return isinstance(cls, type) and isinstance(model, cls)
+def _parts_kind(kge):
+    """Which combination of parts a PyKEEN model is, ``"boxe"``, ``"expressive"`` or
+    ``"reshuffle"``, or ``None``: what the model class declares in ``parts_kind``, else
+    ``"boxe"`` for a PyKEEN ``BoxE`` (a model class of another implementation declares it)."""
+    declared = getattr(kge, "parts_kind", None)
+    if declared is not None:
+        return declared
+    from pykeen.models import BoxE as PyKEENBoxE
+    return "boxe" if isinstance(kge, PyKEENBoxE) else None
 
 
 register_adapter("mowl.models.graph_kge.graph_pykeen_model.GraphPlusPyKEENModel",

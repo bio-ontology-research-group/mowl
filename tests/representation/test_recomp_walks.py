@@ -194,7 +194,7 @@ def test_taxonomy_walks_with_fasttext_and_relations(tiny):
 
 def test_onto2vec_with_entailed_axioms(family):
     model = ComposedSequenceModel(family, method="onto2vec",
-                                  entailment=Entailment("elk"), **SMALL)
+                                  entailment=Entailment("elk"), **SENTENCES)
     assert model.module.parts["entailment"].startswith("entailed by elk")
     model.train(epochs=1)
     _check_trained(model)
@@ -217,14 +217,14 @@ def test_onto2vec_with_cosine_and_similarity_in_two_regimes(tiny):
 
 def test_opa2vec_with_normalised_vectors_and_another_window(family, tiny):
     model = ComposedSequenceModel(family, method="opa2vec", reading=E.TokenVectors(True),
-                                  **{**SMALL, "window": 1})
+                                  **{**SENTENCES, "window": 1})
     assert model.module.encoder.model.window == 1
     model.train(epochs=1)
     vectors, known = model.module.table("classes")
     assert th.allclose(vectors[known].norm(dim=1), th.ones(int(known.sum())), atol=1e-5)
     _check_trained(model)
     other = ComposedSequenceModel(tiny, method="opa2vec", reading=E.TokenVectors(True),
-                                  **SMALL)
+                                  **SENTENCES)
     other.train(epochs=1)
     _evaluate(other, tiny)
 

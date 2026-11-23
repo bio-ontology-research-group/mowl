@@ -173,6 +173,18 @@ def declare_options_of_baseline_modules():
                     setattr(cls, attribute, value)
 
 
+def declare_parts_kinds():
+    """The baseline PyKEEN models that are the same combinations of parts as the library's
+    (``PyKEENGeometry.as_parts`` reads the declared ``parts_kind``)."""
+    for name, kind in (("BoxE", "boxe"), ("ExpressivE", "expressive"),
+                       ("Reshuffle", "reshuffle")):
+        for path in baseline_classes(name):
+            if ".nn." in path:
+                cls = _import(path)
+                if "parts_kind" not in vars(cls):
+                    cls.parts_kind = kind
+
+
 def register_baseline_scorers():
     """The centre-distance scorers of the library's evaluation for the baseline modules."""
     from mowl.evaluation import el_scoring
@@ -459,3 +471,4 @@ def ensure_baseline_options():
     if not _DECLARED and jpype.isJVMStarted():
         _DECLARED.append(True)
         declare_options_of_baseline_modules()
+        declare_parts_kinds()
