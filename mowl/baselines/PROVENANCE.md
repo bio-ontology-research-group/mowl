@@ -15,8 +15,8 @@ Status:
   has the same code today (a copy of today's library is then the same as the original).
 - **adapted**: what was changed, and why.
 
-Checked by `~/tmp/mowl-work/r7-orig/prov.py` (AST of every function and method without
-docstrings and imports, compared with the source at 2d0ed505).
+Checked by a script that compares the syntax tree of every function and method (without
+docstrings and imports) with the source at 2d0ed505.
 
 | baseline file | source @ commit | status |
 |---|---|---|
