@@ -48,12 +48,12 @@ class FaithEL(RegimeTrained, EmbeddingELModel):
     :param gamma: Weight of the parameter-to-individual terms.
     :param psi: Weight of the negative term.
     :param neg_sampling: Use the negative term (the code's default).
-    :param negative_term: ``"unbounded"`` (default of this named method): the code's
-        :math:`-\\psi\\,\\mathrm{mse}(x_a, x_{neg})`, which has no lower bound, so with
-        ``neg_sampling`` the loss can go to :math:`-\\infty` as individuals drift apart.
-        ``"margin"``: the bounded hinge of the part
-        (:class:`~mowl.representation.library.solved_faithel.AnchoredObjective`, the default of
-        the part).
+    :param negative_term: ``"margin"`` (default, the same as the general model
+        :class:`~mowl.models.ComposedEL` ``(method="faithel")``): the bounded hinge of the part
+        (:class:`~mowl.representation.library.solved_faithel.AnchoredObjective`).
+        ``"unbounded"``: the authors' code, :math:`-\\psi\\,\\mathrm{mse}(x_a, x_{neg})`, which has
+        no lower bound, so with ``neg_sampling`` the loss can go to :math:`-\\infty` as
+        individuals drift apart; select it to reproduce the published code.
     :param neg_margin: The margin of ``"margin"``.
     :param centroid_score: Score an assertion by the distance to the parameter plus the
         distance to the centroid (the code's default) instead of the parameter only.
@@ -81,7 +81,7 @@ class FaithEL(RegimeTrained, EmbeddingELModel):
     def __init__(self, dataset, radius=0.6, phi=1.0, gamma=1.0, psi=0.7, neg_sampling=True,
                  centroid_score=True, batch_size=512, learning_rate=0.001,
                  model_filepath=None, device="cpu", seed=None, max_elements=3000,
-                 training=None, negative_term="unbounded", neg_margin=1.0):
+                 training=None, negative_term="margin", neg_margin=1.0):
         self.tbox = faithful_tbox(dataset.ontology, max_elements)
         d = self.tbox.dimension
         super().__init__(dataset, embed_dim=max(d, 1), batch_size=batch_size,

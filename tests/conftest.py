@@ -18,6 +18,14 @@ from tests.datasetFactory import (
 logger = logging.getLogger("Downloader")
 
 
+@pytest.fixture(autouse=True)
+def _baseline_module_options():
+    """The options that the library's modules declare, set on the baseline modules once the
+    JVM is up (tests/baselines/adapters.py)."""
+    tests.baselines.adapters.ensure_baseline_options()
+    yield
+
+
 # Session-scoped fixtures for commonly used datasets.
 # Datasets are downloaded and instantiated lazily on first request rather than
 # eagerly in pytest_configure, so test suites that do not use builtin datasets

@@ -71,11 +71,10 @@ is the distance to the parameter plus the distance to the centroid (``centroid_s
 
 The negative term has no lower bound: with ``neg_sampling=True`` the loss goes to
 :math:`-\infty` as the individuals drift apart. :class:`~mowl.models.faithel.model.FaithEL`
-keeps it (``negative_term="unbounded"``), because it is the code's loss. The part
-(:class:`~mowl.representation.library.solved_faithel.AnchoredObjective`) defaults to the hinge
+and the general model ``ComposedEL(method="faithel")`` both default to the hinge
 :math:`\psi\max(0, m - \lVert x_a - x_{neg}\rVert^2/d)` with margin ``neg_margin`` (the paper
 text was not available, so the hinge is mOWL's choice); ``FaithEL(dataset,
-negative_term="margin")`` selects it.
+negative_term="unbounded")`` selects the code's loss, as the comparison with the code does.
 
 Supported axioms and tasks
 --------------------------

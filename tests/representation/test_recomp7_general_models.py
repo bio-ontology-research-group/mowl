@@ -88,13 +88,16 @@ def _faithel_tables(model):
             "role_head": m.role_head.weight, "role_tail": m.role_tail.weight}
 
 
-def test_composed_el_builds_and_trains_faithel_as_the_named_class():
+@pytest.mark.parametrize("option", [{}, {"negative_term": "unbounded"}])
+def test_composed_el_builds_and_trains_faithel_as_the_named_class(option):
+    """The same defaults on both sides, and the same run with the authors' option."""
     from mowl.models import ComposedEL, FaithEL
     from mowl.training import AlternatingMinibatches
     ds = _abox_dataset()
-    named = FaithEL(ds, batch_size=8, learning_rate=0.01, seed=0)
-    general = ComposedEL(ds, method="faithel", batch_size=8, learning_rate=0.01,
-                         negative_term="unbounded")
+    named = FaithEL(ds, batch_size=8, learning_rate=0.01, seed=0, **option)
+    general = ComposedEL(ds, method="faithel", batch_size=8, learning_rate=0.01, **option)
+    assert named.negative_term == general.module.objective.negative_term \
+        == option.get("negative_term", "margin")
     general.eval_gci_name = "class_assertion"
     assert general.embed_dim == named.tbox.dimension
     assert isinstance(general.training_regime, AlternatingMinibatches)
@@ -235,6 +238,39 @@ def test_composed_el_builds_grounded_with_a_joint_objective_and_trains_it():
     losses = general.train(epochs=3, validate_every=10 ** 6)
     assert len(losses) == 3 and all(th.isfinite(th.tensor(losses)))
     assert any(not th.equal(before[k], v) for k, v in general.module.state_dict().items())
+
+
+def test_composed_el_grounded_trains_like_grounded_el_with_its_own_defaults():
+    """A whole training run: both models from the same seed and data, the general one with
+    its own default objective and samplers (nothing of the named class is handed over)."""
+    from mowl.models import GroundedEL
+    ds = _abox_dataset()
+    named = GroundedEL(ds, embed_dim=4, learning_rate=0.05, seed=0, log_every=0)
+    general = _grounded_general(ds)
+    # the rows of the two models come from two normalisations of the same ontology, which
+    # may list the axioms in another order: train both on the same rows
+    general._training_datasets = named.training_datasets
+    assert general.module.joint_objective.elements is not named.element_sampler
+    state = named.module.state_dict()
+    assert all(th.equal(v, general.module.state_dict()[k]) for k, v in state.items())
+    history = named.train(epochs=6, validate_every=10 ** 6)
+    losses = general.train(epochs=6, validate_every=10 ** 6)
+    assert th.allclose(th.tensor([h["total"] for h in history]), th.tensor(losses), atol=1e-6)
+    for name, value in named.module.state_dict().items():
+        assert th.allclose(value.float(), general.module.state_dict()[name].float(),
+                           atol=1e-6), name
+    # the scores: the depth of every element in every class, and the loss terms of a step
+    elements = th.arange(named.module.nb_elements)
+    with th.no_grad():
+        for c in range(named.module.nb_classes):
+            ids = th.full_like(elements, c)
+            pos = named.module.shared.positions()
+            assert th.allclose(named.module.class_model.depth(pos, ids),
+                               general.module.class_model.depth(pos, ids), atol=1e-6)
+    a = named.compute_batch_losses(generator=th.Generator().manual_seed(9))
+    b = _step(general, named.training_datasets, seed=9)
+    for term in ("fact", "axioms", "region", "minimality", "total"):
+        assert th.allclose(a[term], b[term], atol=1e-6), term
 
 
 def test_grounded_parts_swap_in_the_general_model_with_an_effect():

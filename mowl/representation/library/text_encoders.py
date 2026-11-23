@@ -139,6 +139,16 @@ class SentenceTransformerEncoder(nn.Module):
         self.model.save(path)
 
 
+def _is_sentence_transformer(encoder):
+    """Whether ``encoder`` is a ``sentence_transformers.SentenceTransformer`` (False where the
+    package is not installed: then no such object exists)."""
+    try:
+        from sentence_transformers import SentenceTransformer
+    except ImportError:
+        return False
+    return isinstance(encoder, SentenceTransformer)
+
+
 def as_encoder(encoder, device=None):
     """Turn a model name, a sentence-transformers model or an encoder module into an
     encoder (see the module docstring).
@@ -152,7 +162,7 @@ def as_encoder(encoder, device=None):
     """
     if isinstance(encoder, str):
         enc = SentenceTransformerEncoder.from_pretrained(encoder, device=device)
-    elif type(encoder).__name__ == "SentenceTransformer":
+    elif _is_sentence_transformer(encoder):
         enc = SentenceTransformerEncoder(encoder)
     elif isinstance(encoder, nn.Module):
         enc = encoder

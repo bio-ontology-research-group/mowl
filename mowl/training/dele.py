@@ -612,19 +612,19 @@ class DELECodeLoss(TrainingRegime):
     key = "dele-code-loss"
 
     def loss(self, gci_name, pos_scores, neg_scores):
-        name = type(self.model.module).__name__
+        form = getattr(self.model.module, "dele_code_form", None)
         pos = pos_scores.reshape(-1)
         neg = None if neg_scores is None or neg_scores.numel() == 0 else \
             neg_scores.reshape(-1)
-        if name == "ELEmModule":
+        if form == "ball":
             if gci_name == "gci2" and neg is not None:
                 return _sq_mean(pos) + _sq_mean(neg)
             loss = pos.mean()
             return loss if neg is None else loss + neg.mean()
-        if name == "ELBEModule":
+        if form == "box":
             loss = _sq_mean(pos)
             return loss if neg is None else loss + _sq_mean(neg)
-        if name == "BoxSquaredELModule":
+        if form == "box-with-bumps":
             # positives: DELECodeLosses makes the module return unsquared scores, as the
             # reference module does; without it mOWL's module squares all but GCI2
             squared = gci_name != "gci2" and not getattr(self.model.module,
@@ -635,8 +635,9 @@ class DELECodeLoss(TrainingRegime):
             if gci_name in ("gci2", "gci3"):
                 return loss + neg.mean() ** 2
             return loss + _sq_mean(neg)
-        raise TypeError(f"DELECodeLoss combines the losses of ELEmModule, ELBEModule and "
-                        f"BoxSquaredELModule; got {name}.")
+        raise TypeError(f"DELECodeLoss combines the losses of modules that declare their "
+                        f"form (dele_code_form: 'ball', 'box', 'box-with-bumps'); "
+                        f"{type(self.model.module).__name__} declares {form!r}.")
 
 
 class DELECodeTraining(ComposedRegime):

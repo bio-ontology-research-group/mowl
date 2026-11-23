@@ -55,8 +55,8 @@ def test_every_measure_and_relation_model_declares_its_operations():
     assert TranslationBoxes.provides("preimage_all") == "own"
     assert Translation.provides("preimage_all") == "generic"
     assert AffineBoxes.provides("range") == "own"
-    # no generic non-inclusion: a measure without one says so
-    assert RegionMeasure.provides("outside") is None
+    # non-inclusion has a generic definition (the centre of a is apart from b)
+    assert RegionMeasure.provides("outside") == "generic"
     assert Bounds.provides("outside") == "own" and CentreDistance.provides("outside") == "own"
     with pytest.raises(KeyError):
         Bounds.provides("no such operation")
@@ -66,8 +66,18 @@ def test_a_missing_operation_is_refused_with_its_name_and_purpose():
     class Bare(RegionMeasure):
         accepts = (Box,)
 
-    with pytest.raises(ConstructorUnavailable, match="'outside'.*gci0_negative"):
-        Bare().operation("outside", "gci0_negative='outside'")
+    from mowl.representation.operations import unavailable
+    from mowl.representation.regions import ConstructorNotImplemented
+
+    class WithSpecial(RegionMeasure):
+        OPERATIONS = {"special": "a quantity that only some measures have"}
+        special = unavailable("special")
+
+    with pytest.raises(ConstructorNotImplemented, match="^not implemented: .*'special'.*gci9"):
+        WithSpecial().operation("special", "gci9")
+    # a measure that cannot say "apart" has no non-inclusion either (said when it is asked)
+    with pytest.raises(ConstructorUnavailable, match="no formula for 'apart'"):
+        Bare().operation("outside", "gci0_negative='outside'")(boxes(2, 1), boxes(2, 2))
 
 
 # -- the generic definitions ------------------------------------------------------------------
@@ -81,8 +91,10 @@ def test_generic_product_overlap_is_the_volume_product_of_the_exact_intersection
     disjoint = (a.lower > b.upper).any(1) | (b.lower > a.upper).any(1)
     assert bool((cost.squeeze(1)[disjoint] == 0).all())
     assert bool((cost.squeeze(1)[~disjoint] > 0).all())
-    with pytest.raises(ConstructorUnavailable):    # balls do not intersect in a ball
-        CentreDistance().product_overlap(balls(3, 1), balls(3, 2))
+    # balls intersect in a lens, which has a volume
+    ball_a, ball_b = balls(3, 1), balls(3, 2)
+    lens = CentreDistance().product_overlap(ball_a, ball_b)
+    assert lens.shape == (3, 1) and bool((lens >= 0).all())
 
 
 def test_generic_meets_shrunk_is_the_centre_of_a_meeting_b():
@@ -252,3 +264,146 @@ def test_an_objective_of_another_method_takes_the_negatives_it_defines():
     ranked = Objective(0.1, negatives="gci2", ranking={"gci0": 0.5})
     geometry = build_method("elbe", 4, 2, embed_dim=D, objective=ranked)
     assert geometry.neg_capable_gcis == frozenset({"gci0", "gci2", "object_property_assertion"})
+
+
+# -- formulas that were not written (round 8): the refusal said so, now they exist ------------
+def _monte_carlo(region, row, lo, hi, n=400000, seed=0):
+    g = th.Generator().manual_seed(seed)
+    x = lo + (hi - lo) * th.rand(n, lo.numel(), generator=g, dtype=th.float64)
+    inside = region.contains(x)[row]
+    return float(inside.double().mean() * (hi - lo).prod())
+
+
+@pytest.mark.parametrize("d", [1, 2, 3, 5])
+def test_the_volume_of_a_ball_and_of_a_lens_of_two_balls(d):
+    g = th.Generator().manual_seed(d)
+    c1, c2 = (th.randn(4, d, generator=g, dtype=th.float64) * 0.5 for _ in range(2))
+    r1, r2 = (th.rand(4, 1, generator=g, dtype=th.float64) + 0.3 for _ in range(2))
+    a, b = Ball(c1, r1), Ball(c2, r2)
+    lens, gap = a.intersect(b)
+    volume = lens.volume()
+    distance = th.linalg.norm(c1 - c2, dim=1, keepdim=True)
+    assert bool(((gap == 0) == (distance <= r1 + r2)).all())
+    assert th.allclose(a.volume(), th.tensor([[2.0 * float(r) if d == 1 else 0.0]
+                                              for r in r1], dtype=th.float64) if d == 1
+                       else a.volume())
+    for row in range(4):
+        lo = th.minimum(c1[row] - r1[row], c2[row] - r2[row])
+        hi = th.maximum(c1[row] + r1[row], c2[row] + r2[row])
+        expected = _monte_carlo(lens, row, lo, hi)
+        assert abs(float(volume[row]) - expected) < 0.02 * max(float(a.volume()[row]), 0.1)
+    # nested balls: the smaller one; the same ball twice: the ball
+    assert th.allclose(Ball(c1, r1).intersect(Ball(c1, r1))[0].volume(), a.volume())
+    inner = Ball(c1, r1 * 0.5)
+    assert th.allclose(a.intersect(inner)[0].volume(), inner.volume())
+
+
+def test_prism_octagon_and_union_volumes_against_sampling():
+    from mowl.representation.library.shapes_regions import Prism
+    from mowl.representation.library.shapes_prism_math import supports
+    g = th.Generator().manual_seed(3)
+    # prism: a triangle of inradius 0.5 around (0.1, -0.2) times a box in one more dimension
+    prism = Prism(supports(th.tensor([[0.1, -0.2]], dtype=th.float64),
+                           th.tensor([[0.5]], dtype=th.float64)),
+                  th.tensor([[0.3]], dtype=th.float64), th.tensor([[0.4]], dtype=th.float64))
+    lo, hi = th.tensor([-1.0, -1.0, -0.5], dtype=th.float64), th.tensor([1.0, 1.0, 1.1],
+                                                                        dtype=th.float64)
+    assert abs(float(prism.volume()) - _monte_carlo(prism, 0, lo, hi)) < 0.02
+    # octagon product on two coordinates: the box [-0.5, 0.5] x [-0.3, 0.3] cut at the corners
+    box = Box(th.zeros(1, 2, dtype=th.float64), th.tensor([[0.5, 0.3]], dtype=th.float64))
+    octagon = OctagonProduct.of_box(box)
+    assert abs(float(octagon.volume()) - float(box.volume())) < 1e-9
+    bounds = octagon.bounds.clone()
+    bounds[..., 1] = 0.5                       # cut the corner x + y <= 0.5
+    cut = OctagonProduct(bounds)
+    assert abs(float(cut.volume()) - _monte_carlo(cut, 0, -th.ones(2, dtype=th.float64),
+                                                   th.ones(2, dtype=th.float64))) < 0.02
+    # a union of overlapping boxes: inclusion and exclusion
+    centre = th.tensor([[[0.0, 0.0], [0.4, 0.2], [-0.3, 0.5]]], dtype=th.float64)
+    offset = th.tensor([[[0.5, 0.4], [0.3, 0.5], [0.4, 0.3]]], dtype=th.float64)
+    union = UnionOfBoxes(centre, offset)
+    expected = _monte_carlo(union, 0, -th.ones(2, dtype=th.float64) * 1.2,
+                            th.ones(2, dtype=th.float64) * 1.2, n=800000)
+    assert abs(float(union.volume()) - expected) < 0.02
+    # a family without a written formula says so
+    with pytest.raises(ConstructorUnavailable, match="^not implemented: "):
+        Point(th.zeros(1, 2)).volume()
+
+
+def test_generic_non_inclusion_is_zero_only_where_a_point_of_a_is_outside_b():
+    from mowl.representation.library.multibox_parts import UnionMeasure
+    th.manual_seed(0)
+    a, b = boxes(300, 11, 0.4), boxes(300, 12, 0.4)
+    measure = UnionMeasure()
+    ua = UnionOfBoxes(a.centre.unsqueeze(1), a.offset.unsqueeze(1))
+    ub = UnionOfBoxes(b.centre.unsqueeze(1), b.offset.unsqueeze(1))
+    cost = measure.outside(ua, ub).squeeze(-1)
+    zero = cost == 0
+    assert bool(zero.any()) and bool((~zero).any())
+    # the centre of a is outside b wherever the cost is zero, so a is not inside b
+    in_b = ((a.centre >= b.lower) & (a.centre <= b.upper)).all(1)
+    inside = ((a.lower >= b.lower) & (a.upper <= b.upper)).all(1)
+    assert not bool(in_b[zero].any()) and not bool(inside[zero].any())
+
+
+# -- the generic negative of an existential is sound for any measure --------------------------
+class _NotADistance(Bounds):
+    """Boxes with a ``meets`` that is not declared to be the distance."""
+    meets_is_distance = False
+
+
+class _BallNotADistance(CentreDistance):
+    meets_is_distance = False
+
+
+def _negative_parts(measure, make, delta=0.5, n=400):
+    th.manual_seed(0)
+    rel = Translation(3, D)
+    with th.no_grad():
+        rel.vectors.weight.mul_(0.2)
+    ids = th.zeros(n, dtype=th.long)
+    c, d = make(n, 21), make(n, 22)
+    first = measure.meets(c, rel.sharp_preimage(ids, d), 0.0)
+    second = measure.meets(d, rel.image(ids, c), 0.0)
+    return rel, ids, c, d, first, second
+
+
+@pytest.mark.parametrize("measure, make", [(_NotADistance(), boxes), (_BallNotADistance(), balls)],
+                         ids=["boxes", "balls"])
+def test_generic_negative_is_zero_exactly_when_both_pairs_are_apart_by_delta(measure, make):
+    delta = 0.3
+    rel, ids, c, d, first, second = _negative_parts(measure, make)
+    cost = rel.subsumed_negative(measure, c, ids, d, 0.0, delta).squeeze(-1)
+    satisfied = ((first >= delta) & (second >= delta)).squeeze(-1)
+    assert bool(satisfied.any()) and bool((~satisfied).any())
+    assert bool((cost[satisfied] == 0).all()) and bool((cost[~satisfied] > 0).all())
+    # a zero cost means that neither pair overlaps: the negative is satisfied
+    assert bool((first[satisfied] > 0).all()) and bool((second[satisfied] > 0).all())
+    # the distance measures keep the published form (zero only at the distance delta)
+    published = Bounds() if make is boxes else CentreDistance()
+    pushed = rel.subsumed_negative(published, c, ids, d, 0.0, delta).squeeze(-1)
+    first_p = published.meets(c, rel.sharp_preimage(ids, d), 0.0)
+    assert th.allclose(pushed, ((delta - first_p).square()
+                                + (delta - published.meets(d, rel.image(ids, c), 0.0)
+                                   ).square()).squeeze(-1))
+    with pytest.raises(ConstructorUnavailable, match="not positive"):
+        rel.subsumed_negative(measure, c, ids, d, 0.0, 0.0)
+
+
+def test_generic_negative_refuses_a_measure_without_an_overlap_test_for_cones():
+    from mowl.representation.library.hierarchy_measures import ConeAngle
+    from mowl.representation.library.hierarchy_regions import ConePoint
+    from mowl.representation.library.manifolds import Euclidean
+
+    class Identity(Translation):
+        def sharp_preimage(self, ids, region):
+            return region
+
+        def image(self, ids, region):
+            return region
+
+    g = th.Generator().manual_seed(1)
+    cone = ConePoint(th.randn(2, D, generator=g), Euclidean(), None)
+    with pytest.raises(ConstructorUnavailable, match="^not implemented: ConeAngle has no formula for the overlap"):
+        Identity(3, D).subsumed_negative(ConeAngle(), cone, th.zeros(2, dtype=th.long), cone,
+                                         0.0, 0.5)

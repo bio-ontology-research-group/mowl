@@ -56,6 +56,7 @@ from mowl.representation.library.grounded_logic import (validate_margin as _vali
 from mowl.nn.el.structural import Regions
 from mowl.datasets.rows import sort_rows
 from mowl.representation.library.grounded_parts import ElementDomain
+from mowl.training.sampled_objective import element_offset, seeded_generator
 from mowl.training.schedules import ConstantThenCosine, LinearDecay, TemperatureAnnealing
 from mowl.representation.library.finite_model_placement import (close_labels, edge_triples,
                                                                  interpretation_labels,
@@ -584,8 +585,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         self._live_cls_ids: Optional[th.Tensor] = None
         self._ord_cls_ids: Optional[th.Tensor] = None
         self._dead_min_ids: Optional[th.Tensor] = None
-        self.generator: th.Generator = th.Generator(device="cpu")
-        self.generator.manual_seed(self.seed + 1337)
+        self.generator: th.Generator = seeded_generator(self.seed, 1337)
 
         # the parts given instead of the defaults
         self._geometry_parts = {"class_model": class_model, "relation_model": relation_model,
@@ -837,7 +837,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
 
         elements = dict(self.class_index_dict)
         for ind_iri, ind_idx in self.individual_index_dict.items():
-            elements[ind_iri] = self.nb_classes + int(ind_idx)
+            elements[ind_iri] = element_offset(self.nb_classes, ind_idx)
         labels = close_labels(
             interpretation_labels(raw_labels, self.nb_elements, self.class_index_dict, elements,
                                   device=self.device),
@@ -887,8 +887,9 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
 
         - Mutates ``self.generator`` in-place.
         """
-        eff_seed = (self.seed + 1337) if seed is None else int(seed)
-        self.generator.manual_seed(eff_seed)
+        fresh = seeded_generator(self.seed if seed is None else seed,
+                                 1337 if seed is None else 0)
+        self.generator.set_state(fresh.get_state())
         return self.generator
 
     def scheduled_tau(self, step: int, total_steps: int) -> float:

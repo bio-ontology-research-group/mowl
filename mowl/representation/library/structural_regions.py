@@ -253,7 +253,13 @@ def intersect_signed(a, b):
     intersect = a.intersect
     if "signed" in inspect.signature(intersect).parameters:
         return intersect(b, signed=True)
-    return intersect(b)
+    region, gap = intersect(b)
+    if not isinstance(region, type(a)):
+        # (two balls meet in a lens, which has a volume but is not a ball)
+        raise ConstructorUnavailable(
+            f"The intersection of two {type(a).__name__} regions is a "
+            f"{type(region).__name__}, not a {type(a).__name__}.")
+    return region, gap
 
 
 # ====================================================================================

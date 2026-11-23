@@ -1309,13 +1309,13 @@ def test_no_error_of_a_part_is_turned_into_a_refusal():
 def test_cross_method_swaps_work_or_are_refused_with_a_reason():
     """The whole sweep (about ten minutes): no case raises an error that is not the library's
     refusal, no class or relation model is accepted and ignored, and the share of swaps that
-    work does not fall below that of this round (624 of 1628)."""
+    work does not fall below that of this round (659 of 1628)."""
     from tests.representation import cross_method_swaps as X
     results = X.sweep()
     outcomes = [r[4] for r in results]
     assert X.BUG not in outcomes, [r for r in results if r[4] == X.BUG][:3]
     assert X.NO_EFFECT not in outcomes, [r for r in results if r[4] == X.NO_EFFECT][:3]
-    assert outcomes.count(X.WORKS) >= 624
+    assert outcomes.count(X.WORKS) >= 659
 
 
 # -- the outcome matrix ----------------------------------------------------------------------
@@ -1426,7 +1426,11 @@ ellipsoids, unions of boxes, cones and orders: ``REGION_METHODS`` of
 the class model, relation model, measure or objective of method B, once per distinct
 replacement. ``works``: accepted, the losses change, two epochs train to finite numbers;
 ``refused``: :class:`~mowl.representation.ConstructorUnavailable` at build time with the
-reason of the part that cannot do it; ``same losses``: an objective or measure that is read
+reason of the part that cannot do it, in two columns: *undefined* (the combination has no
+meaning: other spaces, a loss that no constant can change, a relation that no trained form
+reads) and *not implemented* (:class:`~mowl.representation.ConstructorNotImplemented`, the
+message starts with ``not implemented:``: the combination is defined, and the formula is not
+written in mOWL yet); ``same losses``: an objective or measure that is read
 and gives the costs of the method's own on these forms; ``no effect`` and ``bug`` (an
 accepted part that changes nothing, any other error) must stay at zero. Before the parts
 declared their operations (:mod:`mowl.representation.operations`), 361 of the 1628 cases
@@ -1435,10 +1439,13 @@ refusals. The counts are written by the generator of this page:
 
 """
 
-CROSS_REFUSALS = """Most refusals are of a class model or measure of another region family: a measure of
-boxes cannot compare balls, and no exact view of one family as the other exists (exact views
-are used: a point is a box of no width, a box is an octagon product). The hierarchy methods
-train only ``C ⊑ D``, so no relation model they are given would be read. By category:
+CROSS_REFUSALS = """Undefined refusals are mostly of a class model or measure of another *space*: points
+of a manifold, cones, orders and element sets have no comparison with boxes of R^d. The
+hierarchy methods train only ``C ⊑ D``, so no relation model they are given would be read.
+A measure of boxes that is given balls (or prisms, octagons, unions) is a different case: both
+are regions of R^d, the comparison is defined, and the refusal says ``not implemented``
+(exact views are used where they exist: a point is a box of no width, a box is an octagon
+product). By category:
 
 """
 

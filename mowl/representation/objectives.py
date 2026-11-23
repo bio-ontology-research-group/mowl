@@ -37,7 +37,7 @@ import inspect
 
 import torch as th
 
-from mowl.representation.regions import ConstructorUnavailable
+from mowl.representation.regions import ConstructorNotImplemented, ConstructorUnavailable
 
 __all__ = ["Objective", "FORMS", "ROLE_FORMS", "SQUARED_FORMS", "NORM_FORMS"]
 
@@ -639,7 +639,7 @@ class Objective:
     def _relations_with(self, g):
         relations = g.relation_model
         if relations is None or not relations.reads_role_axioms:
-            raise ConstructorUnavailable(
+            raise ConstructorNotImplemented(
                 f"{type(relations).__name__} does not define role_inclusion(...) and "
                 f"role_chain(...), so the role axioms cannot be read.")
         return relations
@@ -704,9 +704,9 @@ def _unhinged_apart(a, b, margin):
     """``apart`` without the hinge, for ball regions (the only published use)."""
     from mowl.representation.regions import Ball
     if not (isinstance(a, Ball) and isinstance(b, Ball)):
-        raise ConstructorUnavailable(
+        raise ConstructorNotImplemented(
             f"gci2_negative='linear' is the unhinged overlap of two balls (the ELEm baseline "
-            f"of the Box2EL code); it has no reading for {type(a).__name__} regions.")
+            f"of the Box2EL code); its reading for {type(a).__name__} regions is not written.")
     distance = th.linalg.norm(a.centre - b.centre, dim=1, keepdim=True)
     return a.radius + b.radius - distance + margin
 

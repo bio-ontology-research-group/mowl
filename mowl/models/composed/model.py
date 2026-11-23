@@ -195,7 +195,7 @@ class ComposedEL(EmbeddingELModel):
             try:
                 joint.probe(module, self.training_datasets)
             except ConstructorUnavailable as error:
-                raise ConstructorUnavailable(f"{self.method!r} {what}: {error}") from error
+                raise error.reworded(f"{self.method!r} {what}: ") from error
             return
         try:
             with th.no_grad():
@@ -212,8 +212,7 @@ class ComposedEL(EmbeddingELModel):
         except ConstructorUnavailable as error:
             # the library's own refusal, raised with its reason by the part that cannot do
             # what the combination asks of it; any other error is a defect and surfaces
-            raise ConstructorUnavailable(
-                f"{self.method!r} {what}: {error}") from error
+            raise error.reworded(f"{self.method!r} {what}: ") from error
 
     def _attach_default_regimes(self):
         """The training regimes that belong to the method (``geometry.default_regimes``: a

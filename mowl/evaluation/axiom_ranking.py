@@ -297,7 +297,3 @@ def closure_rows(model, dataset, gci_name, closure="auto"):
     if closure in ("auto", "elk"):
         return elk_closure_rows(model, dataset, gci_name)
     raise ValueError(f"Unknown closure {closure!r}.")
-
-
-def as_numpy(ranks):
-    return np.asarray(ranks.tolist() if hasattr(ranks, "tolist") else ranks, dtype=float)

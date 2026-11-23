@@ -143,6 +143,15 @@ class Rules:
                              f"shape {tuple(expr.shape)}")
         return d
 
+    @staticmethod
+    def total(*violations):
+        """The sum of the violations of several rules at the same elements (a form that
+        is read as more than one rule, e.g. an edge and the propagation of deadness)."""
+        out = violations[0]
+        for v in violations[1:]:
+            out = out + v
+        return out
+
     def violation(self, premises: Sequence[th.Tensor], conclusion: Optional[th.Tensor] = None,
                   exempt: Optional[th.Tensor] = None, names=()):
         """:math:`(T(p_1, \\dots, p_n, 1 - e) - c)^+`; no premise is truth 1, no conclusion

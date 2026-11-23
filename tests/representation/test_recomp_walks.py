@@ -23,6 +23,13 @@ from tests.baselines.pairs_walks import annotated_family  # noqa: E402
 
 KEYS = ("dl2vec", "owl2vec_star", "taxonomy_walks", "onto2vec", "opa2vec")
 SMALL = dict(embed_dim=8, num_walks=2, walk_length=5, window=3, workers=1, seed=0)
+#: The same for the methods whose corpus is sentences: they have no walks, and walk options
+#: are refused for them.
+SENTENCES = {k: v for k, v in SMALL.items() if k not in ("num_walks", "walk_length")}
+
+
+def small(key):
+    return SMALL if key in ("dl2vec", "owl2vec_star", "taxonomy_walks") else SENTENCES
 
 
 @pytest.fixture(scope="module")
@@ -80,7 +87,7 @@ COMMON = {"classes": "point", "relations": "token", "individuals": "point",
 @pytest.mark.parametrize("key", KEYS)
 def test_the_named_combination_reads_back(family, key):
     assert METHOD_KINDS[key] == "sequences"
-    model = ComposedSequenceModel(family, method=key, **SMALL)
+    model = ComposedSequenceModel(family, method=key, **small(key))
     assert isinstance(model.module, SequenceGeometry)
     parts = model.module.parts
     for name, value in {**COMMON, **EXPECTED[key]}.items():
@@ -104,7 +111,7 @@ def test_the_released_classes_are_the_same_combinations(family):
     syn.set_w2v_model(vector_size=8, sg=1)
     syn.generate_corpus(save=True, with_annotations=True)
     assert syn.module.parts == ComposedSequenceModel(family, method="opa2vec",
-                                                     **SMALL).module.parts
+                                                     **SENTENCES).module.parts
     assert "mowl.baselines" not in type(rw).__module__
 
 
@@ -187,11 +194,11 @@ def test_taxonomy_walks_with_fasttext_and_relations(tiny):
 
 def test_onto2vec_with_entailed_axioms(family):
     model = ComposedSequenceModel(family, method="onto2vec",
-                                  entailment=Entailment("elk"), **SMALL)
+                                  entailment=Entailment("elk"), **SENTENCES)
     assert model.module.parts["entailment"].startswith("entailed by elk")
     model.train(epochs=1)
     _check_trained(model)
-    asserted = ComposedSequenceModel(family, method="onto2vec", **SMALL)
+    asserted = ComposedSequenceModel(family, method="onto2vec", **SENTENCES)
     asserted.train(epochs=1)
     with open(model.corpus_path) as a, open(asserted.corpus_path) as b:
         assert len(a.readlines()) > len(b.readlines())
@@ -200,7 +207,7 @@ def test_onto2vec_with_entailed_axioms(family):
 def test_onto2vec_with_cosine_and_similarity_in_two_regimes(tiny):
     from mowl.evaluation.ont_ranking import OnTRankingRegime
     model = ComposedSequenceModel(tiny, method="onto2vec", measure="cosine",
-                                  scorer="similarity", **SMALL)
+                                  scorer="similarity", **SENTENCES)
     model.train(epochs=1)
     _evaluate(model, tiny)
     _evaluate(model, tiny, OnTRankingRegime(normal_forms=("gci0",)))
@@ -210,14 +217,14 @@ def test_onto2vec_with_cosine_and_similarity_in_two_regimes(tiny):
 
 def test_opa2vec_with_normalised_vectors_and_another_window(family, tiny):
     model = ComposedSequenceModel(family, method="opa2vec", reading=E.TokenVectors(True),
-                                  **{**SMALL, "window": 1})
+                                  **{**SENTENCES, "window": 1})
     assert model.module.encoder.model.window == 1
     model.train(epochs=1)
     vectors, known = model.module.table("classes")
     assert th.allclose(vectors[known].norm(dim=1), th.ones(int(known.sum())), atol=1e-5)
     _check_trained(model)
     other = ComposedSequenceModel(tiny, method="opa2vec", reading=E.TokenVectors(True),
-                                  **SMALL)
+                                  **SENTENCES)
     other.train(epochs=1)
     _evaluate(other, tiny)
 
@@ -320,7 +327,7 @@ def test_annotation_sentences_name_the_entity_by_its_token(family):
     old = V.AnnotationCorpus(entity_form="bracketed iri").read(family)
     assert "http://Male rdfs:label male person" in fixed
     assert "<http://Male> rdfs:label male person" in old
-    model = ComposedSequenceModel(family, method="opa2vec", **SMALL)
+    model = ComposedSequenceModel(family, method="opa2vec", **SENTENCES)
     model.train(epochs=1)
     assert "<http://Male>" not in model.module.encoder.tokens()
 
@@ -363,7 +370,7 @@ def test_the_pair_classifier_is_the_same_for_the_same_seed(family):
     """The training axioms come from the normaliser in another order on every call; the
     head shuffled them as they came, so the same seed trained another classifier."""
     from mowl.evaluation.model_scoring import PairClassifierHead
-    model = ComposedSequenceModel(family, method="onto2vec", **SMALL)
+    model = ComposedSequenceModel(family, method="onto2vec", **SENTENCES)
     model.train(epochs=1)
     rows = th.tensor([[i, j] for i in range(5) for j in range(5) if i != j])
     first = PairClassifierHead(epochs=5)(model, "gci0", rows)

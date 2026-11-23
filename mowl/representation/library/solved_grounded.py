@@ -111,7 +111,7 @@ def grounded(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, n_compone
     from functools import partial
     from mowl.training.joint import JointObjectiveSteps
     from mowl.training.schedules import TemperatureAnnealing
-    module.default_regimes = (JointObjectiveSteps,
+    module.default_regimes = (partial(JointObjectiveSteps, seed_offset=1337),
                               partial(TemperatureAnnealing, start=tau, end=tau_end))
     return module
 

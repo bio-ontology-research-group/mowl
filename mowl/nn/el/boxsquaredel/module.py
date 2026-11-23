@@ -44,6 +44,10 @@ forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01`
     :math:`C`. Both are kept as published; they do not describe the same constraint.
     """
 
+    #: Which of the losses of the DELE reference code combines the scores of this module
+    #: (:class:`~mowl.training.DELECodeLoss`).
+    dele_code_form = "box-with-bumps"
+
     #: Normal forms that get a negative loss with ``all_negative_losses=True``.
     DELE_NEG_GCIS = frozenset({"gci0", "gci1", "gci2", "gci3",
                                "gci0_bot", "gci1_bot", "gci3_bot"})

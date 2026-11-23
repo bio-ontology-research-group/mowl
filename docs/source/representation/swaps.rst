@@ -770,7 +770,11 @@ ellipsoids, unions of boxes, cones and orders: ``REGION_METHODS`` of
 the class model, relation model, measure or objective of method B, once per distinct
 replacement. ``works``: accepted, the losses change, two epochs train to finite numbers;
 ``refused``: :class:`~mowl.representation.ConstructorUnavailable` at build time with the
-reason of the part that cannot do it; ``same losses``: an objective or measure that is read
+reason of the part that cannot do it, in two columns: *undefined* (the combination has no
+meaning: other spaces, a loss that no constant can change, a relation that no trained form
+reads) and *not implemented* (:class:`~mowl.representation.ConstructorNotImplemented`, the
+message starts with ``not implemented:``: the combination is defined, and the formula is not
+written in mOWL yet); ``same losses``: an objective or measure that is read
 and gives the costs of the method's own on these forms; ``no effect`` and ``bug`` (an
 accepted part that changes nothing, any other error) must stay at zero. Before the parts
 declared their operations (:mod:`mowl.representation.operations`), 361 of the 1628 cases
@@ -782,51 +786,62 @@ refusals. The counts are written by the generator of this page:
 
    * - part replaced
      - works
-     - refused
+     - refused: undefined
+     - refused: not implemented
      - same losses
      - no effect
      - bug
      - cases
    * - classes
      - 110
-     - 349
+     - 339
+     - 10
      - 0
      - 0
      - 0
      - 459
    * - relations
      - 55
-     - 169
+     - 116
+     - 53
      - 0
      - 0
      - 0
      - 224
    * - measure
-     - 109
-     - 347
+     - 112
+     - 332
+     - 12
      - 3
      - 0
      - 0
      - 459
    * - objective
-     - 359
-     - 99
-     - 28
+     - 382
+     - 39
+     - 35
+     - 30
      - 0
      - 0
      - 486
    * - all
-     - 633
-     - 964
-     - 31
+     - 659
+     - 826
+     - 110
+     - 33
      - 0
      - 0
      - 1628
 
-Most refusals are of a class model or measure of another region family: a measure of
-boxes cannot compare balls, and no exact view of one family as the other exists (exact views
-are used: a point is a box of no width, a box is an octagon product). The hierarchy methods
-train only ``C ⊑ D``, so no relation model they are given would be read. By category:
+Undefined refusals are mostly of a class model or measure of another *space*: points
+of a manifold, cones, orders and element sets have no comparison with boxes of R^d. The
+hierarchy methods train only ``C ⊑ D``, so no relation model they are given would be read.
+A measure of boxes that is given balls (or prisms, octagons, unions) is a different case: both
+are regions of R^d, the comparison is defined, and the refusal says ``not implemented``
+(exact views are used where they exist: a point is a box of no width, a box is an octagon
+product). By category:
+
+**Undefined**
 
 .. list-table::
    :header-rows: 1
@@ -836,9 +851,9 @@ train only ``C ⊑ D``, so no relation model they are given would be read. By ca
      - relations
      - measure
      - objective
-   * - the measure compares another region family
-     - 336
-     - 9
+   * - the measure compares another space or family
+     - 327
+     - 6
      - 322
      - 0
    * - no trained form reads a relation model
@@ -847,20 +862,15 @@ train only ``C ⊑ D``, so no relation model they are given would be read. By ca
      - 0
      - 0
    * - the relation model does not map these regions
-     - 1
-     - 58
-     - 6
-     - 12
-   * - an operation the part does not provide
      - 0
-     - 5
-     - 8
-     - 47
+     - 14
+     - 6
+     - 9
    * - a margin the measure cannot read
      - 0
      - 0
-     - 7
-     - 35
+     - 0
+     - 22
    * - the method's training regime or solver needs its own part
      - 7
      - 0
@@ -868,6 +878,42 @@ train only ``C ⊑ D``, so no relation model they are given would be read. By ca
      - 4
    * - other
      - 5
-     - 1
+     - 0
      - 4
+     - 4
+
+**Not implemented**
+
+.. list-table::
+   :header-rows: 1
+
+   * - why refused
+     - classes
+     - relations
+     - measure
+     - objective
+   * - the comparison of two families of R^d
+     - 10
+     - 25
+     - 4
+     - 4
+   * - an operation of the part (volume, image, preimage, non-inclusion, ...)
+     - 0
+     - 11
+     - 0
+     - 18
+   * - a reading of a margin
+     - 0
+     - 0
+     - 8
+     - 13
+   * - a rule of the relation model or of a role axiom
+     - 0
+     - 16
+     - 0
+     - 0
+   * - other
+     - 0
      - 1
+     - 0
+     - 0

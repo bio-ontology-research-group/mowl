@@ -63,9 +63,9 @@ class CateCodeTraining(ComposedRegime):
         self._interaction_loss = bool(interaction_loss)
 
     def attach(self, model):
-        from mowl.models.cate import CatE
-        if not isinstance(model, CatE):
-            raise TypeError(f"CateCodeTraining needs a CatE model, got {type(model).__name__}.")
+        if not callable(getattr(model, "_regimes", None)):
+            raise TypeError(f"CateCodeTraining needs a model that composes its regimes "
+                            f"(the hook _regimes, as CatE does), got {type(model).__name__}.")
         # Eq. 7 as the reference code computes it; the options of the model read back it
         model.negative_aggregation = "mean"
         model.filter_negatives = False

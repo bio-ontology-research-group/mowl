@@ -36,7 +36,8 @@ from mowl.representation.class_models import BoxClasses, Classes
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import (DEFAULT_MEASURE, register_class_model, register_measure,
                                          register_relation_model)
-from mowl.representation.regions import Ball, Box, ConstructorUnavailable, Region
+from mowl.representation.regions import (Ball, Box, ConstructorNotImplemented, ConstructorUnavailable,
+                                         Region)
 from mowl.representation.relation_models import Relations
 
 __all__ = ["BumpedBox", "UnionOfBoxes", "MembershipIntersection", "DomainProjection",
@@ -108,6 +109,8 @@ class UnionOfBoxes(Region):
     :param bump: ``(B, d)`` bump vector of the class (shared by all its boxes), or ``None``.
     """
 
+    space = "euclidean"
+
     centre: th.Tensor
     offset: th.Tensor
     bump: th.Tensor = None
@@ -141,6 +144,31 @@ class UnionOfBoxes(Region):
     def is_empty(self):
         """Every box of the union is empty (negative half-width in some coordinate)."""
         return (self.offset < 0).any(dim=-1).all(dim=-1)
+
+    #: The union volume sums over the subsets of the boxes: at most this many boxes.
+    MAX_EXACT_VOLUME_BOXES = 10
+
+    def volume(self):
+        """``(B, 1)``: the exact volume of the union by inclusion and exclusion,
+        :math:`\\sum_{\\emptyset \\ne S} (-1)^{|S|+1} \\mathrm{Vol}(\\bigcap_{i \\in S} b_i)`
+        (:math:`2^k - 1` intersections of boxes; more than
+        :attr:`MAX_EXACT_VOLUME_BOXES` boxes is refused)."""
+        from itertools import combinations
+        k = self.components
+        if k > self.MAX_EXACT_VOLUME_BOXES:
+            raise ConstructorNotImplemented(
+                f"the volume of a union of {k} boxes (inclusion and exclusion has 2^k terms; "
+                f"at most {self.MAX_EXACT_VOLUME_BOXES} boxes are summed).")
+        lower, upper = self.centre - self.offset, self.centre + self.offset
+        total = th.zeros_like(self.centre[:, 0, :1])
+        for size in range(1, k + 1):
+            sign = 1.0 if size % 2 else -1.0
+            for subset in combinations(range(k), size):
+                idx = list(subset)
+                lo = lower[:, idx].amax(dim=1)
+                hi = upper[:, idx].amin(dim=1)
+                total = total + sign * th.relu(hi - lo).prod(dim=-1, keepdim=True)
+        return total
 
     def translate(self, vector):
         return UnionOfBoxes(self.centre + vector.unsqueeze(1), self.offset)
@@ -388,8 +416,10 @@ def membership_sampler(region, temperature=1.0, aggregate="min"):
             dist = th.linalg.norm(points.unsqueeze(0) - region.centre.unsqueeze(1), dim=-1)
             return th.relu(th.sigmoid((region.radius - dist) / temperature) - 0.5)
         return fn
-    raise ConstructorUnavailable(
-        f"{type(region).__name__} has no point-membership function (a `sampler` method).")
+    refusal = ConstructorNotImplemented if getattr(region, "space", None) == "euclidean" \
+        else ConstructorUnavailable
+    raise refusal(f"{type(region).__name__} has no point-membership function (a `sampler` "
+                  f"method).")
 
 
 # ====================================================================================
@@ -843,6 +873,16 @@ class UnionMeasure(RegionMeasure):
     def apart(self, a, b, margin=0.0):
         return self._pairs(self.base.apart, a, b, margin).mean(dim=(1, 2)).unsqueeze(1)
 
+    def outside(self, a, b, margin=0.0):
+        """Zero only if :math:`A \\not\\subseteq B`, by a sufficient condition: the centre of
+        some component of ``a`` lies apart (by ``margin``) from every component of ``b``, so
+        a point of ``a`` is in no box of ``b`` (the mean over the components of ``b``, the
+        minimum over those of ``a``)."""
+        a = _union(a)
+        contracted = replace(a, offset=th.zeros_like(a.offset))
+        pairs = self._pairs(self.base.apart, contracted, b, margin)
+        return pairs.mean(dim=2).amin(dim=1, keepdim=True)
+
     def empty(self, a, margin=0.0):
         a = _union(a)
         batch, k, d = a.centre.shape
@@ -1010,16 +1050,16 @@ class SampledVolume(RegionMeasure, nn.Module):
         return self.apart(MembershipIntersection((a, b)), c, margin)
 
     def intersection_nonempty(self, a, b, margin=0.0, epsilon=0.0):
-        raise ConstructorUnavailable("SampledVolume has no measure of emptiness.")
+        raise ConstructorNotImplemented("SampledVolume has no measure of emptiness.")
 
     def meets(self, a, b, margin=0.0):
-        raise ConstructorUnavailable("SampledVolume does not define meets.")
+        raise ConstructorNotImplemented("SampledVolume does not define meets.")
 
     def empty(self, a, margin=0.0):
-        raise ConstructorUnavailable("SampledVolume does not define empty.")
+        raise ConstructorNotImplemented("SampledVolume does not define empty.")
 
     def nonempty(self, a, epsilon=0.0):
-        raise ConstructorUnavailable("SampledVolume does not define nonempty.")
+        raise ConstructorNotImplemented("SampledVolume does not define nonempty.")
 
 
 register_measure("sampled volume")(SampledVolume)

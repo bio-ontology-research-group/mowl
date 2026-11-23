@@ -30,13 +30,18 @@ __all__ = ["CanonicalModelSource", "LeastModelSource", "FiniteModelSource",
            "canonical_model_of"]
 
 
+def _normalised_ontology_class():
+    from mowl.geometric.normal_forms import NormalisedOntology
+    return NormalisedOntology
+
+
 def canonical_model_of(data):
     """The :class:`~mowl.geometric.completion.CanonicalModel` of a dataset, an OWLAPI
     ontology, a normalised ontology, or itself."""
     from mowl.geometric.completion import CanonicalModel
     if isinstance(data, CanonicalModel):
         return data
-    if type(data).__name__ == "NormalisedOntology":
+    if isinstance(data, _normalised_ontology_class()):
         return CanonicalModel.from_normalised(data)
     if hasattr(data, "ontology") and hasattr(data, "classes"):          # a mOWL dataset
         return CanonicalModel.from_dataset(data)
@@ -47,7 +52,7 @@ def reads_ontology(data):
     """Whether :func:`canonical_model_of` can read ``data``: a mOWL dataset, an OWL API
     ontology, a normalised ontology or a canonical model."""
     from mowl.geometric.completion import CanonicalModel
-    return (isinstance(data, CanonicalModel) or type(data).__name__ == "NormalisedOntology"
+    return (isinstance(data, CanonicalModel) or isinstance(data, _normalised_ontology_class())
             or (hasattr(data, "ontology") and hasattr(data, "classes"))
             or hasattr(data, "getAxioms"))
 
@@ -164,8 +169,9 @@ class FiniteModelSource(Source):
     guarantees = ()
 
     def build(self, data):
-        if type(data).__name__ == "CanonicalModel" or (hasattr(data, "ontology")
-                                                       and hasattr(data, "classes")):
+        from mowl.geometric.completion import CanonicalModel
+        if isinstance(data, CanonicalModel) or (hasattr(data, "ontology")
+                                                and hasattr(data, "classes")):
             # an ontology: the finite interpretation of its canonical model that the
             # convex-regions construction takes (concept names without nominals, no
             # individuals)

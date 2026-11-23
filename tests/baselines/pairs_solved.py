@@ -199,6 +199,9 @@ def _faithel_dataset():
 
 
 def _faithel_new(**options):
+    # the authors' loss is an explicit option: the default of the library is the bounded hinge
+    options.setdefault("negative_term", "unbounded")
+
     def build(dataset):
         from mowl.models import FaithEL
         return FaithEL(dataset, batch_size=8, learning_rate=0.01, seed=0, **options)

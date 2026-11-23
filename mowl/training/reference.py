@@ -435,7 +435,7 @@ class EmELppCodeTraining(ComposedRegime):
     def attach(self, model):
         import numpy as np
         module = model.module
-        is_emelpp = any(c.__name__ == "EmELPPModule" for c in type(module).__mro__)
+        is_emelpp = hasattr(module, "intersection_radius_term")   # EmEL++'s option
         self._init.size_low = 0.0 if is_emelpp else -1.0
         # Replacement classes: the classes of the subsumption pairs (training and
         # validation), as the code's 'prot_ids'.
@@ -529,7 +529,8 @@ class RegDCodeTraining(ComposedRegime):
 
     :param task: ``"inference"`` (evaluate on ``C ⊑ D``) or ``"prediction"``
         (evaluate on ``A ⊑ ∃r.B``).
-    :param design: ``"regd"`` or ``"baseline"``.
+    :param design: ``"energy"`` (the loss of the RegD code; ``"regd"``) or ``"pairs"`` (the
+        code of the ELBE / ELEm baselines; ``"baseline"``).
     :param batch_size: Axioms per normal form and step (512 in the code).
     :param num_negatives: Negatives per positive and column for the baselines (1, as in
         the code's ``sample_negatives``).
@@ -566,8 +567,12 @@ class RegDCodeTraining(ComposedRegime):
                  rectified=False):
         if task not in self._TASK_GCI:
             raise ValueError("task must be 'inference' or 'prediction'.")
-        if design not in ("regd", "baseline"):
-            raise ValueError("design must be 'regd' or 'baseline'.")
+        # the two designs by what they train: the energy of the model (the RegD code's loss),
+        # or pairs of scores (the code of the ELBE / ELEm baselines); the names of the codes
+        # are accepted
+        design = {"regd": "energy", "baseline": "pairs"}.get(design, design)
+        if design not in ("energy", "pairs"):
+            raise ValueError("design must be 'energy' ('regd') or 'pairs' ('baseline').")
         if host_loss not in ("mse", "mean"):
             raise ValueError("host_loss must be 'mse' or 'mean'.")
         if init not in ("joint", None):
@@ -575,7 +580,7 @@ class RegDCodeTraining(ComposedRegime):
         gci = self._TASK_GCI[task]
         parts = [PerNormalFormMiniBatches(batch_size=batch_size, order="random",
                                           seed=seed)]
-        if design == "regd":
+        if design == "energy":
             parts.append(SoftmaxEnergyContrastiveLoss(normal_forms=(gci,),
                                                       rectify_negatives=rectified))
             if host_loss == "mse":
@@ -599,7 +604,7 @@ class RegDCodeTraining(ComposedRegime):
         self.key = type(self).key
         self.task = task
         self.design = design
-        self.raw_energy = bool(raw_energy) and design == "regd" and not rectified
+        self.raw_energy = bool(raw_energy) and design == "energy" and not rectified
         self.init = init
 
     def attach(self, model):

@@ -37,6 +37,11 @@ class CanonicalMixtureModule(FlatLossOption, MixtureGeometry):
     losses of the earlier module.
     """
 
+    #: Why the exact-model check has no region reading of this module's classes.
+    not_a_region_model = ("classes are columns of a 0/1 membership matrix over the finite "
+                          "canonical domain (a set-based model, faithful by construction), "
+                          "not regions of R^d")
+
     def __init__(self, structure, rank=50, entropy_reg=0.0, init_self_mass=0.9,
                  training_class_assertions=None):
         from mowl.representation.library.membership_structure import MembershipStructure

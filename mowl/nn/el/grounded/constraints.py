@@ -99,7 +99,7 @@ def gci2(m_a, rho, dead=None, dead_filler=None, rules=LUKASIEWICZ):
     edge = rules.violation([m_a], rho, exempt=dead, names=("m_a", "rho"))
     if dead_filler is None:
         return edge
-    return edge + gci2_dead(as_float_tensor(m_a), dead_filler, dead=dead, rules=rules)
+    return rules.total(edge, gci2_dead(as_float_tensor(m_a), dead_filler, dead=dead, rules=rules))
 
 
 def gci3(rho, m_b, m_c, dead=None, rules=LUKASIEWICZ):
