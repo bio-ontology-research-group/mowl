@@ -182,9 +182,10 @@ def faithel(tmp_path_factory):
 def test_faithel_tbox_costs_and_abox_scores_are_the_models(faithel):
     # faithel.module is a plain torch Module: geometry_of finds the adapter by the model's
     # own class, and gives the same geometry as building it from the model.
-    g = geometry_of(faithel)
-    assert isinstance(g, FaithELGeometry)
-    assert isinstance(FaithELGeometry(faithel), FaithELGeometry)
+    assert isinstance(geometry_of(faithel), FaithELGeometry)
+    # the baseline checks its own copy of the normal forms: converted by the tests
+    from tests.baselines.adapters import faithel_reading
+    g = FaithELGeometry(faithel_reading(faithel))
     n = len(faithel.class_index_dict)
     pairs = th.tensor(list(itertools.product(range(n), repeat=2)))
     got = g.inside(g.classes(pairs[:, 0]), g.classes(pairs[:, 1]))

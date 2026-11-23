@@ -81,6 +81,23 @@ def library_reading(model):
     return _BaselineReading(model)
 
 
+class _FaithELReading:
+    """A baseline FaithEL whose TBox model answers the library's normal forms."""
+
+    def __init__(self, model):
+        object.__setattr__(self, "_model", model)
+        object.__setattr__(self, "tbox", library_reading(model.tbox))
+
+    def __getattr__(self, name):
+        return getattr(self._model, name)
+
+
+def faithel_reading(model):
+    """A baseline FaithEL as :class:`~mowl.representation.library.other_regions.FaithELGeometry`
+    reads it (its TBox model through :func:`library_reading`)."""
+    return _FaithELReading(model)
+
+
 # -- the adapters of the baseline modules ---------------------------------------------------
 def _lib(name):
     return importlib.import_module(f"mowl.representation.library.{name}")
