@@ -1372,7 +1372,7 @@ validated at build time. The table is written by
 
 
 CROSS_HEADER = """Cross-method swaps among the region-based EL methods
----------------------------------------------------
+----------------------------------------------------
 
 The table above says whether *some* replacement of a part works. This one counts every
 cross-method swap among the region-based EL methods (balls, boxes, octagons, prisms,
