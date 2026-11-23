@@ -1309,13 +1309,13 @@ def test_no_error_of_a_part_is_turned_into_a_refusal():
 def test_cross_method_swaps_work_or_are_refused_with_a_reason():
     """The whole sweep (about ten minutes): no case raises an error that is not the library's
     refusal, no class or relation model is accepted and ignored, and the share of swaps that
-    work does not fall below that of this round (624 of 1628)."""
+    work does not fall below that of this round (659 of 1628)."""
     from tests.representation import cross_method_swaps as X
     results = X.sweep()
     outcomes = [r[4] for r in results]
     assert X.BUG not in outcomes, [r for r in results if r[4] == X.BUG][:3]
     assert X.NO_EFFECT not in outcomes, [r for r in results if r[4] == X.NO_EFFECT][:3]
-    assert outcomes.count(X.WORKS) >= 624
+    assert outcomes.count(X.WORKS) >= 659
 
 
 # -- the outcome matrix ----------------------------------------------------------------------
