@@ -94,6 +94,10 @@ def _scores(model):
         y = th.arange(m).repeat(m)
         out["object_property_assertion"] = module(
             th.stack([x, th.zeros_like(x), y], dim=1), "object_property_assertion")
+    # every other form of the training data, on its first rows
+    for form, data in model.training_datasets.items():
+        if form not in out and len(data):
+            out[form] = module(data[:12], form)
     return out
 
 
@@ -151,8 +155,11 @@ PAIRS = [
           neg_margin=0.2, min_width=0.05, lr_decay=0.9),
     _pair("prism", learning_rate=0.01),
     _pair("prism", "structural", learning_rate=0.01, objective="structural"),
-    _pair("eike", learning_rate=0.01),
-    _pair("eike", "matrix", learning_rate=0.01, instance_map="matrix", alpha=0.5,
+    # EIKE ranks classes and assertions, so these two read data with individuals and roles:
+    # the pair compares the subsumption score, the class assertion score and the role
+    # assertion score (on the family ontology alone, only the first exists).
+    _pair("eike", dataset=_abox, learning_rate=0.01),
+    _pair("eike", "matrix", _abox, learning_rate=0.01, instance_map="matrix", alpha=0.5,
           margins=(0.5, 0.3, 1.0)),
     _pair("concept2box", learning_rate=0.01),
     _pair("concept2box", "triple", learning_rate=0.01, gci2_reading="triple"),

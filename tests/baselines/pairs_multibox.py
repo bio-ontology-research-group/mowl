@@ -77,6 +77,17 @@ def _ranking_scores(model):
         r = th.zeros(n * n, dtype=th.long)
         out["gci2"] = module(th.stack([pairs[:, 0], r, pairs[:, 1]], dim=1), "gci2")
         out["gci3"] = module(th.stack([r, pairs[:, 0], pairs[:, 1]], dim=1), "gci3")
+    return _with_trained_forms(model, out)
+
+
+def _with_trained_forms(model, out, rows=12):
+    """Add the score of every other axiom form of the training data (intersections, the
+    bottom forms, role forms of an ontology without a role pair above) on its first
+    ``rows`` rows, so that a pair compares every score the model ranks with, not only
+    the subsumption between two classes."""
+    for form, data in model.training_datasets.items():
+        if form not in out and len(data):
+            out[form] = model.module(data[:rows], form)
     return out
 
 
