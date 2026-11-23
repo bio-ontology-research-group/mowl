@@ -4,7 +4,7 @@ disk embeddings): they embed the told subclass order between *named* classes."""
 import numpy as np
 import torch as th
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.order.manifolds import RiemannianSGD
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"

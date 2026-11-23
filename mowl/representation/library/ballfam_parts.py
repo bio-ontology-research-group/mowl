@@ -37,7 +37,6 @@ from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.measures import RegionMeasure, CentreDistance, Bounds
 from mowl.representation.methods import (register_measure, register_method,
                                          register_relation_model, DEFAULT_MEASURE)
-from mowl.representation.adapters import register_adapter
 from mowl.representation.objectives import Objective
 from mowl.training.losses import GroupedLogSumExpContrastiveLoss, MSETargetLoss
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable
@@ -543,42 +542,9 @@ def regd_elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
 # -- adapters ---------------------------------------------------------------------------------
 
 
-@register_adapter("EmELPPModule")
-def _emelpp_adapter(module):
-    return emelpp(None, None, embed_dim=module.embed_dim, margin=module.margin,
-                  linear_negative=module.negative_loss_form == "linear",
-                  gci1_radius_term=module.intersection_radius_term,
-                  radius=module.radius_form, role_direction=module.role_direction,
-                  gci0_shift=lambda: getattr(module, "subclass_relation", None),
-                  tables=module)
-
-
-@register_adapter("EmELVarModule")
-def _emelvar_adapter(module):
-    return emelvar(None, None, embed_dim=module.embed_dim, margin=module.margin,
-                   linear_negative=module.negative_loss_form == "linear",
-                   gci1_radius_term=module.intersection_radius_term,
-                   radius=module.radius_form, role_direction=module.role_direction,
-                   sigma_reg_weight=module.sigma_reg_weight,
-                   gci0_shift=lambda: getattr(module, "subclass_relation", None),
-                   tables=module)
-
-
 def _regd_options(module):
     return dict(margin=module.margin, all_negatives=module.all_negative_losses,
                 epsilon=module.epsilon, lamda=module.lamda, p=module.p,
                 gamma1=module.gamma1, gamma2=module.gamma2, eps=module.eps,
                 depth_on_containment=module.depth_on_containment,
                 flip_gci2=module.flip_gci2, tables=module)
-
-
-@register_adapter("RegDELBEModule")
-def _regd_adapter(module):
-    return regd(None, None, embed_dim=module.embed_dim, **_regd_options(module))
-
-
-@register_adapter("RegDELEmModule")
-def _regd_elem_adapter(module):
-    return regd_elem(None, None, embed_dim=module.embed_dim, reg_norm=module.reg_norm,
-                     gci1_radius_term=module.gci1_radius_term, radius=module.radius,
-                     consistent_radius=module.consistent_radius, **_regd_options(module))

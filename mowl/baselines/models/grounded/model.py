@@ -51,7 +51,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.grounded.module import GroundedELModule
 from mowl.baselines.nn.el.grounded.sampling import (
     RegionSample,

@@ -2,7 +2,7 @@ r"""Shared model base for order and hierarchy embeddings of the class taxonomy."
 import numpy as np
 import torch as th
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 
 
 class TaxonomyEmbeddingModel(EmbeddingELModel):

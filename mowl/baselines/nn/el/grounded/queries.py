@@ -61,7 +61,6 @@ import numpy as np
 import torch as th
 
 from mowl.baselines.nn.el.grounded.module import GroundedELModule
-from mowl.baselines.nn.el.grounded.sampling import is_grounded_geometry
 from mowl.baselines.nn.el.structural import Regions
 
 __all__ = [
@@ -123,7 +122,7 @@ def _validate_int_ge(name: str, val: int, min_val: int) -> int:
 
 def _validate_module(module: GroundedELModule, require_translation: bool = False) -> None:
     """Validate that ``module`` is a :class:`GroundedELModule` (and optionally in translation mode)."""
-    if not is_grounded_geometry(module):
+    if not isinstance(module, GroundedELModule):
         raise TypeError(
             f"module must be a GroundedELModule, got {type(module).__name__}"
         )

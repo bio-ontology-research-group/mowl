@@ -17,7 +17,7 @@ import numpy as np
 import torch as th
 from torch import nn
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.geometric.core.faithfulness import StronglyFaithfulModel
 from mowl.baselines.geometric.core.normal_forms import (BOTTOM, NF1, NF2, NF3, NF4, TOP, NormalisedOntology,
                                          is_nominal_name, normalise)

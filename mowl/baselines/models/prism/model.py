@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 
 import torch as th
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.prism.module import PrismModule
 from mowl.baselines.nn.el.structural import (
     DefinitionTable,

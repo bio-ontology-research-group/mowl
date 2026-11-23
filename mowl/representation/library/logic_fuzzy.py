@@ -52,7 +52,6 @@ from mowl.representation.objectives import Objective
 from mowl.representation.regions import ConstructorUnavailable, Region
 from mowl.representation.relation_models import Relations
 from mowl.representation.vocabulary import ClassModel, Construction, RelationModel
-from mowl.representation.adapters import register_adapter
 from mowl.training.regularization import Regularizer
 
 __all__ = ["FuzzySet", "LogitSet", "Family", "Product", "Goedel", "Lukasiewicz", "LogitGoedel",
@@ -1691,19 +1690,3 @@ def alcone(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin=0.1,
         nb_classes, nb_relations, nb_individuals, embed_dim, margin, temperature, family,
         top_index, bottom_index, constant_logit, init_std, anneal, noise, nondegeneracy,
         tables))
-
-
-@register_adapter("DFALCModule")
-def _dfalc_adapter(module):
-    return dfalc(None, None, tables=module)
-
-
-@register_adapter("FALCONModule")
-def _falcon_adapter(module):
-    return falcon(None, None, t_norm=module.t_norm, max_measure=module.max_measure,
-                  tables=module)
-
-
-@register_adapter("ALConeModule")
-def _alcone_adapter(module):
-    return alcone(None, None, anneal=None, nondegeneracy=0.0, tables=module)

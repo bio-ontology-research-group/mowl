@@ -421,14 +421,6 @@ class LassoModel:
 # Geometric interpretation
 # ---------------------------------------------------------------------------
 
-def _individual_point(name, x, dim):
-    """The point of an individual: a non-zero vector of ``R^dim``."""
-    x = np.asarray(x, dtype=float).reshape(-1)
-    if x.size != dim or not np.any(x):
-        raise ValueError(f"Individual {name!r} must be a non-zero point of R^{dim}.")
-    return x
-
-
 class TemporalALConeInterpretation:
     """A temporal al-cone interpretation: one al-cone interpretation per time point, in one
     :math:`\\mathbb{R}^n`, with rigid individuals (rays).
@@ -459,7 +451,10 @@ class TemporalALConeInterpretation:
             self.atoms[name] = list(cones)
         self.individuals: Dict[str, np.ndarray] = {}
         for name, x in (individuals or {}).items():
-            self.individuals[name] = _individual_point(name, x, self.dim)
+            x = np.asarray(x, dtype=float).reshape(-1)
+            if x.size != self.dim or not np.any(x):
+                raise ValueError(f"Individual {name!r} must be a non-zero point of R^{self.dim}.")
+            self.individuals[name] = x
         self._cache: Dict[Tuple[Concept, int], ALCone] = {}
 
     # -- time ---------------------------------------------------------------

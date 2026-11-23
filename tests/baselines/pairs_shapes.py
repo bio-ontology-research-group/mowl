@@ -107,7 +107,7 @@ def _with_structural_tables(model):
         if hasattr(model, "_attach_structural_tables"):
             model._attach_structural_tables()
         else:
-            from mowl.nn.el.structural import build_structural_tables
+            from mowl.baselines.nn.el.structural import build_structural_tables
             model._structural_tables = build_structural_tables(
                 model, k=1, max_components=2 ** 30, enabled=model.structural_definitions,
                 max_level=model.max_depth, cm=model.canonical_model)

@@ -1,7 +1,7 @@
 r"""Concept2Box on an ontology viewed as a two-view knowledge graph."""
 import logging
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.concept2box.module import Concept2BoxModule
 
 logger = logging.getLogger(__name__)

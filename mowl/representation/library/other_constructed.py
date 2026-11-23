@@ -163,36 +163,12 @@ class NormalFormBackend(Backend):
             return nominal_name(expr[1])
         return None
 
-    def _foreign_normal_forms(self):
-        """The normal-form classes of the model's own copy of the geometry code, if the model
-        is a direct implementation that keeps one (``mowl.baselines``: frozen copies the
-        library does not import); ``None`` for a model of this library."""
-        import sys
-        module = type(self.model).__module__
-        if module.startswith("mowl.geometric"):
-            return None
-        root = ".".join(module.split(".")[:3])
-        for name, loaded in list(sys.modules.items()):
-            if name.startswith(root) and loaded is not None and hasattr(loaded, "NF1") \
-                    and hasattr(loaded, "NF4"):
-                return loaded
-        return None
-
     def _satisfies(self, axiom):
-        import dataclasses
         from mowl.geometric.errors import UnsupportedAxiom, UnsupportedRegion
-        foreign = self._foreign_normal_forms()
-        if foreign is not None and dataclasses.is_dataclass(axiom):
-            # the same axiom as an object of the model's own copy of the classes
-            axiom = getattr(foreign, type(axiom).__name__)(
-                *[getattr(axiom, f.name) for f in dataclasses.fields(axiom)])
         try:
             return bool(self.model.satisfies(axiom))
-        except Exception as error:
-            if isinstance(error, (UnsupportedAxiom, UnsupportedRegion)) or type(
-                    error).__name__ in ("UnsupportedAxiom", "UnsupportedRegion"):
-                raise ConstructorUnavailable(str(error)) from error
-            raise
+        except (UnsupportedAxiom, UnsupportedRegion) as error:
+            raise ConstructorUnavailable(str(error)) from error
 
     # relations ---------------------------------------------------------------------------
     def subsumed(self, a, b):

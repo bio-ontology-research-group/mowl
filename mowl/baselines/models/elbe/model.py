@@ -1,4 +1,4 @@
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.elbe.module import ELBEModule
 import torch as th
 from deprecated.sphinx import deprecated

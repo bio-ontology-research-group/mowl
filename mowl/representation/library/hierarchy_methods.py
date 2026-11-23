@@ -26,9 +26,8 @@ method                 class model         measure           space
 import torch as th
 
 from mowl.representation.library import cone_regions as C
-from mowl.representation.library.manifolds import (library_manifold, Euclidean, Hyperboloid, PoincareBall, Sphere,
+from mowl.representation.library.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
-from mowl.representation.adapters import register_adapter
 from mowl.representation.library.hierarchy_classes import (
     CodedBoxes, ConePoints, DiskClasses, OrderPoints, PointClasses, TextPoints,
     UnitCubeBoxes)
@@ -329,7 +328,7 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     if tables is not None:
         formulation, radius = tables.formulation, tables.radius
         horosphere_height, gamma3 = tables.horosphere_height, tables.gamma3
-        manifold = library_manifold(tables.manifold)
+        manifold = tables.manifold
         margin, negative_form = tables.margin, tables.negative
     elif formulation.endswith("half-space"):
         manifold = UpperHalfSpace()
@@ -380,7 +379,7 @@ def disk_embeddings(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
         classes = DiskClasses(nb_classes, embed_dim, _DISK_SPACES[geometry](), init_scale,
                               seed=seed)
     else:
-        classes = DiskClasses(manifold=library_manifold(tables.manifold), table=tables.class_embed,
+        classes = DiskClasses(manifold=tables.manifold, table=tables.class_embed,
                               radii=tables.radius_embed)
         margin = tables.margin
     return hierarchy_geometry(classes, None,
@@ -464,51 +463,3 @@ def ont(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margi
 
 
 # -- adapters: geometry_of(module) -------------------------------------------------------
-@register_adapter("OrderEmbeddingsModule")
-def _order_embeddings(module):
-    return order_embeddings(None, margin=module.margin, tables=module)
-
-
-@register_adapter("CatEModule")
-def _cate(module):
-    return cate(None, tables=module)
-
-
-@register_adapter("BoxLatticeModule")
-def _box_lattice(module):
-    return box_lattice(None, tables=module)
-
-
-@register_adapter("GumbelBoxModule")
-def _gumbel_box(module):
-    return gumbel_box(None, tables=module)
-
-
-@register_adapter("BinaryCodeBoxModule")
-def _bcbox(module):
-    return bcbox(None, variant=module.variant, tables=module)
-
-
-@register_adapter("HyperbolicConesModule")
-def _hyperbolic_cones(module):
-    return hyperbolic_cones(None, tables=module)
-
-
-@register_adapter("ShadowConesModule")
-def _shadow_cones(module):
-    return shadow_cones(None, tables=module)
-
-
-@register_adapter("DiskEmbeddingsModule")
-def _disk_embeddings(module):
-    return disk_embeddings(None, tables=module)
-
-
-@register_adapter("HiTModule")
-def _hit(module):
-    return hit(tables=module)
-
-
-@register_adapter("OnTModule")
-def _ont(module):
-    return ont(tables=module)

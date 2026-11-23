@@ -25,7 +25,6 @@ import torch as th
 import torch.nn as nn
 
 from mowl.representation.library import octagon_geometry as G
-from mowl.representation.adapters import register_adapter
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.methods import register_method
 from mowl.training.initialisation import redraw_after
@@ -80,7 +79,6 @@ def _instance(cls, into, base_init, *parts, **options):
     target = cls.__new__(cls) if into is None else into
     base_init(target, *parts, **options)
     return target
-
 
 
 # -- the random numbers of the modules ------------------------------------------------------------
@@ -249,14 +247,6 @@ def octagon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0
                      supported_forms=FORMS, neg_capable_gcis={"gci2"})
 
 
-@register_adapter("OctagonELModule")
-def _octagon(module):
-    own = module.disjoint_margin != module.margin
-    return octagon(None, None, margin=module.margin,
-                   disjoint_margin=module.disjoint_margin if own else None,
-                   neg_margin=module.neg_margin, min_width=module.min_width, tables=module)
-
-
 # -- prism ------------------------------------------------------------------------------------
 
 @register_method("prism")
@@ -370,16 +360,6 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     return geometry
 
 
-@register_adapter("PrismModule")
-def _prism(module):
-    return prism(None, None, margin=module.margin,
-                 reading=getattr(module, "objective", "axiom"),
-                 existence_weight=getattr(module, "existence_weight", 1.0),
-                 size_reg=getattr(module, "size_reg", 1e-3),
-                 empty_box_reading=getattr(module, "empty_box_reading", "signed"),
-                 tables=module)
-
-
 # -- eike -------------------------------------------------------------------------------------
 
 @register_method("eike")
@@ -462,11 +442,6 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
     return geometry
 
 
-@register_adapter("EIKEModule")
-def _eike(module):
-    return eike(None, None, tables=module)
-
-
 # -- concept2box --------------------------------------------------------------------------------
 
 @register_method("concept2box")
@@ -527,11 +502,6 @@ def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin
     return _instance(Concept2BoxModule if t is None else ComposedGeometry, _into,
                      ComposedGeometry.__init__, classes, relations, measure, objective,
                      individuals=points, supported_forms=forms, neg_capable_gcis=forms)
-
-
-@register_adapter("Concept2BoxModule")
-def _concept2box(module):
-    return concept2box(None, None, margin=0.0, tables=module)
 
 
 # -- the modules of the four methods --------------------------------------------------------------

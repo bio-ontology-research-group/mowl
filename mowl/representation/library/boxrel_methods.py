@@ -10,7 +10,6 @@ from functools import partial
 import torch as th
 import torch.nn as nn
 
-from mowl.representation.adapters import register_adapter
 from mowl.representation.class_models import BoxClasses
 from mowl.representation.library.boxrel_boxes import FixableBoxes, MinDeltaBoxes
 from mowl.representation.library.shapes_classes import Points as _Points
@@ -97,15 +96,6 @@ def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.
                             individuals=individuals, regularizers=regularizers)
 
 
-@register_adapter("TransBoxModule")
-def _transbox(module):
-    return transbox(None, None, embed_dim=module.embed_dim, margin=module.margin,
-                    enhanced=module.use_enhancement, reg_factor=module.reg_factor,
-                    formulation=module.formulation,
-                    reference_bottom_losses=module.reference_bottom_losses,
-                    strict_negatives=module.strict_negatives, tables=module)
-
-
 # ==========================================================================================
 @register_method("boxel")
 def boxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
@@ -168,13 +158,6 @@ def _boxel_geometry(geometry, objective, nb_classes, nb_relations, nb_individual
                     individuals=individuals, regularizers=regularizers)
 
 
-@register_adapter("BoxELModule")
-def _boxel(module):
-    return _boxel_geometry(ComposedGeometry, boxel_objective(0.0), None, None, 0, None,
-                           module.temperature, _role_options(module), module,
-                           (LocationPenalty(1.0),))
-
-
 def _role_options(module):
     """The options of :class:`Affine` that the module's attributes name."""
     return ("positive" if module.positive_scale else "signed",
@@ -217,14 +200,6 @@ def boxsel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
     # the conditionals are trained with their own loss term (those of the model, if any)
     geometry.default_regimes = (partial(ConditionalStatements),)
     return geometry
-
-
-@register_adapter("BoxSELModule")
-def _boxsel(module):
-    return boxsel(None, None, temperature=module.temperature, beta=module.beta,
-                  location_weight=module.location_weight,
-                  volume_weight=module.volume_weight, tables=module,
-                  **dict(zip(("scale", "role_chain_composition"), _role_options(module))))
 
 
 # ==========================================================================================
@@ -270,12 +245,3 @@ def elkem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     # step decay and the model selection (the options of the named class are its own)
     geometry.default_regimes = (partial(ELKEmTraining),)
     return geometry
-
-
-@register_adapter("ELKEmModule")
-def _elkem(module):
-    geometry = elkem(None, None, margin=module.margin, abox_threshold=module.abox_threshold,
-                     variant=module.variant, tables=module)
-    # The module uses margin 0 in evaluation mode; the geometry starts in the module's mode
-    # (the two modes are switched separately afterwards).
-    return geometry.train(module.training)
