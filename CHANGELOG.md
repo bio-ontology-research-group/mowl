@@ -217,6 +217,9 @@ Behaviour that changed, and how to get the 2.1.0 behaviour back:
 
 ### Fixed
 
+- The `convex` extra installs the ECOS solver as well: BoxLitE takes the first of Clarabel,
+  ECOS and SCS that solves the programme, and without ECOS it fell through to SCS, whose
+  solution ranks far worse (MRR 0.25 instead of 0.66 on the first family benchmark).
 - Box2EL trained with the design of the DELE code (`dele-code-training`,
   `DELECodeLosses`) keeps the margin of its negative and disjointness losses, which are the
   reference's already. The reading switched it to a strict margin as for ELEmbeddings and

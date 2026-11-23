@@ -54,6 +54,8 @@ setuptools.setup(
         # Language-model based methods (mowl.models.HiT, mowl.models.OnT)
         "lm": ["sentence-transformers"],
         # Convex-programme methods (mowl.models.BoxLitE)
-        "convex": ["cvxpy"],
+        # ecos: of the open-source solvers the one whose solution ranks best (see the
+        # recipe notes of mowl.benchmarks.recipe_sets.lourenco2026)
+        "convex": ["cvxpy", "ecos"],
     },
 )
