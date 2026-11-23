@@ -103,9 +103,9 @@ class FaithEL(RegimeTrained, EmbeddingELModel):
                                self.object_property_index_dict)
 
     def init_module(self):
-        """The geometry of the method (:func:`~mowl.representation.library.solved_faithel.
-        faithel`) with the constructed inputs of :func:`~mowl.representation.library.
-        solved_faithel.faithel_inputs`, which :class:`~mowl.models.ComposedEL` uses too."""
+        """The geometry of the method (``solved_faithel.faithel`` of
+        :mod:`mowl.representation.library`) with the constructed inputs of
+        ``solved_faithel.faithel_inputs``, which :class:`~mowl.models.ComposedEL` uses too."""
         inputs = faithel_inputs(self, self.tbox)
         if self.seed is not None:
             th.manual_seed(self.seed)

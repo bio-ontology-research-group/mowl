@@ -63,9 +63,10 @@ class CanonicalMixture(EmbeddingELModel):
 
     :param training: The training regime (default :class:`IndividualBatches`; or
         :class:`~mowl.representation.library.mixture_training.AssertionBatches`).
-    :param source, reading: The construction (names in
-        :data:`~mowl.representation.construction.SOURCES` and
-        :data:`~mowl.representation.construction.READINGS`, or instances).
+    :param source: The construction source (a name in
+        :data:`~mowl.representation.construction.SOURCES`, or an instance).
+    :param reading: The reading of the constructed model (a name in
+        :data:`~mowl.representation.construction.READINGS`, or an instance).
     """
 
     #: :meth:`train` runs the shared loop with the batching regime ``self.training`` (it
