@@ -776,10 +776,11 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
             else self.n_components
         )
         self.n_components = eff_k
-        self.module = GroundedELModule(
-            nb_elements=self.nb_elements,
-            nb_classes=self.nb_classes,
-            nb_rels=self.nb_rels,
+        # the geometry is the registered combination ``grounded`` (what
+        # ComposedEL(method="grounded") builds), with bottom silenced
+        from mowl.representation.methods import METHODS
+        self.module = METHODS["grounded"](
+            self.nb_classes, self.nb_rels, self.nb_inds,
             embed_dim=self.embed_dim,
             n_components=self.n_components,
             n_role_components=self.n_role_components,
@@ -793,14 +794,11 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
             bot_id=self.bot_id,
             role_mode=self.role_mode,
             inverse_of=self.inverse_of,
+            silence_bottom=True,
+            tau_end=self.tau1,
             **getattr(self, "_geometry_parts", {}),
         ).to(self.device)
         self.role_mode = self.module.role_mode
-
-        if self.bot_id is not None:
-            # bottom has no element and no box
-            self.module.elements.clamp_dead(self.bot_id, _DEAD_LOGIT)
-            self.module.class_model.silence(self.bot_id)
 
         if self.init == "elements":
             labels_t, edges_list = self._resolve_init_labels_and_edges()

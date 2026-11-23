@@ -27,7 +27,7 @@ import torch as th
 from mowl.training.loop import Rows, TrainingLoop
 from mowl.training.regime import ComposedRegime, TrainingRegime
 
-__all__ = ["positive_triples", "train_on_triples", "TripleBatches", "carry_rows",
+__all__ = ["positive_triples", "train_on_triples", "TripleBatches", "SLCWABatches", "carry_rows",
            "extend_embeddings", "forward_id", "HitsEarlyStopping"]
 
 
@@ -140,6 +140,90 @@ class TripleBatches(TrainingRegime):
         return loss
 
 
+class SLCWABatches(TrainingRegime):
+    """The batches and the loss of PyKEEN's sLCWA training loop
+    (:class:`pykeen.training.SLCWATrainingLoop`) as a regime of the shared loop, so that a
+    PyKEEN model trained in mOWL's loop takes exactly the steps of PyKEEN's own loop: the data
+    loader of PyKEEN's loop (shuffled batches of ``batch_size`` training instances, the
+    negatives of its negative sampler, default the basic corruption of heads or tails) is made
+    once, iterated once per epoch, and the loss of a batch is PyKEEN's
+    (``SLCWATrainingLoop._process_batch_static``: the model's loss of the positive and
+    negative scores plus its regularisation term). The shared loop zeroes the gradients,
+    back-propagates, takes the optimiser step and then applies the model's constraints
+    (``post_parameter_update``, the projection of the geometry), in PyKEEN's order.
+
+    What is not reproduced: sub-batching, slicing, gradient clipping, learning-rate
+    schedulers, checkpoints and stoppers of PyKEEN's loop (mOWL's regimes do the last three);
+    ``post_forward_pass`` of the model is called after the step instead of before it (a no-op
+    for PyKEEN's models).
+
+    :param kge: The PyKEEN model (:class:`pykeen.models.ERModel`).
+    :param triples_factory: The training triples.
+    :param batch_size: Training instances per batch.
+    :param negative_sampler, negative_sampler_kwargs: As for PyKEEN's loop.
+    :param reinitialise: As PyKEEN's loop does unless it continues a run: probe the memory
+        (when the loop optimises it automatically, the default) and draw the parameters again,
+        in that order, before the first epoch.
+    """
+
+    key = "slcwa-batches"
+
+    def __init__(self, kge, triples_factory, batch_size, negative_sampler=None,
+                 negative_sampler_kwargs=None, drop_last=None, reinitialise=True):
+        super().__init__()
+        self.reinitialise = bool(reinitialise)
+        self.kge, self.triples_factory, self.batch_size = kge, triples_factory, batch_size
+        self.negative_sampler = negative_sampler
+        self.negative_sampler_kwargs = negative_sampler_kwargs
+        self.drop_last = drop_last
+        self._loop, self._batches, self._iterator = None, None, None
+
+    def training_datasets(self, datasets):
+        from pykeen.training import SLCWATrainingLoop
+        from pykeen.utils import get_batchnorm_modules
+        self._loop = SLCWATrainingLoop(
+            model=self.kge, triples_factory=self.triples_factory,
+            optimizer=th.optim.Adam(params=self.kge.get_grad_params()),
+            negative_sampler=self.negative_sampler,
+            negative_sampler_kwargs=self.negative_sampler_kwargs)
+        drop_last = self.drop_last if self.drop_last is not None \
+            else bool(get_batchnorm_modules(self.kge))
+        if self.reinitialise:
+            # PyKEEN's ``_train`` first probes the memory (a forward and backward pass over
+            # batches, without a step; it draws random numbers), then draws the parameters
+            # again; the optimiser is made after this hook
+            if self._loop.automatic_memory_optimization:
+                sub, slices = self._loop.sub_batch_and_slice(
+                    batch_size=self.batch_size, sampler=None,
+                    triples_factory=self.triples_factory)
+                if (sub is not None and sub != self.batch_size) or slices is not None:
+                    raise ValueError("SLCWABatches does not split batches (PyKEEN chose "
+                                     f"sub-batches of {sub}, slices of {slices}).")
+            self.kge.reset_parameters_()
+        # as PyKEEN's ``_train`` makes it (shuffled, no worker processes, pinned memory)
+        self._batches = self._loop._create_training_data_loader(
+            self.triples_factory, batch_size=self.batch_size, drop_last=drop_last,
+            num_workers=0, pin_memory=True, shuffle=True, sampler=None)
+        if len(self._batches) == 0:
+            raise ValueError("There is no training batch: the graph has no triples.")
+        return datasets
+
+    @property
+    def steps_per_epoch(self):
+        return len(self._batches)
+
+    def on_epoch_start(self, epoch, epochs):
+        self._iterator = iter(self._batches)
+
+    def step_loss(self, step):
+        loop = self._loop
+        loss = loop._process_batch_static(model=self.kge, loss=loop.loss, mode=loop.mode,
+                                          batch=next(self._iterator), start=None, stop=None)
+        if not th.isfinite(loss):
+            raise FloatingPointError("The loss is not finite.")
+        return loss
+
+
 class _TripleRun(TrainingLoop):
     """The shared loop configured for a geometry of triples: an epoch is a pass over the
     batches of :class:`TripleBatches`, the epoch hooks of the regimes see epochs and get the
@@ -175,7 +259,8 @@ class _TripleRun(TrainingLoop):
 
 
 def train_on_triples(module, triples, num_entities, num_relations, optimizer, lr, batch_size,
-                     epochs, regime=None, device="cpu", drop_last=False, reinitialise=False):
+                     epochs, regime=None, device="cpu", drop_last=False, reinitialise=False,
+                     batches=None):
     """Train a geometry on the triples of a graph: :class:`TripleBatches` (with ``regime``
     in front of it) in the shared loop (:meth:`~mowl.training.loop.TrainingLoop.run_training`);
     after the optimiser step the geometry's constraints are applied (``module.project()``).
@@ -187,11 +272,15 @@ def train_on_triples(module, triples, num_entities, num_relations, optimizer, lr
     :param optimizer: A class of :mod:`torch.optim` (the regime's ``optimizer`` replaces it).
     :param regime: A :class:`~mowl.training.TrainingRegime` or ``None``.
     :param reinitialise: Draw the parameters again before training.
+    :param batches: The batching regime (default :class:`TripleBatches`; for a PyKEEN model
+        :class:`SLCWABatches` takes the steps of PyKEEN's own loop).
     :return: The sum of the losses of every epoch.
     """
     if reinitialise:
         module.reset_parameters()
-    batches = TripleBatches(module, num_entities, num_relations, batch_size, drop_last, device)
+    if batches is None:
+        batches = TripleBatches(module, num_entities, num_relations, batch_size, drop_last,
+                                device)
     batches.outer = regime
     run_regime = batches if regime is None else ComposedRegime(regime, batches)
     run_regime.model = getattr(regime, "model", None)

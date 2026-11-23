@@ -96,6 +96,11 @@ def test_unbounded_negative_loss(dataset):
 def test_per_axiom_norm_penalty(dataset):
     model = _model(ELEmbeddings, dataset)
     module = model.module
+    # ELEmbeddings draws its centres on the unit sphere, so at initialisation the penalty is
+    # zero up to rounding, and whether the rounding leaves it exactly zero depended on the
+    # random numbers earlier tests had drawn: move the centres off the sphere
+    with th.no_grad():
+        module.class_embed.weight.mul_(2.0)
     row = th.tensor([[0, 1]])
     plain = module(row, "gci0")
     assert float(module.regularization_loss()) > 0

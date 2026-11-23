@@ -752,6 +752,13 @@ class GroundedJointObjective(JointObjective):
         self._cache = (key, grounding)
         return grounding
 
+    def step(self, geometry, datasets, grounding, generator, negatives=None):
+        """One step on a given finite domain (``grounding``) with ``negatives`` the corrupted
+        role assertions ``(table, generator) -> rows`` (default: the element sampler's): the
+        terms of :meth:`GroundedObjective.losses`."""
+        return self.objective.losses(geometry, datasets, grounding, generator, self.elements,
+                                     self.regions, weights=self.weights, negatives=negatives)
+
     def losses(self, geometry, datasets, generator, negatives=None):
         grounding = self.grounding(geometry, datasets)
         sampled = None

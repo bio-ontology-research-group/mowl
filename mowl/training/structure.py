@@ -20,18 +20,26 @@ class IdleComponentReseeding(TrainingRegime):
 
     :param every: Period in epochs; re-seeding runs at the end of epochs ``every``,
         ``2 * every``, ... (1-based). ``0`` disables it.
-    :param reset_optimizer: Clear the optimiser state (``model.optimizer``) after a
-        re-seeding step.
+    :param reset_optimizer: Clear the optimiser state after a re-seeding step.
+    :param optimizer_from: Where the optimiser is found: ``"run"`` (default) the optimiser
+        of the run of the shared loop (``model.training_optimizer``, set by
+        :meth:`~mowl.training.loop.TrainingLoop.run_training`), else ``model.optimizer``;
+        ``"model attribute"`` only ``model.optimizer``, the earlier behaviour, in which the
+        state of a model without that attribute (MultiBoxEL) was never cleared (a defect,
+        kept as an option to reproduce earlier runs).
     """
 
     key = "idle-component-reseeding"
 
-    def __init__(self, every=100, reset_optimizer=True):
+    def __init__(self, every=100, reset_optimizer=True, optimizer_from="run"):
         super().__init__()
         if int(every) < 0:
             raise ValueError("every must be >= 0.")
+        if optimizer_from not in ("run", "model attribute"):
+            raise ValueError("optimizer_from must be 'run' or 'model attribute'.")
         self.every = int(every)
         self.reset_optimizer = bool(reset_optimizer)
+        self.optimizer_from = optimizer_from
         #: ``(epoch, number of components moved)`` for every re-seeding step.
         self.history = []
 
@@ -47,6 +55,10 @@ class IdleComponentReseeding(TrainingRegime):
             return
         moved = self.model.reseed_components(epoch)
         self.history.append((epoch, moved))
-        optimizer = getattr(self.model, "optimizer", None)
-        if self.reset_optimizer and optimizer is not None:
+        optimizer = None
+        if self.optimizer_from == "run":
+            optimizer = getattr(self.model, "training_optimizer", None)
+        if optimizer is None:
+            optimizer = getattr(self.model, "optimizer", None)
+        if self.reset_optimizer and optimizer is not None and hasattr(optimizer, "state"):
             optimizer.state.clear()

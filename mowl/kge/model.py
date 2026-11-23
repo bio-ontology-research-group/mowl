@@ -34,6 +34,10 @@ class KGEModel():
     :param model_filepath: Path for saving the model. Defaults to \
     :class:`tempfile.NamedTemporaryFile`
     :type model_filepath: str, optional
+    :param batching: ``"pykeen"`` (default): the batches, negatives and loss of PyKEEN's sLCWA
+        loop, the run of the released version; ``"mowl"``: mOWL's triple batches and uniform
+        corruption.
+    :type batching: str, optional
     '''
 
     def __init__(self,
@@ -45,6 +49,7 @@ class KGEModel():
                  lr=1e-3,
                  device="cpu",
                  model_filepath=None,
+                 batching="pykeen",
                  ):
 
         if not isinstance(triples_factory, TriplesFactory):
@@ -70,6 +75,9 @@ pykeen.triples.triples_factory.TriplesFactory.")
         if not isinstance(model_filepath, str) and model_filepath is not None:
             raise TypeError("Optional parameter model_filepath must be of type str or None.")
 
+        if batching not in ("pykeen", "mowl"):
+            raise ValueError("batching must be 'pykeen' or 'mowl'.")
+        self.batching = batching
         self.triples_factory = triples_factory
         self.device = device
         self.model = pykeen_model.to(self.device)
@@ -138,16 +146,17 @@ Please train the model first.")
     def train(self):
         """Train the PyKEEN model on the triples for :attr:`epochs` epochs and save it.
 
-        Training is that of every model of triples in mOWL
-        (:func:`mowl.training.triples.train_on_triples`: the regime
-        :class:`~mowl.training.triples.TripleBatches` in the shared loop of
-        :mod:`mowl.training.loop`): shuffled batches of ``batch_size`` triples, one corrupted
-        triple per positive (head or tail), the loss of the PyKEEN model, its regularisation
-        term, and its constraints after every step (``post_parameter_update``). The parameters
-        are drawn again first, as PyKEEN's own training loop does."""
+        The run is that of PyKEEN's sLCWA training loop, as in the released mOWL: the
+        parameters are drawn again, then every epoch goes over PyKEEN's shuffled batches with
+        the negatives of its basic negative sampler, the model's loss plus its regularisation
+        term, an optimiser step and the model's constraints. The steps are taken by mOWL's
+        loop (:func:`mowl.training.triples.train_on_triples`) with the regime
+        :class:`~mowl.training.triples.SLCWABatches`, which reads PyKEEN's batches and loss;
+        ``batching="mowl"`` uses mOWL's own batches and sampler
+        (:class:`~mowl.training.triples.TripleBatches`) instead."""
         from types import SimpleNamespace
         from mowl.representation.library.other_graph import PyKEENGeometry
-        from mowl.training.triples import positive_triples, train_on_triples
+        from mowl.training.triples import SLCWABatches, positive_triples, train_on_triples
         factory = self.triples_factory
         inverse = bool(getattr(factory, "create_inverse_triples", False))
         view = SimpleNamespace(
@@ -157,9 +166,12 @@ Please train the model first.")
             SUBCLASS_RELATION="http://subclassof", create_inverse_triples=inverse,
             num_negs_per_pos=None, projector=None)
         geometry = PyKEENGeometry(view)
+        batches = None if self.batching == "mowl" else SLCWABatches(
+            self.model, factory, self.batch_size)
         train_on_triples(geometry, positive_triples(factory.mapped_triples, inverse),
                          factory.num_entities, factory.num_relations, self.optimizer, self.lr,
-                         self.batch_size, self.epochs, device=self.device, reinitialise=True)
+                         self.batch_size, self.epochs, device=self.device,
+                         reinitialise=batches is None, batches=batches)
         th.save(self.model.state_dict(), self.model_filepath)
         self._trained = True
 

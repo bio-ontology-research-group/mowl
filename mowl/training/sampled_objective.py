@@ -81,6 +81,7 @@ class _SampledRun(TrainingLoop):
     def start_training(self, optimizer):
         # regimes that reset the optimiser (re-seeding) find it on the model
         self.model.optimizer = optimizer
+        self.model.training_optimizer = optimizer
 
     def step_regularization_loss(self):
         return 0

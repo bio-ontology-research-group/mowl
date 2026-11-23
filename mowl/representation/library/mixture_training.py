@@ -163,6 +163,9 @@ class _MixtureRun(TrainingLoop):
     def get_optimizer(self):
         return self.model.get_optimizer()
 
+    def start_training(self, optimizer):
+        self.model.training_optimizer = optimizer
+
     def epoch_steps(self, regime):
         return max(1, self.batches.steps_per_epoch)
 

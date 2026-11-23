@@ -43,7 +43,8 @@ __all__ = ["grounded"]
 def grounded(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, n_components=2,
              n_role_components=2, role_mode="product", tau=1.0, agg="max", agg_tau=0.1,
              top_id=None, bot_id=None, inverse_of=None, class_model=None, relation_model=None,
-             measure=None, tables=None, objective=None, silence_bottom=False, tau_end=0.01):
+             measure=None, tables=None, objective=None, silence_bottom=False, tau_end=0.01,
+             dead_init_logit=0.0, element_features=None, encoder=None):
     """GroundedEL from its parts (module docstring): the element-grounded geometry, which is a
     :class:`mowl.nn.GroundedELModule` over ``nb_classes + nb_individuals`` elements, with the
     grounded constraints as its joint objective (``geometry.joint_objective``,
@@ -71,6 +72,8 @@ def grounded(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, n_compone
         is wrapped with the default samplers.
     :param silence_bottom: Bottom has no element and no box (what GroundedEL does after
         building; a general model asks for it).
+    :param dead_init_logit, element_features, encoder: The element domain (see
+        :class:`mowl.nn.GroundedELModule`).
     :param tables: An existing module (it is its own geometry; returned as it is).
     """
     if tables is not None:
@@ -95,9 +98,10 @@ def grounded(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, n_compone
     module = GroundedELModule(
         nb_elements=nb_classes + nb_individuals, nb_classes=nb_classes, nb_rels=nb_relations,
         embed_dim=embed_dim, n_components=n_components, n_role_components=n_role_components,
-        tau=tau, agg=agg, agg_tau=agg_tau, top_id=top_id, bot_id=bot_id, role_mode=role_mode,
-        inverse_of=inverse_of, class_model=class_model, relation_model=relation_model,
-        measure=measure)
+        tau=tau, agg=agg, agg_tau=agg_tau, dead_init_logit=dead_init_logit,
+        element_features=element_features, encoder=encoder, top_id=top_id, bot_id=bot_id,
+        role_mode=role_mode, inverse_of=inverse_of, class_model=class_model,
+        relation_model=relation_model, measure=measure)
     if silence_bottom and bot_id is not None:
         module.elements.clamp_dead(bot_id, _DEAD_LOGIT)
         module.class_model.silence(bot_id)

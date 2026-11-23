@@ -16,7 +16,8 @@ from typing import Any, Dict, Optional
 import torch as th
 
 from mowl.models.grounded.common import _CountInt
-from mowl.representation.library.grounded_objective import GroundedObjective, Grounding
+from mowl.representation.library.grounded_objective import (GroundedJointObjective,
+                                                            GroundedObjective, Grounding)
 from mowl.representation.library.grounded_sampling import ElementSampler, RegionSampler
 
 
@@ -118,10 +119,15 @@ class GroundedConstraints:
         if step is not None:
             self.step_tau(step, total_steps)
         weights = None if self.constraint_mode == "fixed" else self.dual_weights
-        out = self.objective.losses(
-            self.module, self.training_datasets, self.grounding(),
-            self.generator if generator is None else generator, self.element_sampler,
-            self.region_sampler, weights=weights, negatives=self._regime_corrupted_opa)
+        # the step is the joint objective of the geometry
+        # (:class:`~mowl.representation.library.grounded_objective.GroundedJointObjective`,
+        # what ComposedEL(method="grounded") trains), with the parts of this model
+        joint = GroundedJointObjective(self.objective, self.element_sampler,
+                                       self.region_sampler, weights=weights)
+        self.module.joint_objective = joint
+        out = joint.step(self.module, self.training_datasets, self.grounding(),
+                         self.generator if generator is None else generator,
+                         negatives=self._regime_corrupted_opa)
         out["n_region_skipped_top"] = _CountInt(out["n_region_skipped_top"])
         for name in ("w_fact", "w_axioms", "w_region"):
             out[name] = out[name].detach()

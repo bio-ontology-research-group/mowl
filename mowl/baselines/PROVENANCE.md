@@ -182,6 +182,7 @@ docstrings and imports, compared with the source at 2d0ed505).
 | `training/regime.py` | `mowl/training/regime.py` @ 162ff5fd | original; library code rewritten since |
 | `training/schedules.py` | `mowl/training/schedules.py` @ fa438240 | original; library code rewritten since |
 | `training/structure.py` | `mowl/training/structure.py` @ fa438240 | unchanged since |
+| `kge/model.py` | `mowl/kge/model.py` @ 6cc74711 (as released in v2.1.0, f8b2cb07) | original: `KGEModel` trained by PyKEEN's `SLCWATrainingLoop`; the library version trains in mOWL's loop (round 7) |
 
 ## Replaced by the original in round 7
 

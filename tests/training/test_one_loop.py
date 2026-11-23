@@ -164,3 +164,32 @@ def test_a_step_loss_with_terms_reaches_on_epoch_end():
     toy.train(epochs=2)
     assert len(seen) == 2 and set(seen[0]) == {"total", "half"}
     assert seen[0]["half"] == pytest.approx(seen[0]["total"] / 2)
+
+
+def test_idle_component_reseeding_resets_the_optimiser_of_the_run():
+    """Defect (round 7): the regime cleared ``model.optimizer``, which a model of the shared
+    loop such as MultiBoxEL does not have, so its re-seeding never reset the optimiser. The
+    fix (default) reads the optimiser of the run; ``optimizer_from="model attribute"`` is the
+    earlier behaviour."""
+    from mowl.training import ComposedRegime, IdleComponentReseeding, TrainingRegime
+
+    seen = {}
+
+    class Moments(TrainingRegime):
+        def on_epoch_end(self, epoch, losses):
+            opt = self.model.training_optimizer
+            seen.setdefault("before", []).append(len(opt.state))
+
+    def run(**options):
+        seen.clear()
+        toy = _Toy(_rows()).model
+        type(toy).reseed_components = lambda self, epoch: 1
+        toy.get_optimizer = lambda: th.optim.Adam(toy.module.parameters(), lr=0.1)
+        reseed = IdleComponentReseeding(every=1, **options)
+        toy.training_regime = ComposedRegime(reseed, Moments())
+        toy.train(epochs=2)
+        return toy, list(seen["before"])
+    toy, states = run()
+    assert states == [0, 0] and not hasattr(toy, "optimizer")
+    _, old = run(optimizer_from="model attribute")
+    assert old == [1, 1]          # the state was never cleared

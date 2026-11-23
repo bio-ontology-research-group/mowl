@@ -280,6 +280,8 @@ class TrainingLoop:
             optimizer = regime.optimizer()
         if optimizer is NotImplemented:
             optimizer = self.get_optimizer()
+        #: The optimiser of the run (regimes that reset its state find it here).
+        self.training_optimizer = optimizer
         self.start_training(optimizer)
         if by_steps:
             self.training_losses = history
