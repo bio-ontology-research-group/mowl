@@ -198,8 +198,9 @@ When a part cannot do something
 A part may lack a constructor or an axiom form. The error is
 :class:`~mowl.representation.ConstructorUnavailable`, and it means one of these:
 
-* The region family is not closed under the operation. Two balls do not intersect in a ball,
-  and a box has no complement.
+* The region family is not closed under the operation. The union of two balls is not a
+  ball, and a box has no complement. (The intersection of two balls is not a ball either, but
+  it has its own region, a lens, so it is not refused.)
 * The relation model has no reading of it. A relation model without ``role_inclusion``
   cannot read role inclusions, and one without ``image`` cannot give the region of the
   successors of a set.
@@ -218,15 +219,15 @@ subclass axioms only. The forms a geometry reads are in ``geometry.supported_for
 
    adapter = OWLAPIAdapter()
    cls = lambda name: adapter.create_class("http://" + name)
-   both = adapter.create_object_intersection_of(cls("Female"), cls("Parent"))
+   either = adapter.create_object_union_of(cls("Female"), cls("Parent"))
    try:
-       expression_region(model, both, *id_maps(model))   # `model` has balls as classes
+       expression_region(model, either, *id_maps(model))   # `model` has balls as classes
    except ConstructorUnavailable as error:
        print(error)
 
 .. testoutput::
 
-   The intersection of two Ball regions is not a Ball. A class expression with an intersection cannot be evaluated by ComposedGeometry.
+   Ball has no union. A class expression with a union cannot be evaluated by ComposedGeometry.
 
 Regularisation is a part too
 ----------------------------

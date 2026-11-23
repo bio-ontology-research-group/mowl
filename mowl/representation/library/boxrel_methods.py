@@ -101,7 +101,8 @@ def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.
 def boxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
           temperature=1.0, gci1_bot="volume product", scale="positive",
           role_chain_composition="in_order", min_bounds=(1e-4, 0.2), delta_bounds=(-0.1, 0.0),
-          relation_bounds=(-0.1, 0.1), scaling_bounds=(0.9, 1.1), tables=None):
+          relation_bounds=(-0.1, 0.1), scaling_bounds=(0.9, 1.1), tables=None,
+          gci3_preimage="corners"):
     """BoxEL (Xiong et al. 2022): boxes stored as lower corner and log-width, an affine map
     per relation, a smoothed volume ratio, and a penalty that keeps the boxes in the unit
     cube.
@@ -121,11 +122,20 @@ def boxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         initialisation of the lower corners, the log-widths, the shifts and the factors of a
         role (new tables only).
     :param tables: A :class:`~mowl.nn.BoxELModule` to share parameters with.
+    :param gci3_preimage: The box of :math:`\\exists r.C`: ``"corners"`` (default, as
+        published) or ``"as_released"`` (the box of mOWL 2.1.0, a defect); the
+        ``preimage_reading`` of :class:`Affine`.
     """
-    return _boxel_geometry(ComposedGeometry, boxel_objective(margin, _product(gci1_bot)),
-                           nb_classes, nb_relations, nb_individuals, embed_dim, temperature,
-                           (scale, role_chain_composition), tables, (LocationPenalty(1.0),),
-                           (min_bounds, delta_bounds, relation_bounds, scaling_bounds))
+    geometry = _boxel_geometry(
+        ComposedGeometry, boxel_objective(margin, _product(gci1_bot)),
+        nb_classes, nb_relations, nb_individuals, embed_dim, temperature,
+        (scale, role_chain_composition), tables, (LocationPenalty(1.0),),
+        (min_bounds, delta_bounds, relation_bounds, scaling_bounds))
+    if gci3_preimage != "corners":
+        if gci3_preimage not in Affine.PREIMAGE_READINGS:
+            raise ValueError(f"gci3_preimage must be one of {Affine.PREIMAGE_READINGS}.")
+        geometry.relation_model.preimage_reading = gci3_preimage
+    return geometry
 
 
 def _product(gci1_bot):
