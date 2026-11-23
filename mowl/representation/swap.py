@@ -154,6 +154,11 @@ def build_method(key, nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
              "regularizers": tuple(regularizers) or None}
     given = {k: v for k, v in given.items() if v is not None}
     rest = given
+    # a method whose geometry is not a ComposedGeometry may take parts under names of its
+    # own (``build.part_options``: kind -> option of the builder)
+    for kind, option in getattr(build, "part_options", {}).items():
+        if kind in rest:
+            options[option] = rest.pop(kind)
     sizes = (nb_classes, nb_relations, nb_individuals)
     geometry = build(*sizes, embed_dim=embed_dim, **options)
     if not rest:

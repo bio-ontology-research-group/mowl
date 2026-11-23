@@ -1,30 +1,38 @@
 """Training regimes and negative samplers of the canonical mixture.
 
-The trained part of the canonical mixture is the individual model, so its training loop goes
-over *individuals*: :class:`IndividualBatches` (the method's own regime) draws a random batch
-of individuals, takes their training assertions, samples one negative per assertion and makes
+The trained part of the canonical mixture is the individual model, so its training goes over
+*individuals*: :class:`IndividualBatches` (the method's own regime) draws a random batch of
+individuals, takes their training assertions, samples one negative per assertion and makes
 one optimiser step per batch, with the regularisers of the geometry evaluated on the batch.
 :class:`AssertionBatches` goes over the assertions instead (minibatches of every form in
 turn), as a swap.
+
+Both are :class:`~mowl.training.TrainingRegime` objects that compute the loss of a step
+themselves (:meth:`~mowl.training.TrainingRegime.step_loss`), and they train in the shared
+loop of :mod:`mowl.training.loop` (:meth:`MixtureBatches.run`): losses and regularisers are
+evaluated in chunks of bounded size (the support entries of the individuals,
+:meth:`MixtureIndividuals.pair_chunks
+<mowl.representation.library.mixture_individuals.MixtureIndividuals.pair_chunks>`) and their
+gradients accumulated (:class:`~mowl.training.Accumulated`,
+:func:`~mowl.training.loop.accumulate_backward`), so that a step never holds more than a
+bounded number of entries; a batch with nothing to supervise takes no step. Other regimes
+(schedules, early stopping, projections) can be put in front of them.
 
 Negatives are parts of the regime: :class:`NonEntailedClasses` corrupts the class of a class
 assertion with a class that the constructed model does not entail for the individual
 (rejection sampling against its own element's classes), :class:`UniformTails` corrupts the
 object of a role assertion with a uniformly drawn individual.
-
-Losses and regularisers are evaluated in chunks of bounded size (the support entries of the
-individuals, :meth:`MixtureIndividuals.pair_chunks
-<mowl.representation.library.mixture_individuals.MixtureIndividuals.pair_chunks>`)
-and their gradients accumulated, so that a batch never holds more than a bounded number of
-entries.
 """
 
 import os
 
 import torch as th
-from tqdm import trange
 
-__all__ = ["NonEntailedClasses", "UniformTails", "IndividualBatches", "AssertionBatches"]
+from mowl.training.loop import TrainingLoop, accumulate_backward
+from mowl.training.regime import Accumulated, ComposedRegime, TrainingRegime
+
+__all__ = ["NonEntailedClasses", "UniformTails", "MixtureBatches", "IndividualBatches",
+           "AssertionBatches"]
 
 _FORMS = (("class_assertion", 2), ("object_property_assertion", 3))
 
@@ -103,10 +111,8 @@ def _backward(geometry, rows, form, neg=False):
         return 0.0
     total = 0.0
     for s, e in geometry.individual_model.pair_chunks(rows):
-        loss = geometry(rows[s:e], form, neg=neg).mean() * (float(e - s) / float(n))
-        if loss.requires_grad:
-            loss.backward()
-        total += float(loss.detach())
+        total += accumulate_backward(geometry(rows[s:e], form, neg=neg).mean(),
+                                     float(e - s) / float(n))
     return total
 
 
@@ -120,15 +126,12 @@ def _penalties(geometry, batch):
         if getattr(regularizer, "batch_penalty", False):
             n = max(int(batch.shape[0]), 1)
             for s, e in geometry.individual_model.chunks(batch):
-                term = regularizer.penalty(geometry, batch[s:e]) * (float(e - s) / n)
-                if term.requires_grad:
-                    term.backward()
-                total += float(term.detach())
+                total += accumulate_backward(regularizer.penalty(geometry, batch[s:e]),
+                                             float(e - s) / n)
         else:
             term = regularizer.penalty(geometry)
             if term is not None:
-                term.backward()
-                total += float(term.detach())
+                total += accumulate_backward(term)
     return total
 
 
@@ -139,29 +142,95 @@ def _project(geometry):
     geometry.project()
 
 
-class _Regime:
-    """What the regimes share: negatives, validation and the best checkpoint.
+class _MixtureRun(TrainingLoop):
+    """The shared loop configured for a model trained by a :class:`MixtureBatches` regime:
+    an epoch is the regime's steps, a progress bar over the steps, the epoch hooks of the
+    regimes see epochs, validation every ``validate_every`` epochs selects the best
+    parameters (:meth:`MixtureBatches.select`), which are restored at the end."""
 
-    :meth:`run` is a training loop of its own (epochs of optimiser steps with validation and
-    checkpointing), not an inner solver: it should run in the shared loop of
-    :mod:`mowl.training.loop`. It does not yet because a step here accumulates the gradient
-    chunk by chunk (:func:`_backward`: memory bounded by the support entries of the
-    individuals) and skips the optimiser step of a batch with nothing to supervise, while a
-    step of the shared loop computes one loss and calls ``backward`` once. Until the shared
-    loop has a hook for an accumulated step, the canonical mixture refuses every training
-    regime (``CanonicalMixture.training_hooks`` is empty) instead of ignoring one."""
+    loop_style = "epochs"
+    epoch_hooks = True
+
+    def __init__(self, model, regime, batches):
+        self.model, self.batches = model, batches
+        self.module, self.device = model.module, model.device
+        self.training_regime = regime
+
+    @property
+    def training_datasets(self):
+        return self.model.training_datasets
+
+    def get_optimizer(self):
+        return self.model.get_optimizer()
+
+    def epoch_steps(self, regime):
+        return max(1, self.batches.steps_per_epoch)
+
+    def step_regularization_loss(self):
+        return 0
+
+    def after_optimizer_step(self):
+        self.training_regime.after_step()
+
+    def record_epoch(self, epoch, mean_loss):
+        self.model.loss_history.append(mean_loss)
+
+    def validate_epoch(self, epoch, loss):
+        self.batches.select(self.model, loss)
+
+    def finish_training(self):
+        self.batches.restore(self.model)
+
+
+class MixtureBatches(TrainingRegime):
+    """What the regimes of the canonical mixture share: negatives, the steps of an epoch
+    (:meth:`steps`, a generator that does the draws of the epoch in order and yields one
+    :class:`~mowl.training.Accumulated` loss per step, or ``None`` for a step with nothing
+    to supervise), the projection after a step, validation and the best checkpoint.
+
+    :param batch_size: Rows per step (default: the model's).
+    :param class_negatives, role_negatives: The negative samplers.
+    """
 
     key = ""
 
     def __init__(self, batch_size=None, class_negatives=None, role_negatives=None):
+        super().__init__()
         self.batch_size = batch_size
         self.class_negatives = class_negatives if class_negatives is not None \
             else NonEntailedClasses()
         self.role_negatives = role_negatives if role_negatives is not None else UniformTails()
+        self._data, self._epoch = None, None
 
     def sampler(self, form):
         return self.class_negatives if form == "class_assertion" else self.role_negatives
 
+    @property
+    def size(self):
+        return self.batch_size or self.model.batch_size
+
+    # -- the hooks of the shared loop -------------------------------------------------------
+    def training_datasets(self, datasets):
+        self._data = _data(self.model)
+        return datasets
+
+    @property
+    def steps_per_epoch(self):
+        raise NotImplementedError
+
+    def steps(self, geometry, data, batch_size):
+        raise NotImplementedError
+
+    def on_epoch_start(self, epoch, epochs):
+        self._epoch = self.steps(self.model.module, self._data, self.size)
+
+    def step_loss(self, step):
+        return next(self._epoch, None)
+
+    def after_step(self):
+        _project(self.model.module)
+
+    # -- validation -------------------------------------------------------------------------
     @staticmethod
     def validation_loss(model):
         """Mean positive loss of the validation assertions of ``model.eval_gci_name`` (or
@@ -181,30 +250,41 @@ class _Regime:
                     return total / float(len(rows))
         return 0.0
 
-    def run(self, model, epochs, validate_every=1, epoch_callback=None):
-        data = _data(model)
-        optimizer = model.get_optimizer()
-        best, saved = float("inf"), False
-        model.loss_history = []
-        for epoch in trange(epochs):
-            model.module.train()
-            loss = self.epoch(model, data, optimizer)
-            model.loss_history.append(loss)
-            if epoch_callback is not None:
-                epoch_callback(epoch, model)
-            if validate_every and (epoch + 1) % validate_every == 0:
-                value = self.validation_loss(model) if model.dataset.validation is not None \
-                    else loss
-                if value < best:
-                    best = value
-                    th.save(model.module.state_dict(), model.model_filepath)
-                    saved = True
-        if saved and model.model_filepath is not None and os.path.exists(model.model_filepath):
+    def select(self, model, loss):
+        """After a validation epoch: the validation loss (or, without validation data, the
+        epoch loss); the parameters are saved to ``model.model_filepath`` if it is the best
+        so far."""
+        value = self.validation_loss(model) if model.dataset.validation is not None else loss
+        if value < self._best:
+            self._best = value
+            th.save(model.module.state_dict(), model.model_filepath)
+            self._saved = True
+
+    def restore(self, model):
+        """At the end: load the best parameters, if any were saved."""
+        if self._saved and model.model_filepath is not None and \
+                os.path.exists(model.model_filepath):
             model.module.load_state_dict(th.load(model.model_filepath,
                                                  map_location=model.device, weights_only=True))
 
+    def run(self, model, epochs, validate_every=1, epoch_callback=None):
+        """Train ``model`` for ``epochs`` epochs in the shared loop
+        (:meth:`~mowl.training.loop.TrainingLoop.run_training`), with the regime assigned to
+        the model (``model.training_regime``, if any) in front of this one."""
+        self.attach(model)
+        self._best, self._saved = float("inf"), False
+        model.loss_history = []
+        assigned = getattr(model, "training_regime", None)
+        regime = self if assigned is None else ComposedRegime(assigned, self)
+        regime.model = model
+        run = _MixtureRun(model, regime, self)
+        callback = None if epoch_callback is None else \
+            (lambda epoch, _: epoch_callback(epoch, model))
+        run.run_training(epochs, validate_every=validate_every, epoch_callback=callback)
+        return model.loss_history
 
-class IndividualBatches(_Regime):
+
+class IndividualBatches(MixtureBatches):
     """The regime of the canonical mixture: per epoch a random order of the individuals, in
     batches of ``batch_size``; per batch the training assertions of its individuals (at most
     ``batch_size`` of every form, drawn at random if there are more) with one negative each,
@@ -219,15 +299,17 @@ class IndividualBatches(_Regime):
 
     key = "individual-batches"
 
-    def epoch(self, model, data, optimizer):
-        geometry = model.module
-        batch_size = self.batch_size or model.batch_size
+    @property
+    def steps_per_epoch(self):
+        n_ind, b = len(self.model.module.individual_model), self.size
+        return -(-n_ind // b)
+
+    def steps(self, geometry, data, batch_size):
+        device = self.model.device
         n_ind = len(geometry.individual_model)
-        perm = th.randperm(n_ind, device=model.device)
-        total, steps = 0.0, 0
+        perm = th.randperm(n_ind, device=device)
         for start in range(0, n_ind, batch_size):
             batch = perm[start:start + batch_size]
-            optimizer.zero_grad()
             loss, supervised = 0.0, False
             for form, _ in _FORMS:
                 rows = data[form]
@@ -239,7 +321,7 @@ class IndividualBatches(_Regime):
                 pos = rows[mask]
                 if pos.shape[0] > batch_size:
                     pos = pos.index_select(0, th.randperm(pos.shape[0],
-                                                          device=model.device)[:batch_size])
+                                                          device=device)[:batch_size])
                 neg = self.sampler(form).sample(geometry, pos)
                 loss += _backward(geometry, pos, form)
                 loss += _backward(geometry, neg, form, neg=True)
@@ -248,15 +330,10 @@ class IndividualBatches(_Regime):
                             for r in geometry.regularizers)
             if penalised:
                 loss += _penalties(geometry, batch)
-            if supervised or penalised:
-                optimizer.step()
-                _project(geometry)
-                total += loss
-                steps += 1
-        return total / max(steps, 1)
+            yield Accumulated(loss) if supervised or penalised else None
 
 
-class AssertionBatches(_Regime):
+class AssertionBatches(MixtureBatches):
     """A swap for :class:`IndividualBatches`: per epoch the class assertions and then the
     role assertions, each in a random order and in minibatches of ``batch_size``
     assertions, one negative each; one step per minibatch, the regularisers on the
@@ -264,24 +341,21 @@ class AssertionBatches(_Regime):
 
     key = "assertion-batches"
 
-    def epoch(self, model, data, optimizer):
-        geometry = model.module
-        batch_size = self.batch_size or model.batch_size
-        total, steps = 0.0, 0
+    @property
+    def steps_per_epoch(self):
+        b = self.size
+        return sum(-(-int(rows.shape[0]) // b) for rows in self._data.values())
+
+    def steps(self, geometry, data, batch_size):
         for form, _ in _FORMS:
             rows = data[form]
-            perm = th.randperm(rows.shape[0], device=model.device)
+            perm = th.randperm(rows.shape[0], device=self.model.device)
             for s in range(0, rows.shape[0], batch_size):
                 pos = rows.index_select(0, perm[s:s + batch_size])
-                optimizer.zero_grad()
                 loss = _backward(geometry, pos, form)
                 loss += _backward(geometry, self.sampler(form).sample(geometry, pos), form,
                                   neg=True)
                 ids = th.unique(pos[:, 0] if form == "class_assertion"
                                 else th.cat([pos[:, 0], pos[:, 2]]))
                 loss += _penalties(geometry, ids)
-                optimizer.step()
-                _project(geometry)
-                total += loss
-                steps += 1
-        return total / max(steps, 1)
+                yield Accumulated(loss)

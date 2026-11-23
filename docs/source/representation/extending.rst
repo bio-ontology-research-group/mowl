@@ -106,6 +106,33 @@ The example registers boxes with shifts, scored the way RegD scores inclusion:
 A method that learns from queries and not from axioms is registered with
 ``trained_on="queries"``; ``ComposedEL`` then refuses it with a clear error.
 
+Three more things let a general model build a method that is not made from sizes alone:
+
+* a part *constructed from the ontology* (FaithEL's strongly faithful TBox, the ids of top
+  and bottom of a grounded domain) is made by a function registered with
+  :func:`~mowl.representation.dataset_inputs.register_dataset_inputs`; ``ComposedEL`` passes
+  what it returns to the builder (``embed_dim`` among it is the dimension the construction
+  fixes);
+* a *joint objective* (:mod:`mowl.representation.joint_objective`) reads every axiom form of
+  a step at once, at one draw of elements; a geometry that has one
+  (``geometry.joint_objective``) is trained by ``ComposedEL`` with the regime
+  :class:`~mowl.training.joint.JointObjectiveSteps`;
+* a builder whose geometry is not a :class:`~mowl.representation.ComposedGeometry` names the
+  options its parts are (``builder.part_options``, for example ``{"classes": "class_model"}``),
+  so that ``classes=``, ``relations=``, ``measure=`` and ``objective=`` reach it.
+
+.. testcode::
+
+   from mowl.representation.library.grounded_parts import UnionDepth
+
+   model = ComposedEL(FamilyDataset(), method="grounded", embed_dim=4, relations="translation",
+                      measure=UnionDepth(agg="lse"))
+   print(model.module.parts["relations"], model.module.joint_objective.part)
+
+.. testoutput::
+
+   box of translations grounded constraints
+
 Then, in the repository:
 
 #. Add the method's entry to ``mowl/representation/catalog.py`` (its parts, as the catalogue

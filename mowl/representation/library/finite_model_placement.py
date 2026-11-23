@@ -27,6 +27,9 @@ used by GroundedEL (``init="elements"``) from a least model, and usable by any g
 of an :class:`~mowl.representation.library.grounded_parts.ElementDomain`, a
 :class:`~mowl.representation.library.grounded_parts.BoxUnionClasses` and one of its relation
 models. Reasoner-free: the labels and the edges are the caller's.
+
+Method-specific part: only GroundedEL is made of an element domain with one element per class
+and per individual; no other method of the library uses it (catalogue card ``grounded``).
 """
 from __future__ import annotations
 

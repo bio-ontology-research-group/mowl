@@ -68,6 +68,9 @@ def data(name):
         elif name == "query":
             from tests.datasetFactory import FamilyDataset
             _DATA[name] = FamilyDataset()
+        elif name == "abox":
+            from tests.baselines.pairs_solved import _faithel_dataset
+            _DATA[name] = _faithel_dataset()
         elif name == "ranked":
             from tests.representation.test_recomp_construct import ranked_dataset
             _DATA[name] = ranked_dataset()
@@ -75,11 +78,23 @@ def data(name):
 
 
 #: Keys that no general model can train from a dataset alone, and why.
-UNSUPPORTED_BY_GENERAL_MODEL = {
-    "faithel": "its TBox is constructed by a reasoner from the ontology and its classes are "
-               "anchored to it; ComposedEL builds from sizes. Train it with FaithEL.",
-    "grounded": "GroundedELModule is a grounded program over a shared element domain, "
-                "not an ELModule: ComposedEL refuses it; train it with GroundedEL.",
+UNSUPPORTED_BY_GENERAL_MODEL = {}
+
+#: Methods that ComposedEL builds and trains but whose objective is joint (every form of a
+#: step read at one draw of elements, :mod:`mowl.representation.joint_objective`): the
+#: per-form costs this harness compares do not exist, so their swaps are tested with an
+#: effect check of the joint objective in the file named.
+OWN_SWAP_TESTS = {
+    "grounded": ("tests/representation/test_recomp7_general_models.py", {
+        "classes": (True, "another union of boxes per class (three boxes)"),
+        "relations": (True, "translation (boxes of translations)"),
+        "measure": (True, "log-sum-exp aggregation (UnionDepth(agg='lse'))"),
+        "objective": (True, "GroundedObjective(lambda_reg=0)"),
+        "objective_options": (False, "options of the joint objective are options of "
+                                     "GroundedObjective (pass objective=)"),
+        "regularizers": (False, "the minimality term of the joint objective is its "
+                                "regulariser"),
+    }),
 }
 
 
@@ -106,9 +121,18 @@ def el_options(key):
     return options
 
 
+#: Methods that learn the ABox only (their TBox is constructed): trained on a dataset with
+#: individuals.
+ABOX_METHODS = {"faithel"}
+
+
 def axioms_model(key, **parts):
     th.manual_seed(0)
-    return ComposedEL(data("family"), method=key, **el_options(key), **parts)
+    model = ComposedEL(data("abox" if key in ABOX_METHODS else "family"), method=key,
+                       **el_options(key), **parts)
+    if key in ABOX_METHODS:
+        model.eval_gci_name = "class_assertion"
+    return model
 
 
 def alc_model(key, **parts):
@@ -336,6 +360,10 @@ _NO_CLASS_FOR_MEASURE = (
 #: report of this test); written for inspection.
 UNREAD_OPTIONS = {}
 REFUSES_EVERY = {
+    ("faithel", "classes"): "a class of FaithEL is a moving point anchored at the centroid of "
+                            "its region in the constructed TBox model, and the anchor distance "
+                            "compares anchored regions: a class model without anchors is "
+                            "refused",
     ("boxsel", "objective_options"): "the only option it has is the margin, and its volume "
                                      "measure ignores a margin (BoxEL and BoxSEL have none)",
     ("boxlite", "classes"): "the measure reads the lower and upper corner tables of its own "
@@ -453,7 +481,17 @@ def run(build, check, key, kind, limit=None, on_late_error=None, refuses=None):
 
 TRIPLE_KEYS = ("boxe", "expressive", "graph_kge", "gda_projection")
 AXIOM_KEYS = sorted(k for k, v in METHOD_KINDS.items() if v == "axioms"
-                    and k not in UNSUPPORTED_BY_GENERAL_MODEL)
+                    and k not in UNSUPPORTED_BY_GENERAL_MODEL and k not in OWN_SWAP_TESTS)
+
+
+@pytest.mark.parametrize("key", sorted(OWN_SWAP_TESTS))
+def test_a_method_with_a_joint_objective_is_built_by_the_general_model(key):
+    from mowl.representation.library.grounded_objective import GroundedJointObjective  # noqa
+    model = ComposedEL(data("abox"), method=key, embed_dim=D)
+    assert model.module.joint_objective is not None
+    where, kinds = OWN_SWAP_TESTS[key]
+    for kind, (works, label) in kinds.items():
+        OUTCOMES[(key, kind)] = (WORKS if works else UNAVAILABLE, f"{label} (see {where})")
 EL_KINDS = ["classes", "relations", "measure", "objective", "objective_options",
             "regularizers"]
 
@@ -498,11 +536,11 @@ def test_a_method_no_general_model_trains_says_so(key):
             OUTCOMES[(key, kind)] = (UNSUPPORTED, UNSUPPORTED_BY_GENERAL_MODEL[key])
 
 
-def test_faithel_is_refused_at_build_not_in_training():
-    """FaithEL's TBox is constructed from the ontology: a model built from sizes used to be
-    accepted and to crash in the first training step."""
-    with pytest.raises(ConstructorUnavailable, match="faithel"):
-        ComposedEL(data("family"), method="faithel", embed_dim=D)
+def test_faithel_is_built_with_its_constructed_tbox():
+    """FaithEL's TBox is constructed from the ontology: ComposedEL takes it from the dataset
+    (:mod:`mowl.representation.dataset_inputs`), with the dimension it fixes."""
+    model = ComposedEL(data("abox"), method="faithel", embed_dim=D)
+    assert model.module.tbox is not None and model.embed_dim != D
 
 
 def test_a_relation_model_no_trained_form_reads_is_refused_at_build():
@@ -609,8 +647,11 @@ def test_an_argument_the_method_cannot_take_is_a_type_error_that_names_the_accep
 
 def test_a_method_that_is_not_a_composed_geometry_names_the_parts_it_takes():
     from mowl.representation.swap import build_method
-    with pytest.raises(ConstructorUnavailable, match="replaceable"):
-        build_method("grounded", 5, 2, 0, 4, classes="box")
+    # the grounded geometry takes parts under its own names (grounded.part_options) and
+    # refuses the parts of other families
+    assert build_method("grounded", 5, 2, 0, 4, classes="box").class_model.part
+    with pytest.raises(ConstructorUnavailable, match="element domain"):
+        build_method("grounded", 5, 2, 0, 4, classes="ball")
 
 
 # -- named classes: one rule ----------------------------------------------------------------
@@ -1035,11 +1076,14 @@ def _graph_effect(base, model, kind):
     return a.shape != b.shape or not th.equal(a, b)
 
 
-GRAPH_REFUSES_EVERY = {}
-#: Reshuffle is a named combination whose entities are encoded by a graph network that uses
-#: the matrices of its own relations: its class and relation models are not swappable, and
-#: the model says so (TypeError, like every named class).
-GRAPH_NOT_SWAPPABLE = {("reshuffle", "classes"), ("reshuffle", "relations")}
+GRAPH_REFUSES_EVERY = {
+    ("reshuffle", "relations"): "RESHUFFLE reads an entity as a k x l matrix and a relation as "
+                                "an l x l matrix, and the encoding of the graph multiplies by "
+                                "them: a relation model without matrices is refused",
+}
+#: Reshuffle takes a class model (learned entity matrices of k * l coordinates instead of the
+#: encoding of the graph); nothing is refused as a whole.
+GRAPH_NOT_SWAPPABLE = set()
 
 
 @pytest.mark.parametrize("kind", GRAPH_KINDS)
@@ -1198,7 +1242,8 @@ def test_the_matrix_in_the_documentation_lists_every_method():
 def test_every_axiom_method_has_a_general_model_or_a_reason():
     for key in METHODS:
         if METHOD_KINDS[key] == "axioms":
-            assert key in AXIOM_KEYS or key in UNSUPPORTED_BY_GENERAL_MODEL, key
+            assert key in AXIOM_KEYS or key in UNSUPPORTED_BY_GENERAL_MODEL \
+                or key in OWN_SWAP_TESTS, key
     assert accepted_parts("elbe")
 
 

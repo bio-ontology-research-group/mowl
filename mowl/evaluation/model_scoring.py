@@ -233,7 +233,12 @@ class PairClassifierHead:
 
     # -- training -----------------------------------------------------------------------
     def fit(self, model, gci_name, relation=None):
-        """Train the network for one axiom form (and role); returns it."""
+        """Train the network for one axiom form (and role); returns it.
+
+        This is an inner solver of an evaluation regime, not a training loop: the head is
+        fitted once, on frozen embeddings of a trained model, with a fixed number of epochs
+        of its own; no training regime hooks into it, so it does not run in the shared loop
+        (:mod:`mowl.training.loop`)."""
         key = (gci_name, relation)
         if key in self._nets:
             return self._nets[key]

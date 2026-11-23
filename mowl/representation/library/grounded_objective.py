@@ -46,9 +46,10 @@ from typing import Callable, Mapping, NamedTuple, Optional
 
 import torch as th
 
+from mowl.representation.joint_objective import JointObjective
 from mowl.representation.library.grounded_parts import register_grounded_part
 
-__all__ = ["GroundedObjective", "Grounding"]
+__all__ = ["GroundedObjective", "Grounding", "GroundedJointObjective"]
 
 #: The forms with an element term and a region term, in the order a step reads them.
 FORMS = ("gci0", "gci0_bot", "gci1", "gci1_bot", "gci2", "gci3", "gci3_bot",
@@ -75,7 +76,10 @@ class Grounding(NamedTuple):
 def domain_index_sets(nb_classes, nb_elements, top_id=None, bot_id=None, device="cpu"):
     """The index sets of a :class:`Grounding` read off the size of the domain:
     ``(live_classes, ordinary_classes, dead_probes)``, the classes other than bottom, the
-    classes other than top and bottom, and the elements other than the element of bottom."""
+    classes other than top and bottom, and the elements other than the element of bottom.
+
+    Method-specific part of the grounded objective (the domain of GroundedEL: one element per
+    class and per individual)."""
     def without(n, *drop):
         return th.tensor([i for i in range(n) if i not in drop], dtype=th.long, device=device)
     return (without(nb_classes, bot_id), without(nb_classes, top_id, bot_id),
@@ -86,7 +90,10 @@ def relation_fillers(axioms, nb_rels, nb_elements, nb_classes, device="cpu"):
     """The filler and left-hand elements of every relation, in order of first occurrence:
     from :math:`A \\sqsubseteq \\exists r.B` (``A`` and ``B``) and the role assertions
     (the elements of the individuals). Returns ``(fillers, lhs, mask)``: dicts of index
-    tensors per relation and the boolean ``(nb_rels, nb_elements)`` table of fillers."""
+    tensors per relation and the boolean ``(nb_rels, nb_elements)`` table of fillers.
+
+    Method-specific part of the grounded objective (the domain of GroundedEL: elements
+    ``0 .. nb_classes - 1`` are the classes, then the individuals)."""
     fillers = {r: {} for r in range(nb_rels)}
     lhs = {r: {} for r in range(nb_rels)}
     for form, offset in (("gci2", 0), ("object_property_assertion", nb_classes)):
@@ -694,3 +701,70 @@ class GroundedObjective:
 
 
 register_grounded_part("objective")(GroundedObjective)
+
+
+class GroundedJointObjective(JointObjective):
+    """The grounded constraints as a joint objective of a geometry
+    (:mod:`mowl.representation.joint_objective`): a step reads every axiom form at one draw
+    of elements and of points of regions. It holds the objective
+    (:class:`GroundedObjective`) and the samplers
+    (:class:`~mowl.representation.library.grounded_sampling.ElementSampler`,
+    :class:`~mowl.representation.library.grounded_sampling.RegionSampler`), and builds the
+    finite domain of the step (:class:`Grounding`: :func:`domain_index_sets` and
+    :func:`relation_fillers` of the training data) from the geometry (``nb_classes``,
+    ``nb_elements``, ``nb_rels``, ``top_id``, ``bot_id``). With it a general model
+    (:class:`~mowl.models.ComposedEL`) trains the grounded geometry; GroundedEL makes the
+    same step from its own options.
+
+    :param objective: A :class:`GroundedObjective` (default: its defaults).
+    :param elements, regions: The samplers (default: GroundedEL's defaults; the first point
+        of a row with the published doubled gradient).
+    :param weights: ``{"fact", "axioms", "region"}`` multipliers, or ``None``.
+    """
+
+    part = "grounded constraints"
+
+    def __init__(self, objective=None, elements=None, regions=None, weights=None):
+        from mowl.representation.library.grounded_sampling import ElementSampler, RegionSampler
+        self.objective = objective if objective is not None else GroundedObjective()
+        self.elements = elements if elements is not None else ElementSampler(4096, 4, 32, 64)
+        self.regions = regions if regions is not None else RegionSampler(
+            4, 2, doubled_gradient=True)
+        self.weights = weights
+        self._cache = None
+
+    def grounding(self, geometry, datasets):
+        """The finite domain of the data ``datasets`` over ``geometry`` (kept for the same
+        data)."""
+        key = (id(geometry), id(datasets))
+        if self._cache is not None and self._cache[0] == key:
+            return self._cache[1]
+        device = geometry.positions(th.zeros(1, dtype=th.long)).device
+        top, bot = getattr(geometry, "top_id", None), getattr(geometry, "bot_id", None)
+        top = None if top is None or int(top) < 0 else int(top)
+        bot = None if bot is None or int(bot) < 0 else int(bot)
+        live, ordinary, probes = domain_index_sets(geometry.nb_classes, geometry.nb_elements,
+                                                   top, bot, device)
+        _, _, mask = relation_fillers(datasets, geometry.nb_rels, geometry.nb_elements,
+                                      geometry.nb_classes, device)
+        grounding = Grounding(live, ordinary, probes, mask, geometry.nb_classes,
+                              geometry.nb_elements - geometry.nb_classes, top, bot)
+        self._cache = (key, grounding)
+        return grounding
+
+    def losses(self, geometry, datasets, generator, negatives=None):
+        grounding = self.grounding(geometry, datasets)
+        sampled = None
+        if negatives is not None:
+            elements, k = self.elements, self.objective.neg_k
+
+            def sampled(table, gen):
+                rows = negatives(table, gen)
+                if rows is None:
+                    device = geometry.positions(th.zeros(1, dtype=th.long)).device
+                    rows = elements.corrupted(table[:].to(device), grounding.nb_individuals,
+                                              gen, k)
+                return rows
+        out = self.objective.losses(geometry, datasets, grounding, generator, self.elements,
+                                    self.regions, weights=self.weights, negatives=sampled)
+        return {k: (int(v) if k == "n_region_skipped_top" else v) for k, v in out.items()}

@@ -17,6 +17,15 @@ can use. The model only says *what* its data and its score are:
   regime of :mod:`mowl.training.negatives` or :mod:`mowl.training.graph` supplies them);
 * :meth:`get_optimizer`.
 
+A regime may compute the loss of a step itself (:meth:`~mowl.training.TrainingRegime.step_loss`):
+a method whose step is one objective over all its forms at once (a sampled objective), or
+one that accumulates the gradient of a step chunk by chunk to bound its memory
+(:class:`~mowl.training.Accumulated`, :func:`accumulate_backward`; the canonical mixture,
+:class:`MicroBatchAccumulation` for any model) and skips steps with nothing to supervise.
+The loop still takes the optimiser step, calls the hooks and records the losses, so every
+optimisation step of mOWL is taken here (the inner solvers of a constructed or solved method
+-- a gradient fit of a solver, the fit of an evaluation head -- are not training loops).
+
 One *step* of the loop is one optimisation step. A batching regime may declare
 ``steps_per_epoch`` (:class:`~mowl.training.PerNormalFormMiniBatches`,
 :class:`~mowl.training.EpochBatches`); :meth:`train` then runs ``epochs * steps_per_epoch``
@@ -30,11 +39,12 @@ import logging
 import torch as th
 from tqdm import trange
 
-from mowl.training.regime import HOOKS, check_compatible, TrainingRegime
+from mowl.training.regime import HOOKS, Accumulated, check_compatible, TrainingRegime
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Rows", "TrainingLoop", "RegimeTrained", "steps_per_epoch"]
+__all__ = ["Rows", "TrainingLoop", "RegimeTrained", "steps_per_epoch", "accumulate_backward",
+           "MicroBatchAccumulation"]
 
 _UNSET = object()
 
@@ -50,6 +60,23 @@ class Rows:
 
     def __getitem__(self, idx):
         return self.data[idx]
+
+
+def accumulate_backward(loss, weight=1.0):
+    """Back-propagate ``weight * loss`` now (if it needs a gradient) and return its value as a
+    float: one chunk of a step whose gradient a regime accumulates
+    (:meth:`~mowl.training.TrainingRegime.step_loss` returning
+    :class:`~mowl.training.Accumulated`). With ``weight = rows of the chunk / rows of the
+    step`` and ``loss`` the mean over the chunk, the accumulated gradient is that of the mean
+    over the step, while only one chunk is held in memory."""
+    term = loss * weight if weight != 1.0 else loss
+    if getattr(term, "requires_grad", False):
+        term.backward()
+    return float(term.detach()) if hasattr(term, "detach") else float(term)
+
+
+def _as_float(value):
+    return float(value.detach().item()) if hasattr(value, "detach") else float(value)
 
 
 def steps_per_epoch(regime):
@@ -92,12 +119,27 @@ class TrainingLoop:
     epoch_hooks = False
 
     def epoch_steps(self, regime):
-        """Optimisation steps of one epoch: what the batching regime declares (one without)."""
-        return steps_per_epoch(regime)
+        """Optimisation steps of one epoch: with ``loop_style = "steps"`` what the batching
+        regime declares (one without); with ``"epochs"`` one."""
+        return steps_per_epoch(regime) if self.loop_style == "steps" else 1
 
     #: ``validate_every`` of :meth:`run_training` when the call gives none (``None``: no
     #: validation).
     default_validate_every = None
+
+    #: How the losses of the steps of an epoch make the loss of the epoch: ``"mean"`` (over
+    #: the steps taken) or ``"sum"``.
+    epoch_loss = "mean"
+
+    #: ``loop_style = "steps"``: put the module in evaluation mode after training.
+    eval_after_training = True
+
+    #: Show a progress bar over the steps (``None``: with ``loop_style = "epochs"``).
+    progress_bar = None
+
+    def start_training(self, optimizer):
+        """Called once with the optimiser of the run, before the first step (a model that
+        lets regimes reset the optimiser keeps it here)."""
 
     def on_epoch_start(self, step, steps):
         """Called at the start of every step before the regime's hook."""
@@ -143,6 +185,15 @@ class TrainingLoop:
         return self._step_loss(data, step, negatives)
 
     def _step_loss(self, datasets, step, negatives=True):
+        loss = self.forms_loss(datasets, step, negatives)
+        loss = self._add_extra_terms(loss, step)
+        return loss + self.step_regularization_loss()
+
+    def forms_loss(self, datasets, step=0, negatives=True):
+        """The loss of the rows of every form of ``datasets`` (``{form: dataset}``):
+        negatives, scores and the combination of the regime (the model's hooks where the
+        regime does not decide), without the additional and regularisation terms of a
+        step."""
         regime = self.training_regime
         self.negative_masks = {}
         loss = th.tensor(0.0, device=self.device)
@@ -170,14 +221,20 @@ class TrainingLoop:
             if form_loss is NotImplemented:
                 form_loss = self.combine_scores(form, pos_scores, neg_scores)
             loss = loss + form_loss
-        extra = self.additional_training_loss(step)
-        if extra is not None:
-            loss = loss + extra
+        return loss
+
+    def _extra_terms(self, step):
+        """The additional loss terms of a step: the model's, then the regime's."""
+        out = [self.additional_training_loss(step)]
+        regime = self.training_regime
         if regime is not None:
-            extra = regime.additional_loss(step)
-            if extra is not None:
-                loss = loss + extra
-        return loss + self.step_regularization_loss()
+            out.append(regime.additional_loss(step))
+        return [extra for extra in out if extra is not None]
+
+    def _add_extra_terms(self, loss, step):
+        for extra in self._extra_terms(step):
+            loss = loss + extra
+        return loss
 
     # ------------------------------------------------------------------ train
     def run_training(self, epochs=100, validate_every=None, verbose=False, epoch_callback=None,
@@ -196,7 +253,8 @@ class TrainingLoop:
         :rtype: list of float
         """
         by_steps = self.loop_style == "steps"
-        if by_steps and self.training_regime is None:
+        if by_steps and self.training_regime is None and \
+                hasattr(self, "_attach_default_regimes"):
             self._attach_default_regimes()
         regime = self.training_regime
         if by_steps:
@@ -214,7 +272,7 @@ class TrainingLoop:
         if regime is not None:
             datasets = regime.training_datasets(datasets)
         self.log_training_datasets(datasets)
-        per_epoch = self.epoch_steps(regime) if by_steps else 1
+        per_epoch = self.epoch_steps(regime)
         total = epochs * per_epoch
         self.training_steps = total
         optimizer = NotImplemented
@@ -222,9 +280,13 @@ class TrainingLoop:
             optimizer = regime.optimizer()
         if optimizer is NotImplemented:
             optimizer = self.get_optimizer()
+        self.start_training(optimizer)
         if by_steps:
             self.training_losses = history
-        for step in (range(total) if by_steps else trange(total)):
+        # a regime that computes the loss of a step (a sampled objective, accumulated chunks)
+        own_steps = regime is not None and "step_loss" in regime.overridden_hooks()
+        progress = (not by_steps) if self.progress_bar is None else self.progress_bar
+        for step in (trange(total) if progress else range(total)):
             self.module.train()
             self.on_epoch_start(step, total)
             if regime is not None and (not self.epoch_hooks or step % per_epoch == 0):
@@ -232,26 +294,21 @@ class TrainingLoop:
                     regime.on_epoch_start(step // per_epoch, epochs)
                 else:
                     regime.on_epoch_start(step, total)
-            loss = self._step_loss(datasets, step // per_epoch if self.epoch_hooks else step)
-            value = 0.0
-            if regime is not None and regime.skips_empty_steps and not loss.requires_grad:
-                pass
-            else:
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                self.after_optimizer_step()
-                value = loss.detach().item()
-            running += value
-            counted += 1
+            hook_step = step // per_epoch if self.epoch_hooks else step
+            value, terms, taken = self._one_step(optimizer, datasets, hook_step, regime,
+                                                 own_steps)
+            if taken:
+                running += value
+                counted += 1
             ends_epoch = (step + 1) % per_epoch == 0
             if ends_epoch:
                 epoch = step // per_epoch
-                history.append(running / max(counted, 1))
+                history.append(running if self.epoch_loss == "sum"
+                               else running / max(counted, 1))
                 running, counted = 0.0, 0
                 self.record_epoch(epoch, history[-1])
             if regime is not None and not self.epoch_hooks:
-                regime.on_epoch_end(step, {"total": value})
+                regime.on_epoch_end(step, terms if terms is not None else {"total": value})
             elif regime is not None and ends_epoch:
                 regime.on_epoch_end(epoch, {"total": history[-1]})
             if ends_epoch:
@@ -259,8 +316,8 @@ class TrainingLoop:
                     print(f"Epoch {epoch + 1}: loss {history[-1]:.6f}")
                 if epoch_callback is not None:
                     epoch_callback(epoch, self)
-                if not by_steps and (epoch + 1) % validate_every == 0 and not (
-                        regime is not None and regime.replaces_validation):
+                if not by_steps and validate_every and (epoch + 1) % validate_every == 0 \
+                        and not (regime is not None and regime.replaces_validation):
                     self.validate_epoch(epoch, history[-1])
             if regime is not None and (
                     regime.should_stop(epoch) if self.epoch_hooks and ends_epoch
@@ -272,8 +329,106 @@ class TrainingLoop:
         if by_steps:
             if not (regime is not None and regime.replaces_validation):
                 self.save_state()
-            self.module.eval()
+            if self.eval_after_training:
+                self.module.eval()
         return history
+
+    def _one_step(self, optimizer, datasets, step, regime, own_steps):
+        """One optimisation step; returns ``(loss value, terms or None, taken)``.
+
+        The loss is the regime's (:meth:`~mowl.training.TrainingRegime.step_loss`) when it
+        computes one, else the loop's own (:meth:`_step_loss`). ``taken`` is ``False`` when
+        no optimiser step was taken (nothing to supervise)."""
+        outcome = NotImplemented
+        if own_steps:
+            optimizer.zero_grad()
+            outcome = regime.step_loss(step)
+        if outcome is NotImplemented:
+            loss = self._step_loss(datasets, step)
+            if regime is not None and regime.skips_empty_steps and not loss.requires_grad:
+                return 0.0, None, True
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            self.after_optimizer_step()
+            return loss.detach().item(), None, True
+        if outcome is None:
+            return 0.0, None, False
+        if isinstance(outcome, Accumulated):
+            value = outcome.value
+            for extra in self._extra_terms(step):
+                value += accumulate_backward(extra)
+            optimizer.step()
+            self.after_optimizer_step()
+            terms = None
+            if outcome.terms is not None:
+                terms = dict(outcome.terms)
+                terms.setdefault("total", value)
+            return value, terms, True
+        terms = None
+        if isinstance(outcome, th.Tensor):
+            loss = outcome
+        else:
+            loss = outcome["total"]
+            terms = {k: _as_float(v) for k, v in outcome.items()}
+        loss = self._add_extra_terms(loss, step)
+        loss.backward()
+        optimizer.step()
+        self.after_optimizer_step()
+        return loss.detach().item(), terms, True
+
+
+class MicroBatchAccumulation(TrainingRegime):
+    """Gradient accumulation over micro-batches: the step of the loop computed chunk by
+    chunk, with the memory of one chunk.
+
+    Every form of the step is split into chunks of at most ``chunk_size`` rows; the loss of
+    a chunk (negatives, scores and combination of the loop, :meth:`TrainingLoop.forms_loss`)
+    is back-propagated at once with the weight ``rows of the chunk / rows of the form``, then
+    the regularisation term of the step; the loop takes one optimiser step
+    (:meth:`~mowl.training.TrainingRegime.step_loss`, :class:`~mowl.training.Accumulated`).
+    For a loss that is a mean over the rows of a form (and negatives that do not depend on
+    the other rows) the gradient is the gradient of the whole step; otherwise it is the usual
+    micro-batch approximation. A step whose forms are all empty is not taken.
+
+    Place it *last* in a composition (after the regimes that change or batch the data), so
+    that it reads the data of the step.
+
+    :param chunk_size: Rows per chunk.
+    :param negatives: Score corruptions (default ``True``).
+    """
+
+    key = "micro-batch-accumulation"
+
+    def __init__(self, chunk_size=1024, negatives=True):
+        super().__init__()
+        if int(chunk_size) < 1:
+            raise ValueError("chunk_size must be >= 1.")
+        self.chunk_size = int(chunk_size)
+        self.negatives_on = bool(negatives)
+        self.datasets = {}
+
+    def training_datasets(self, datasets):
+        self.datasets = datasets
+        return datasets
+
+    def step_loss(self, step):
+        model = self.model
+        value, taken = 0.0, False
+        for form, dataset in self.datasets.items():
+            n = len(dataset)
+            if n == 0:
+                continue
+            rows = dataset[:]
+            for start in range(0, n, self.chunk_size):
+                chunk = rows[start:start + self.chunk_size]
+                loss = model.forms_loss({form: Rows(chunk)}, step, self.negatives_on)
+                value += accumulate_backward(loss, float(len(chunk)) / float(n))
+                taken = True
+        if not taken:
+            return None
+        value += accumulate_backward(model.step_regularization_loss())
+        return Accumulated(value)
 
 
 class RegimeTrained(TrainingLoop):

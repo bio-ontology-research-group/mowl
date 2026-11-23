@@ -4,7 +4,7 @@ the regimes of the literature (negatives, losses, positives, schedules, model se
 batching)."""
 
 from mowl.training.regime import (TrainingRegime, ComposedRegime, HOOKS, SCHEDULE_HOOKS,
-                                  unsupported_hooks)
+                                  unsupported_hooks, Accumulated)
 from mowl.training.closure import DeductiveClosure, NORMAL_FORMS
 from mowl.training.dele import (AllNormalFormNegatives, ClosureFilteredNegatives,
                                 ClosurePositives, DELECodeLoss, DELECodeLosses,
@@ -47,7 +47,7 @@ from mowl.training.splits import ShuffledSplits
 from mowl.training.box_regularization import BoxBatchRegulariser
 from mowl.training.graph import (EpochBatches, EdgeCorruption, KnownRowMask, SelfAdversarialBCE,
                                  GroupedMarginLoss, HeadRestrictedHinge, ValidationPatience)
-from mowl.training.loop import RegimeTrained, Rows
+from mowl.training.loop import RegimeTrained, Rows, accumulate_backward, MicroBatchAccumulation
 from mowl.training.regularization import (Regularization, Regularizer, NormPenalty,
                                           MaxNormPenalty, PowerPenalty, SphereProjection,
                                           BallProjection, IntervalProjection, ModuleProjection,
@@ -92,6 +92,7 @@ __all__ = [
     "ShuffledSplits", "BoxBatchRegulariser",
     "EpochBatches", "EdgeCorruption", "KnownRowMask", "SelfAdversarialBCE", "GroupedMarginLoss",
     "HeadRestrictedHinge", "ValidationPatience", "RegimeTrained", "Rows",
+    "Accumulated", "accumulate_backward", "MicroBatchAccumulation",
     "ModuleProjection", "AlternatingMinibatches", "FullBatch", "FormSelection",
     "LinearWarmupDecay", "SampledLogicalLosses",
 ]

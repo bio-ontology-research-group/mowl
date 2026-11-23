@@ -81,7 +81,14 @@ GROUNDED = MethodCard(
         "Training: the regime 'grounded-el-training', a composition of "
         "'temperature-annealing', 'cosine-lr-decay' / 'linear-lr-decay', "
         "'idle-component-reseeding' and 'lagrangian-dual-weights', each usable with "
-        "other models."),
+        "other models. "
+        "Shared parts: the query search (mowl.evaluation.query_search), ElementBoxFamily, "
+        "BoundedBoxUnions and AnswerMarginLoss are also used by the query embedding models "
+        "(QueryEmbeddingModel.score_query(search='beam'|'compile') over the entities of "
+        "Query2Box, TranslationBoxDomain; AnswerMarginObjective). Method-specific parts "
+        "(they read a finite element domain with one element per class and per individual, "
+        "which only GroundedEL has): OwnPointReseeding, relation_fillers, domain_index_sets "
+        "and FiniteModelPlacement."),
 )
 
 LEAST_MODEL = MethodCard(

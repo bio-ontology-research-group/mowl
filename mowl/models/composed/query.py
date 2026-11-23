@@ -332,15 +332,24 @@ class QueryEmbeddingModel(RegimeTrained, Model):
                           self.device, entity_ids, max_cells)
 
     @th.no_grad()
-    def score_query(self, structure, queries):
+    def score_query(self, structure, queries, search=None, **options):
         """Scores of a batch of queries of one structure against all entities (higher:
         better), the interface of :class:`mowl.evaluation.LogicalQueryAnswering`.
 
         :param structure: Nested-tuple structure (:func:`mowl.nn.query.expression.from_nested`).
         :param queries: Instances of ``structure`` with entity and relation ids of this
             model (:attr:`triples`, :attr:`entity_names`).
+        :param search: ``None`` (default): the query embedded by the operators of the
+            geometry. ``"beam"`` or ``"compile"`` (or an evaluator): the answers searched over
+            the entities as a finite domain (point entities and boxes of translations, as in
+            Query2Box; :func:`mowl.representation.library.translation_box_domain.search_scores`,
+            ``options`` are passed to it); the union structures of the evaluators.
         :return: ``(len(queries), num_entities)`` tensor.
         """
+        if search is not None:
+            from mowl.representation.library.translation_box_domain import search_scores
+            self.module.eval()
+            return search_scores(self.module, structure, queries, search, **options).cpu()
         nodes = [from_nested(structure, q) for q in queries]
         self._require_operators(nodes)
         self.module.eval()

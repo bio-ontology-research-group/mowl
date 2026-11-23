@@ -339,13 +339,13 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
    * - ``faithel``
-     - not supported
-     - not supported
-     - 
-     - not supported
-     - not supported
-     - not supported
-     - not supported
+     - unavailable
+     - works
+     - works
+     - works
+     - works
+     - works
+     - works
      - 
      - 
      - 
@@ -391,13 +391,13 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
    * - ``grounded``
-     - not supported
-     - not supported
      - 
-     - not supported
-     - not supported
-     - not supported
-     - not supported
+     - 
+     - 
+     - 
+     - 
+     - 
+     - 
      - 
      - 
      - 
@@ -567,8 +567,8 @@ Axiom methods (ComposedEL, ComposedALC)
      - not supported
      - not supported
      - not supported
-     - not supported
-     - not supported
+     - works
+     - unavailable
      - works
      - works
      - works
@@ -737,16 +737,15 @@ Reasons
 * ``eike``, measure, unavailable: LinkedMeasure is the only measure that compares Linked regions; every other measure compares one region kind
 * ``expressive``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``expressive``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
-* ``faithel``, not supported: its TBox is constructed by a reasoner from the ontology and its classes are anchored to it; ComposedEL builds from sizes. Train it with FaithEL.
+* ``faithel``, classes, unavailable: a class of FaithEL is a moving point anchored at the centroid of its region in the constructed TBox model, and the anchor distance compares anchored regions: a class model without anchors is refused
 * ``falcon``, classes, unavailable: FALCON evaluates class expressions on an open domain of element vectors (Domain, completed by sampled anonymous elements): only its own network class model evaluates on that domain; every other class model is refused with the reason (build time)
 * ``falcon``, relations, unavailable: FALCON's relations are networks over pairs of element vectors of the domain and its sampled ABox objective needs a relation model: every geometric relation model, and none, is refused (build time)
 * ``gda_projection``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``gda_projection``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``graph_kge``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``graph_kge``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
-* ``grounded``, not supported: GroundedELModule is a grounded program over a shared element domain, not an ELModule: ComposedEL refuses it; train it with GroundedEL.
 * ``reshuffle``, not supported: it is defined on a graph (its entities are encoded by message passing over the edges): ComposedEL has no edges to give it. Swap its parts through GraphKGEModel.
-* ``reshuffle``, not supported: reshuffle encodes its entities with a graph network that uses the matrices of its own relations
+* ``reshuffle``, relations (graph), unavailable: RESHUFFLE reads an entity as a k x l matrix and a relation as an l x l matrix, and the encoding of the graph multiplies by them: a relation model without matrices is refused
 * ``attributed_dl``, source, unavailable: the data of the method is an attributed ontology, which no other source reads (each source reads one kind of data and refuses another with the two sides named)
 * ``box_milp``, source, unavailable: the only reading of a box model is 'boxes'; a finite model cannot in general be read as single boxes (boxes have the Helly property), so every other source is refused with both sides named
 * ``box_milp``, reading, unavailable: a box model is a set of boxes, it has no domain elements for the cell readings to place: only the 'boxes' reading reads it

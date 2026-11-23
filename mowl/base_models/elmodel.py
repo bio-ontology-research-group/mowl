@@ -369,7 +369,7 @@ of :class:`torch.utils.data.DataLoader`
     training_hooks = frozenset((
         "training_datasets", "negatives", "filter_negatives", "loss", "optimizer",
         "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss",
-        "regularization", "after_step"))
+        "regularization", "after_step", "step_loss"))
 
     @property
     def training_regime(self):

@@ -74,19 +74,14 @@ class TaxonomyEmbeddingModel(EmbeddingELModel):
     def after_training(self):
         """Hook run after the last epoch."""
 
-    def get_optimizer(self):
-        optimizer = super().get_optimizer()
+    def after_optimizer_step(self):
+        """The boxes live in the unit cube: the module projects them after every optimiser
+        step (paper, Sec. 4.3), whichever optimiser the run uses, then the regime's
+        projections."""
         project = getattr(self.module, "project", None)
         if project is not None:
-            # The boxes live in the unit cube: project after every step (paper, Sec. 4.3).
-            original = optimizer.step
-
-            def step(*args, **kwargs):
-                out = original(*args, **kwargs)
-                project()
-                return out
-            optimizer.step = step
-        return optimizer
+            project()
+        super().after_optimizer_step()
 
     @property
     def object_property_embeddings(self):

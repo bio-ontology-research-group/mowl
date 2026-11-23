@@ -726,6 +726,11 @@ class ReshuffleRelations(_PairRelations):
             nn.init.normal_(self.vectors.weight)
             nn.init.normal_(self.loop_raw, std=0.1)
 
+    def embedding_rows(self, ids):
+        """The raw parameters of the relations ``ids`` ``(n, l + 1, l)`` (their
+        embeddings)."""
+        return self.raw()[ids]
+
 
 class GraphEncodedPoints(Classes):
     r"""Entities computed by a graph network (the class model of RESHUFFLE): every entity has
@@ -829,6 +834,10 @@ class GraphEncodedPoints(Classes):
         x = self._frozen if self._frozen is not None \
             else self.encode(all_relations=self._relations.inverse)[0]
         return Point(x[ids].reshape(len(ids), -1))
+
+    def embedding_rows(self, ids):
+        """The feature matrices of the entities ``ids`` ``(n, k, l)`` (their embeddings)."""
+        return self.centres(ids).view(len(ids), self.k, self.l)
 
     def tables(self):
         return {}
@@ -1107,7 +1116,8 @@ def reshuffle(nb_classes, nb_relations, nb_individuals=0, embed_dim=None, margin
               objective=None, tables=None, subclass_id=-2, loss=None, sampler=None,
               regularizers=(), projection="owl2vec_star", triples=None, l=25,  # noqa: E741
               k=80, num_layers=4, aggregation="max_self_and_selfLoop", density=0.3085,
-              feature_seed=0, row_function="softmax", inverse_triples=True):
+              feature_seed=0, row_function="softmax", inverse_triples=True, classes=None,
+              relations=None):
     """RESHUFFLE from parts: entities encoded by a graph network from fixed random binary
     features (:class:`GraphEncodedPoints`), relations that are soft coordinate reshufflings
     (:class:`ReshuffleRelations`), the triple score, the margin ranking loss with margin 2
@@ -1116,6 +1126,15 @@ def reshuffle(nb_classes, nb_relations, nb_individuals=0, embed_dim=None, margin
     It is defined on a graph: ``triples`` (``(E, 3)`` ids of its edges) is required, and
     ``nb_relations`` is the number of relations of the graph (the rows of the matrices are
     twice that, a relation and its inverse).
+
+    :param classes: ``None`` (the entities encoded from the graph) or a class model (name
+        or factory ``(size, dim)``) whose entities are learned tables of ``k * l``
+        coordinates, read as ``k x l`` matrices by the relation model: RESHUFFLE's
+        relations over transductive entities.
+    :param relations: ``None`` or a relation model of matrices, a factory taking the
+        options of :class:`ReshuffleRelations` (``size, l, inverse, row_function,
+        subclass_id``) and giving its ``matrices``; the message passing of the encoded
+        entities multiplies by them.
 
     :param l, k, num_layers, aggregation, density, feature_seed: See
         :class:`GraphEncodedPoints`.
@@ -1129,20 +1148,45 @@ def reshuffle(nb_classes, nb_relations, nb_individuals=0, embed_dim=None, margin
             "over the edges. Pass triples=..., or use mowl.models.Reshuffle.")
     if tables is not None:
         raise TypeError("reshuffle: tables are not supported.")
-    relation_model = ReshuffleRelations(
-        2 * nb_relations, l, inverse_triples, row_function,
+    from mowl.representation import methods as M
+    relation_factory = ReshuffleRelations if relations is None else (
+        M.RELATION_MODELS[relations] if isinstance(relations, str) else relations)
+    if isinstance(relation_factory, type) and not callable(getattr(relation_factory,
+                                                                   "matrices", None)):
+        raise ConstructorUnavailable(
+            f"reshuffle reads an entity as a k x l matrix and a relation as an l x l "
+            f"matrix (matrices()); {relation_factory.__name__} has no matrices.")
+    relation_model = relation_factory(
+        2 * nb_relations, l=l, inverse=inverse_triples, row_function=row_function,
         subclass_id=None if subclass_id < 0 else (2 * subclass_id if inverse_triples
                                                   else subclass_id))
-    class_model = GraphEncodedPoints(nb_classes, l, k, th.as_tensor(triples), num_layers,
-                                     aggregation, density, feature_seed)
-    class_model.bind(relation_model)
+    if not callable(getattr(relation_model, "matrices", None)):
+        raise ConstructorUnavailable(
+            f"reshuffle reads an entity as a k x l matrix and a relation as an l x l "
+            f"matrix (matrices()); {type(relation_model).__name__} has no matrices.")
+    if classes is None:
+        class_model = GraphEncodedPoints(nb_classes, l, k, th.as_tensor(triples), num_layers,
+                                         aggregation, density, feature_seed)
+        class_model.bind(relation_model)
+    else:
+        if classes == "point":
+            class_model = PointClasses(nb_classes, k * l)
+        else:
+            class_factory = M.CLASS_MODELS[classes] if isinstance(classes, str) else classes
+            class_model = class_factory(nb_classes, k * l)
     if objective is None:
         objective = Objective(margin, negatives="gci2")
     loss = triple_loss(loss) if loss is not None else _DEFAULT_LOSS["reshuffle"](margin)
     geometry = triple_geometry(class_model, relation_model, TripleScore(), objective,
                                regularizers=regularizers, loss=loss, sampler=sampler,
                                projection=projection)
-    geometry.initialiser = relation_model.reset_parameters
+    if classes is None or not callable(getattr(class_model, "reset_parameters", None)):
+        geometry.initialiser = relation_model.reset_parameters
+    else:
+        def initialiser():
+            relation_model.reset_parameters()
+            class_model.reset_parameters()
+        geometry.initialiser = initialiser
     return geometry
 
 

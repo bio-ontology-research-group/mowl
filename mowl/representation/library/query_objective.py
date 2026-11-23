@@ -11,7 +11,7 @@ combination of their parts) can use any of its options.
 import torch as th
 import torch.nn.functional as F
 
-__all__ = ["QueryObjective", "AnswerMarginLoss"]
+__all__ = ["QueryObjective", "AnswerMarginLoss", "AnswerMarginObjective"]
 
 
 class QueryObjective:
@@ -86,8 +86,8 @@ class AnswerMarginLoss:
     .. math:: \\operatorname{mean}[m - s^+]_+ + \\operatorname{mean}[m + s^-]_+ ,
 
     the second term only when non-answers are given. Used by GroundedEL's witness-chain
-    queries (:func:`mowl.nn.el.grounded.queries.query_witness_loss`); any scorer of targets
-    can use it.
+    queries (:func:`mowl.nn.el.grounded.queries.query_witness_loss`) and by the query
+    embedding methods as :class:`AnswerMarginObjective`; any scorer of targets can use it.
 
     :param margin: The margin :math:`m`.
     """
@@ -112,3 +112,37 @@ class AnswerMarginLoss:
         if with_negatives and scores.shape[1] > n_answers:
             loss = loss + F.relu(self.margin + scores[:, n_answers:]).mean()
         return loss
+
+
+class AnswerMarginObjective:
+    r"""The objective of a query embedding model as the margin loss of answers
+    (:class:`AnswerMarginLoss`): for every batch of queries of one structure, the scores
+    ``logit = gamma - distance`` of the positive answer and of the sampled non-answers, the
+    loss :math:`\operatorname{mean}[m - s^+]_+ + \operatorname{mean}[m + s^-]_+`; the
+    batches count by their number of queries. It replaces
+    :class:`QueryObjective` (``QueryEmbeddingModel(..., objective=AnswerMarginObjective())``).
+
+    :param margin: The margin :math:`m`.
+    """
+
+    kind = "answer margin"
+
+    def __init__(self, margin=0.0):
+        self.loss = AnswerMarginLoss(margin)
+
+    @property
+    def margin(self):
+        return self.loss.margin
+
+    def __call__(self, geometry, groups):
+        total, count = 0.0, 0
+        for group in groups.values():
+            sig, rows, pos, neg = group[:4]
+            state = geometry.embed(sig, rows)
+            p = geometry.logit(state, pos)
+            n = geometry.logit(state, neg)
+            scores = th.cat([p.reshape(len(rows), -1), n.reshape(len(rows), -1)], dim=1)
+            total = total + self.loss(scores, p.reshape(len(rows), -1).shape[1], True, p) \
+                * len(rows)
+            count += len(rows)
+        return total / max(count, 1)

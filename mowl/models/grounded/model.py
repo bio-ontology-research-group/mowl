@@ -248,6 +248,15 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
 
     scored_forms = ("class_assertion",)
 
+    #: The hooks the training loop consults (:class:`~mowl.training.SampledObjectiveTraining`
+    #: in the shared loop): the optimiser, the schedule hooks, the negatives of the
+    #: corrupted role assertions, additional losses, projections after a step and a step
+    #: loss that replaces the grounded objective. The data, the per-form loss and the
+    #: regularisation are those of the objective and are not consulted.
+    training_hooks = frozenset(("optimizer", "on_epoch_start", "on_epoch_end", "should_stop",
+                                "on_train_end", "additional_loss", "negatives",
+                                "filter_negatives", "after_step", "step_loss"))
+
     def __init__(
         self,
         dataset=None,

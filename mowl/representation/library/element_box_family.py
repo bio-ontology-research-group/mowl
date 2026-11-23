@@ -15,8 +15,10 @@ elements), ``class_regions(ids)`` and ``translation_regions(ids)`` (unions of bo
   depth of :math:`y` in :math:`x + V_r`), of an element in a class, of a target in the
   class of a witness.
 
-GroundedEL answers queries through it (:mod:`mowl.nn.el.grounded.queries`); any geometry of
-that shape can.
+GroundedEL answers queries through it (:mod:`mowl.nn.el.grounded.queries`), and so do the
+query embedding models with point entities and boxes of translations (Query2Box) through
+:class:`~mowl.representation.library.translation_box_domain.TranslationBoxDomain`
+(``QueryEmbeddingModel.score_query(..., search="beam")``); any geometry of that shape can.
 """
 from __future__ import annotations
 
