@@ -937,10 +937,15 @@ def construct(data, source, reading, names=None, roles=None, individuals=None,
             raise ConstructorUnavailable(f"The {source.key!r} source cannot read this data: "
                                          f"{reason}")
         from mowl.geometric.errors import UnsupportedAxiom
+
+        class _OutsideSourceLogic(ConstructorUnavailable, UnsupportedAxiom):
+            """The combination cannot be built, because an axiom is outside the logic of
+            the source: both errors, so that either can be caught."""
+
         try:
             built = source.build(data)
         except UnsupportedAxiom as error:           # the data is outside the source's logic
-            raise ConstructorUnavailable(
+            raise _OutsideSourceLogic(
                 f"The {source.key!r} source ({source.logic}) cannot build from this data: "
                 f"{error}") from error
     reading.check(built)

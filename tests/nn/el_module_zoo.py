@@ -62,7 +62,8 @@ def _kwargs(cls):
                 "DiskEmbeddingsModule"):
         return dict(nb_classes=N, embed_dim=D)
     if name == "Concept2BoxModule":      # the golden values are those of the paper's triple
-        return dict(nb_classes=N, nb_rels=R, nb_inds=I, embed_dim=D, gci2_reading="triple")
+        return dict(nb_classes=N, nb_rels=R, nb_inds=I, embed_dim=D, gci2_reading="triple",
+                    beta=1.0, init_scale=0.5)     # and of the settings they were recorded with
     if name == "EIKEModule":
         return dict(nb_classes=N, nb_rels=R, nb_inds=I, embed_dim=D)
     return dict(nb_ont_classes=N, nb_rels=R, nb_inds=I, embed_dim=D)

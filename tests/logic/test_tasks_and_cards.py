@@ -57,6 +57,9 @@ NOT_MECHANICAL = {"mcmultibox", "canonical_mixture"}
 def test_el_cards_agree_with_their_modules():
     """The ABox, ⊥ and role axiom support stated on a card is what the module implements."""
     from mowl.nn import ELModule
+    from mowl.representation.geometry import ComposedGeometry
+    from tests.nn.el_module_zoo import all_el_module_classes, make
+    zoo = set(all_el_module_classes())
 
     def overrides(cls, name):
         return getattr(cls, name) is not getattr(ELModule, name)
@@ -70,10 +73,18 @@ def test_el_cards_agree_with_their_modules():
         if not issubclass(cls, ELModule):
             continue
         logic = card.supported_expressivity
-        code = (overrides(cls, "class_assertion_loss")
-                and overrides(cls, "object_property_assertion_loss"),
-                overrides(cls, "gci0_bot_loss") and overrides(cls, "gci1_bot_loss"),
-                bool(getattr(cls, "role_axiom_capable", False)))
+        if issubclass(cls, ComposedGeometry):
+            # built from parts: every loss is generated, so the instance says what it reads
+            if cls not in zoo:
+                continue
+            forms = make(cls).supported_forms
+            code = ({"class_assertion", "object_property_assertion"} <= forms,
+                    {"gci0_bot", "gci1_bot"} <= forms, "role_chain" in forms)
+        else:
+            code = (overrides(cls, "class_assertion_loss")
+                    and overrides(cls, "object_property_assertion_loss"),
+                    overrides(cls, "gci0_bot_loss") and overrides(cls, "gci1_bot_loss"),
+                    bool(getattr(cls, "role_axiom_capable", False)))
         stated = (logic.has_abox, Construct.BOTTOM in logic, Construct.ROLE_CHAIN in logic)
         assert stated == code, (card.key, card.expressivity, code)
         checked += 1

@@ -7,6 +7,7 @@ REGIME = RegimeCard(
     key='assertion-corruption',
     name='Corruption of ABox assertions',
     kind=RegimeKind.TRAINING,
+    assumption="closed world over stated axioms",
     summary=(
         'Negatives of class assertions C(a) (the class replaced by a class the model does'
         'not fix) and of role assertions r(a, b) (the object replaced by an individual);'
