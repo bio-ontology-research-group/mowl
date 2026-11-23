@@ -248,3 +248,7 @@ def test_an_objective_of_another_method_takes_the_negatives_it_defines():
     geometry = build_method("elbe", 4, 2, embed_dim=D, objective=Objective(0.1,
                                                                             negatives="gci0"))
     assert geometry.neg_capable_gcis == frozenset({"gci0"})
+    # a ranking form has a negative cost too
+    ranked = Objective(0.1, negatives="gci2", ranking={"gci0": 0.5})
+    geometry = build_method("elbe", 4, 2, embed_dim=D, objective=ranked)
+    assert geometry.neg_capable_gcis == frozenset({"gci0", "gci2", "object_property_assertion"})

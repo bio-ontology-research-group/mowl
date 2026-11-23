@@ -441,11 +441,20 @@ class Objective:
         if form not in self.unit_norm:
             return 0.0
         if form in _ROLE_COLUMNS:
-            vectors = g.relation_model.vectors
+            vectors = getattr(self._relations_of(g, "unit_norm"), "vectors", None)
+            if vectors is None:
+                raise ConstructorUnavailable(
+                    f"unit_norm pulls the shift vectors of the relations to norm one; "
+                    f"{type(g.relation_model).__name__} has none.")
             return sum(th.abs(th.linalg.norm(vectors(rows[:, c]), dim=1, keepdim=True) - 1)
                        for c in _ROLE_COLUMNS[form])  # (role vectors: always unit)
         regions = [(g.classes if kind == "c" else g.individuals)(rows[:, c])
                    for kind, c in _NORM_COLUMNS[form]]
+        for region in regions:
+            if getattr(region, "centre", None) is None:
+                raise ConstructorUnavailable(
+                    f"unit_norm pulls the centres of the regions to norm one; "
+                    f"{type(region).__name__} regions have no centre.")
         return sum(th.abs(th.linalg.norm(r.centre, dim=1, keepdim=True)
                           - self.unit_norm_target) for r in regions)
 
@@ -488,7 +497,7 @@ class Objective:
         that of :math:`\\exists r.D`, or (``gci2_reading="image"``) the image of the
         subclass and the filler."""
         if self.gci2_reading == "image":
-            return g.relation_model.image(relation, sub), filler
+            return self._relations_of(g, "gci2_reading='image'").image(relation, sub), filler
         rel = g.relation_model
         if sharp and rel is not None:
             return sub, rel.sharp_preimage(relation, filler)
@@ -616,6 +625,15 @@ class Objective:
                                  self._neg(neg, "object_property_assertion"),
                                  "object_property_assertion")
         return cost
+
+    @staticmethod
+    def _relations_of(g, purpose):
+        """The relation model of ``g``; a geometry without one cannot read ``purpose``."""
+        relations = getattr(g, "relation_model", None)
+        if relations is None:
+            raise ConstructorUnavailable(f"{purpose} reads the relation model, and the "
+                                         f"geometry has none.")
+        return relations
 
     # -- role axioms ------------------------------------------------------------------------
     def _relations_with(self, g):

@@ -84,7 +84,7 @@ class TransBoxObjective(Objective):
 
     def gci2(self, g, rows, neg=False):
         sub, filler = g.classes(rows[:, 0]), g.classes(rows[:, 2])
-        exists = g.relation_model.preimage(rows[:, 1], filler)
+        exists = g.exists(rows[:, 1], filler)
         if neg:
             if self.reference:
                 return g.measure.apart(sub, exists, -self.margin)

@@ -275,8 +275,17 @@ def swap(geometry, key, sizes, embed_dim, classes=None, relations=None, individu
         raise ConstructorUnavailable(
             f"{key!r} cannot take {sorted(k for k in parts if k != 'regularizers')}: "
             f"{error} (the method's other parts: {geometry.parts}).") from error
-    if objective is not None:
-        # another objective: the forms with a negative loss are the ones it defines (the
-        # method's own choice of them belongs to the method's own objective)
-        geometry.neg_capable_gcis = frozenset(geometry.objective.neg_forms)
+    new = parts.get("objective")
+    if objective is not None and getattr(new, "strict_negatives", False):
+        # an objective that refuses the negative loss of a form it has none for: the forms
+        # with a negative loss are the ones it defines (a ranking form has one)
+        geometry.neg_capable_gcis = frozenset(new.neg_forms) | frozenset(new.ranking or ())
+    refuses = getattr(geometry, "refuses", None)
+    reason = refuses() if callable(refuses) else None
+    if reason:
+        # the geometry knows why its parts cannot work together (an open domain of elements
+        # that only its own class and relation models evaluate on)
+        raise ConstructorUnavailable(
+            f"{key!r} cannot take {sorted(k for k in parts if k != 'regularizers')}: "
+            f"{reason} (the method's other parts: {geometry.parts}).")
     return geometry

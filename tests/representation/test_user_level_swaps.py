@@ -211,6 +211,30 @@ def has_effect(base, model, kind):
                for f in costs)
 
 
+def measure_is_read(model):
+    """Whether the losses of the training forms call the measure of the model: a measure
+    whose formula agrees with the method's own on these forms (the signed distance of BoxLitE
+    and the bounds of ELBE on boxes) is read, not ignored."""
+    from mowl.representation.measures import RELATIONS
+    measure, calls = model.module.measure, []
+    for name in RELATIONS:
+        method = getattr(measure, name, None)
+        if callable(method):
+            def counted(*args, _method=method, **kwargs):
+                calls.append(1)
+                return _method(*args, **kwargs)
+            setattr(measure, name, counted)
+    try:
+        with th.no_grad():
+            for form, rows in model.training_datasets.items():
+                if len(rows):
+                    model.module(rows[:], form)
+    finally:
+        for name in RELATIONS:
+            measure.__dict__.pop(name, None)
+    return bool(calls)
+
+
 def observable(model, kind):
     """Whether the data can show the effect of a part of ``kind`` in the loss."""
     if kind == "regularizers":
@@ -338,13 +362,9 @@ UNREAD_OPTIONS = {}
 REFUSES_EVERY = {
     ("boxsel", "objective_options"): "the only option it has is the margin, and its volume "
                                      "measure ignores a margin (BoxEL and BoxSEL have none)",
-    ("boxlite", "classes"): "the measure reads the lower and upper corner tables of its own "
-                            "BoundsBoxes, which are constrained by the solver programme; no "
-                            "other class model has corner tables (box models are refused when "
-                            "the probe finds no 'lower')",
-    ("concept2box", "classes"): "the soft-box measure reads the context table of its own "
-                                "ContextualSoftBox class model (in_context); no other class "
-                                "model has contexts",
+    ("boxlite", "classes"): "the variables of the BoxLitE programme are the lower and upper "
+                            "corner tables of its own BoundsBoxes; no other class model has "
+                            "corner tables, and the geometry refuses one without them",
     ("eike", "classes"): _NO_CLASS_FOR_MEASURE.format("an ellipsoid and a vector, Linked"),
     ("eike", "measure"): "LinkedMeasure is the only measure that compares Linked regions; "
                          "every other measure compares one region kind",
@@ -405,7 +425,8 @@ def run(build, check, key, kind, limit=None, on_late_error=None, refuses=None):
         conditional = kind == "objective_options" and set(argument) <= set(CONDITIONAL_OPTIONS)
         if effect and observable(model, kind) and not same_part and not conditional:
             try:
-                if not has_effect(base, model, kind):
+                if not has_effect(base, model, kind) and not (
+                        kind == "measure" and measure_is_read(model)):
                     ignored.append(label)
             except Exception as error:
                 if on_late_error is None:

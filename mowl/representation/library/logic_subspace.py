@@ -43,7 +43,7 @@ from mowl.representation.measures import RegionMeasure
 from mowl.representation.methods import (register_class_model, register_method,
                                           register_relation_model)
 from mowl.representation.objectives import Objective
-from mowl.representation.regions import Region
+from mowl.representation.regions import ConstructorUnavailable, Region
 from mowl.representation.relation_models import Relations
 from mowl.training.regularization import Regularizer
 
@@ -527,7 +527,7 @@ class SubspaceStructure(Regularizer):
         special = {classes.top_index, classes.bottom_index}
         ids = th.tensor([i for i in range(len(classes)) if i not in special],
                         dtype=th.long, device=g.device)
-        x, r = g.individual_model.centres.weight, g.relation_model.vectors.weight
+        x, r = g.individual_model.centres.weight, g.r_embedding.weight
         loss = L.entity_structure_loss(x, d).mean()
         if len(ids) > 0:
             c = classes.centres(ids)
@@ -649,8 +649,9 @@ class SubspaceGeometry(ComposedGeometry, ALCModule):
         return self.class_model(idx).indicator
 
     def relation(self, idx):
-        """The indicator vectors of the relations ``idx``."""
-        return self.relation_model.vectors(idx)
+        """The indicator vectors of the relations ``idx``: vectors of the space of pairs
+        (dimension ``2 d``, twice that of an entity)."""
+        return self.r_embedding(idx)
 
     @property
     def c_embedding(self):
@@ -658,7 +659,16 @@ class SubspaceGeometry(ComposedGeometry, ALCModule):
 
     @property
     def r_embedding(self):
-        return self.relation_model.vectors
+        """The table of the relation vectors, of the space of pairs (``2 d`` columns); a
+        relation model without such a table is refused."""
+        vectors = getattr(self.relation_model, "vectors", None)
+        width = getattr(vectors, "embedding_dim", None)
+        if width != 2 * self.dim:
+            raise ConstructorUnavailable(
+                f"E2R reads a relation as an indicator vector of the space of pairs (a "
+                f"table of dimension {2 * self.dim}); {type(self.relation_model).__name__} "
+                f"has {'a table of dimension ' + str(width) if width else 'no such table'}.")
+        return vectors
 
     @property
     def e_embedding(self):
