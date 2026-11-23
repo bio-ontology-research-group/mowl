@@ -164,6 +164,16 @@ is loaded into the geometry by the exact-limit construction
 
    [[1, 1, 0], [0, 1, 0], [0, 0, 1]] [[0, 2, 0], [1, 2, 0]]
 
+The general model builds and trains the same combination:
+``ComposedEL(dataset, method="grounded", classes=..., relations=..., measure=...,
+objective=...)``. The grounded constraints are its joint objective
+(:class:`~mowl.representation.library.grounded_objective.GroundedJointObjective`: one step
+reads every axiom form at one draw of elements, the same step as GroundedEL's), trained in the
+shared loop by :class:`~mowl.training.joint.JointObjectiveSteps` with the temperature
+annealed; the parts swap by the names of the general model (another union of boxes per class,
+the relation model ``"translation"``, the log-sum-exp measure, another objective) and parts of
+other families are refused.
+
 The model class only wires the parts; what it computes besides the objective is done by
 general parts that other geometries of elements and unions of boxes can use:
 
@@ -183,8 +193,8 @@ general parts that other geometries of elements and unions of boxes can use:
 * ``evaluate_model`` is the evaluation regime
   :class:`~mowl.representation.library.grounded_evaluation.ExactDomainCheck` over the crisp
   report (``exact_regime=`` replaces it);
-* ``train`` is the loop :class:`~mowl.training.sampled_objective.SampledObjectiveTraining`
-  of any model whose step is one sampled objective.
+* ``train`` is the regime :class:`~mowl.training.sampled_objective.SampledObjectiveTraining`
+  of any model whose step is one sampled objective, in the shared loop.
 * the query answering below is general: :mod:`mowl.evaluation.query_search` reads a batch
   of queries into a tree and evaluates it with
   :class:`~mowl.evaluation.query_search.RegionCompiler` (``compile_query``),

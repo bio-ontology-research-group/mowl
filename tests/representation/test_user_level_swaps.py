@@ -78,9 +78,23 @@ def data(name):
 
 
 #: Keys that no general model can train from a dataset alone, and why.
-UNSUPPORTED_BY_GENERAL_MODEL = {
-    "grounded": "GroundedELModule is a grounded program over a shared element domain, "
-                "not an ELModule: ComposedEL refuses it; train it with GroundedEL.",
+UNSUPPORTED_BY_GENERAL_MODEL = {}
+
+#: Methods that ComposedEL builds and trains but whose objective is joint (every form of a
+#: step read at one draw of elements, :mod:`mowl.representation.joint_objective`): the
+#: per-form costs this harness compares do not exist, so their swaps are tested with an
+#: effect check of the joint objective in the file named.
+OWN_SWAP_TESTS = {
+    "grounded": ("tests/representation/test_recomp7_general_models.py", {
+        "classes": (True, "another union of boxes per class (three boxes)"),
+        "relations": (True, "translation (boxes of translations)"),
+        "measure": (True, "log-sum-exp aggregation (UnionDepth(agg='lse'))"),
+        "objective": (True, "GroundedObjective(lambda_reg=0)"),
+        "objective_options": (False, "options of the joint objective are options of "
+                                     "GroundedObjective (pass objective=)"),
+        "regularizers": (False, "the minimality term of the joint objective is its "
+                                "regulariser"),
+    }),
 }
 
 
@@ -467,7 +481,17 @@ def run(build, check, key, kind, limit=None, on_late_error=None, refuses=None):
 
 TRIPLE_KEYS = ("boxe", "expressive", "graph_kge", "gda_projection")
 AXIOM_KEYS = sorted(k for k, v in METHOD_KINDS.items() if v == "axioms"
-                    and k not in UNSUPPORTED_BY_GENERAL_MODEL)
+                    and k not in UNSUPPORTED_BY_GENERAL_MODEL and k not in OWN_SWAP_TESTS)
+
+
+@pytest.mark.parametrize("key", sorted(OWN_SWAP_TESTS))
+def test_a_method_with_a_joint_objective_is_built_by_the_general_model(key):
+    from mowl.representation.library.grounded_objective import GroundedJointObjective  # noqa
+    model = ComposedEL(data("abox"), method=key, embed_dim=D)
+    assert model.module.joint_objective is not None
+    where, kinds = OWN_SWAP_TESTS[key]
+    for kind, (works, label) in kinds.items():
+        OUTCOMES[(key, kind)] = (WORKS if works else UNAVAILABLE, f"{label} (see {where})")
 EL_KINDS = ["classes", "relations", "measure", "objective", "objective_options",
             "regularizers"]
 
@@ -623,8 +647,11 @@ def test_an_argument_the_method_cannot_take_is_a_type_error_that_names_the_accep
 
 def test_a_method_that_is_not_a_composed_geometry_names_the_parts_it_takes():
     from mowl.representation.swap import build_method
-    with pytest.raises(ConstructorUnavailable, match="replaceable"):
-        build_method("grounded", 5, 2, 0, 4, classes="box")
+    # the grounded geometry takes parts under its own names (grounded.part_options) and
+    # refuses the parts of other families
+    assert build_method("grounded", 5, 2, 0, 4, classes="box").class_model.part
+    with pytest.raises(ConstructorUnavailable, match="element domain"):
+        build_method("grounded", 5, 2, 0, 4, classes="ball")
 
 
 # -- named classes: one rule ----------------------------------------------------------------
@@ -1215,7 +1242,8 @@ def test_the_matrix_in_the_documentation_lists_every_method():
 def test_every_axiom_method_has_a_general_model_or_a_reason():
     for key in METHODS:
         if METHOD_KINDS[key] == "axioms":
-            assert key in AXIOM_KEYS or key in UNSUPPORTED_BY_GENERAL_MODEL, key
+            assert key in AXIOM_KEYS or key in UNSUPPORTED_BY_GENERAL_MODEL \
+                or key in OWN_SWAP_TESTS, key
     assert accepted_parts("elbe")
 
 

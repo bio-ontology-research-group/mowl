@@ -196,3 +196,89 @@ def test_answer_margin_loss_is_an_objective_of_the_query_models():
     b = margin.train(epochs=2)
     assert len(a) == len(b) == 2 and a != b
     assert all(th.isfinite(p).all() for p in margin.module.parameters())
+
+
+# -- GroundedEL through ComposedEL ---------------------------------------------------------------
+def _grounded_general(ds, **parts):
+    from mowl.models import ComposedEL
+    th.manual_seed(0)
+    model = ComposedEL(ds, method="grounded", embed_dim=4, learning_rate=0.05, **parts)
+    model.eval_gci_name = "class_assertion"
+    return model
+
+
+def _step(model, datasets, seed=5):
+    gen = th.Generator().manual_seed(seed)
+    return model.module.joint_objective.losses(model.module, datasets, gen)
+
+
+def test_composed_el_builds_grounded_with_a_joint_objective_and_trains_it():
+    from mowl.models import GroundedEL
+    from mowl.representation.library.grounded_objective import GroundedJointObjective
+    from mowl.training.joint import JointObjectiveSteps
+    from mowl.training.sampled_objective import find_regime
+    ds = _abox_dataset()
+    named = GroundedEL(ds, embed_dim=4, learning_rate=0.05, seed=0, log_every=0)
+    # the same step as GroundedEL: the objective and the samplers of the named class
+    general = _grounded_general(ds, objective=GroundedJointObjective(
+        named.objective, named.element_sampler, named.region_sampler))
+    assert find_regime(general.training_regime, JointObjectiveSteps) is not None
+    assert general.module.bot_id == named.bot_id and general.module.top_id == named.top_id
+    general.module.load_state_dict(named.module.state_dict())
+    general.module.set_tau(float(named.module.tau))
+    a = _step(general, named.training_datasets)
+    b = named.compute_batch_losses(generator=th.Generator().manual_seed(5))
+    for term in ("fact", "axioms", "region", "minimality", "total"):
+        assert th.allclose(a[term], b[term]), term
+    # and it trains in the shared loop (the joint objective's steps)
+    before = {k: v.clone() for k, v in general.module.state_dict().items()}
+    losses = general.train(epochs=3, validate_every=10 ** 6)
+    assert len(losses) == 3 and all(th.isfinite(th.tensor(losses)))
+    assert any(not th.equal(before[k], v) for k, v in general.module.state_dict().items())
+
+
+def test_grounded_parts_swap_in_the_general_model_with_an_effect():
+    from functools import partial
+    from mowl.representation.library.grounded_objective import GroundedObjective
+    from mowl.representation.library.grounded_parts import BoxUnionClasses, UnionDepth
+    ds = _abox_dataset()
+    base = _grounded_general(ds)
+    data = base.training_datasets
+    reference = _step(base, data)["total"]
+
+    def differs(model, copy=True):
+        if copy:   # the same parameters where the parts have them
+            mine = model.module.state_dict()
+            for name, value in base.module.state_dict().items():
+                if name in mine and mine[name].shape == value.shape:
+                    mine[name].copy_(value)
+            model.module.load_state_dict(mine)
+        return not th.allclose(_step(model, data)["total"], reference)
+    # another relation model (boxes of translations instead of products of boxes)
+    translation = _grounded_general(ds, relations="translation")
+    assert translation.module.parts["relations"] != base.module.parts["relations"]
+    assert differs(translation)
+    # another aggregation measure (log-sum-exp over the boxes of a union)
+    lse = _grounded_general(ds, measure=UnionDepth(agg="lse", agg_tau=0.5))
+    assert lse.module.measure.agg == "lse" and differs(lse)
+    # another box-union class model (three boxes per class)
+    three = _grounded_general(ds, classes=partial(_three_boxes, BoxUnionClasses))
+    assert three.module.class_model.n_components == 3 and differs(three, copy=False)
+    # another objective (no region terms)
+    plain = _grounded_general(ds, objective=GroundedObjective(lambda_reg=0.0))
+    assert differs(plain)
+    for model in (translation, lse, three, plain):
+        assert all(th.isfinite(th.tensor(model.train(epochs=2, validate_every=10 ** 6))))
+
+
+def _three_boxes(cls, nb_classes, n_components, *args, **kwargs):
+    return cls(nb_classes, 3, *args, **kwargs)
+
+
+def test_the_grounded_geometry_refuses_parts_of_other_families():
+    from mowl.representation import Objective
+    ds = _abox_dataset()
+    for parts in ({"classes": "ball"}, {"relations": "affine map"}, {"measure": "point"},
+                  {"objective": Objective(0.1)}):
+        with pytest.raises(ConstructorUnavailable):
+            _grounded_general(ds, **parts)

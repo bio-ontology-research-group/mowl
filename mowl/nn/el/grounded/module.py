@@ -190,7 +190,19 @@ class GroundedELModule(nn.Module, Geometry):
     #: The model that trains this geometry (``ComposedEL`` refuses it and says so); its
     #: parts are swapped there: ``GroundedEL(..., relation_model="translation")``.
     trained_by = ("mowl.models.GroundedEL (class_model=, relation_model=, measure=, "
-                  "objective=, element_sampler=, region_sampler=, crisp_regime=, exact_regime=)")
+                  "objective=, element_sampler=, region_sampler=, crisp_regime=, exact_regime=)"
+                  " or mowl.models.ComposedEL(method='grounded', classes=, relations=, "
+                  "measure=, objective=)")
+
+    #: No form has a negative loss of rows (the corrupted role assertions are a term of the
+    #: joint objective).
+    neg_capable_gcis = frozenset()
+    #: The joint objective reads the role inclusions and chains.
+    role_axiom_capable = True
+    #: The joint objective (:mod:`mowl.representation.joint_objective`) a general model
+    #: trains the geometry with (set by :func:`~mowl.representation.library.solved_grounded.
+    #: grounded`; ``None``: GroundedEL's own step).
+    joint_objective = None
 
     def __init__(
         self,
@@ -312,6 +324,16 @@ class GroundedELModule(nn.Module, Geometry):
                 state_dict[prefix + new + dot + rest] = state_dict.pop(key)
 
     # -- the shared part ----------------------------------------------------------------------
+    def project(self) -> None:
+        """After an optimiser step: the deadness back in :math:`[0, 1]`, bottom dead (what
+        GroundedEL's ``project_parameters`` does; a general model calls this)."""
+        self.elements.clamp_dead(self.bot_id if self.bot_id is not None and self.bot_id >= 0
+                                 else None, _DEAD_LOGIT)
+
+    def regularization_loss(self):
+        """No penalty besides the joint objective's minimality term."""
+        return 0
+
     def ensure_tau_s(self) -> nn.Parameter:
         """The score temperature ``raw_tau_s`` of the shared part (created on first use)."""
         return self.elements.ensure_tau_s()

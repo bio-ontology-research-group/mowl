@@ -148,7 +148,8 @@ class ComposedEL(EmbeddingELModel):
                     isinstance(self.individuals, str) and self.individuals == NO_PART):
                 module = swap(module, "compose", sizes, self.embed_dim,
                               individuals=self.individuals)
-        if not isinstance(module, ELModule):
+        if not isinstance(module, ELModule) and getattr(module, "joint_objective", None) \
+                is None:
             from mowl.representation.regions import ConstructorUnavailable
             trainer = getattr(module, "trained_by", None)
             raise ConstructorUnavailable(
@@ -184,6 +185,14 @@ class ComposedEL(EmbeddingELModel):
         module = self.module
         swapped = sorted(self.swapped_parts)
         what = f"cannot take {swapped}" if swapped else "cannot be trained by ComposedEL"
+        joint = getattr(module, "joint_objective", None)
+        if joint is not None:
+            # one step of the joint objective, with a generator of its own
+            try:
+                joint.probe(module, self.training_datasets)
+            except ConstructorUnavailable as error:
+                raise ConstructorUnavailable(f"{self.method!r} {what}: {error}") from error
+            return
         try:
             with th.no_grad():
                 for form, data in self.training_datasets.items():
