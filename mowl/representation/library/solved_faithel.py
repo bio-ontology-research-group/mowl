@@ -419,6 +419,11 @@ class AnchoredObjective(Objective):
     def class_assertion(self, g, rows, neg=False):
         x = g.individuals(rows[:, 0]).centre
         region = g.classes(rows[:, 1])
+        if not isinstance(region, Anchored):
+            raise ConstructorUnavailable(
+                f"FaithEL's objective pulls the moving point of a class to its individuals and "
+                f"to the centroid of its region in the constructed TBox (an Anchored region); "
+                f"the class model gives {type(region).__name__} regions, which have neither.")
         p, c = region.moving, region.centroid
         loss = _mse(x, c) + self.gamma * _mse(p, x) + self.phi * _mse(p, c)
         if self.neg_sampling:
@@ -427,6 +432,12 @@ class AnchoredObjective(Objective):
 
     def object_property_assertion(self, g, rows, neg=False):
         xs, xo = g.individuals(rows[:, 0]).centre, g.individuals(rows[:, 2]).centre
+        if not callable(getattr(g.relation_model, "region", None)):
+            raise ConstructorUnavailable(
+                f"FaithEL's objective pulls the moving head and tail points of a relation to "
+                f"the pairs of individuals and to the centroid of its region over pairs in the "
+                f"constructed TBox (AnchoredPairs.region); {type(g.relation_model).__name__} "
+                f"has no such region.")
         region = g.relation_model.region(rows[:, 1])
         ph, pt, c = region.head, region.tail, region.centroid
         pair = th.cat([xs, xo], dim=1)

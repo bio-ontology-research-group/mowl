@@ -1111,6 +1111,29 @@ def expressive(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
                   initialiser=_init_normal)
 
 
+def graph_arguments(factory, builder, subclass_relation, inverse):
+    """What the builder of a method of a graph needs of the graph (a PyKEEN triples
+    factory): ``nb_classes`` (the entities), ``nb_relations`` and the row of the
+    ``subclass`` edge ``subclass_id`` (``-1`` if there is none); with ``inverse`` triples the
+    relation ``r`` is row ``2 r``, unless the builder takes ``inverse_triples`` and makes the
+    rows of the inverses itself (it then counts the relations of the graph); the edges
+    themselves (``triples``) for a builder that takes them (its entities are encoded from
+    the graph).
+
+    :param builder: The parameters of the builder (names, as a mapping or a set).
+    """
+    subclass = factory.relation_to_id.get(subclass_relation, -1)
+    own_inverses = "inverse_triples" in builder
+    if inverse and subclass >= 0 and not own_inverses:
+        subclass *= 2
+    out = dict(nb_classes=factory.num_entities,
+               nb_relations=factory.real_num_relations if own_inverses
+               else factory.num_relations, subclass_id=subclass)
+    if "triples" in builder:
+        out["triples"] = factory.mapped_triples
+    return out
+
+
 @register_method("reshuffle")
 def reshuffle(nb_classes, nb_relations, nb_individuals=0, embed_dim=None, margin=2.0,
               objective=None, tables=None, subclass_id=-2, loss=None, sampler=None,

@@ -465,18 +465,9 @@ class GraphKGEModel(TripleGraphModel):
         for a method defined on the graph (its entities are encoded from it); a method that
         takes ``inverse_triples`` counts the relations of the graph and makes the rows of the
         inverses itself."""
-        factory = self.triples_factory
-        builder = self._builder_parameters(self.method)
-        subclass = factory.relation_to_id.get(self.SUBCLASS_RELATION, -1)
-        own_inverses = "inverse_triples" in builder
-        if self.create_inverse_triples and subclass >= 0 and not own_inverses:
-            subclass *= 2
-        out = dict(nb_classes=factory.num_entities,
-                   nb_relations=factory.real_num_relations if own_inverses
-                   else factory.num_relations, subclass_id=subclass)
-        if "triples" in builder:
-            out["triples"] = factory.mapped_triples
-        return out
+        from mowl.representation.library.other_graph import graph_arguments
+        return graph_arguments(self.triples_factory, self._builder_parameters(self.method),
+                               self.SUBCLASS_RELATION, self.create_inverse_triples)
 
     def _make_module(self):
         from mowl.representation import methods as M
