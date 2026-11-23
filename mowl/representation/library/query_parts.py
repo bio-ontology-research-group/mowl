@@ -30,6 +30,7 @@ from mowl.representation.methods import register_relation_model
 from mowl.representation.regions import Box, ConstructorUnavailable
 from mowl.representation.relation_models import Relations
 
+
 def positive_beta_parameters(x):
     """The parameters of a Beta distribution from unconstrained values: ``x + 1`` clamped to
     ``[0.05, 1e9]`` (the regularizer of the BetaE reference code, which also keeps the
@@ -607,4 +608,10 @@ class ConeDistance(nn.Module):
         return self.modulus * (outside.sum(-1) + self.cen * inside.sum(-1))
 
 
-__all__ += ["from_state", "wrap_angle"]
+def margin_logit(gamma, distance):
+    """The score of a query geometry: ``gamma - distance`` (higher: more likely an answer),
+    the margin ``gamma`` minus the distance of an entity to the query."""
+    return gamma - distance
+
+
+__all__ += ["from_state", "wrap_angle", "margin_logit"]

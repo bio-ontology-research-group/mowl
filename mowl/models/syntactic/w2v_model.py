@@ -79,7 +79,7 @@ class SyntacticPlusW2VModel(ComposedSequenceModel, SyntacticModel):
             sources = source.sources if hasattr(source, "sources") else [source]
             corpus = []
             for s in sources:
-                corpus += s.sentences(self.dataset)
+                corpus.extend(s.sentences(self.dataset))
             return corpus
         self.module.source = source
         source.write(self.dataset)

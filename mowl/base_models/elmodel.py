@@ -3,6 +3,7 @@ from mowl.base_models.model import Model
 from mowl.training.loop import TrainingLoop
 from mowl.training.losses import weighted_mean_loss
 from mowl.training.negatives import corrupt_column_blocks
+from mowl.training.regularization import AnchorPenalty, add_penalties
 from mowl.training.initialisation import extend_embeddings
 from mowl.evaluation.validation import mean_module_cost
 from mowl.datasets.el import ELDataset
@@ -12,17 +13,18 @@ from torch.utils.data import DataLoader
 
 from deprecated.sphinx import versionadded, versionchanged
 
-from org.semanticweb.owlapi.model import OWLClassExpression, OWLClass, OWLObjectSomeValuesFrom, OWLObjectIntersectionOf
+from org.semanticweb.owlapi.model import (OWLClassExpression, OWLClass, OWLObjectSomeValuesFrom,
+                                          OWLObjectIntersectionOf)
 
 import copy
 import numbers
-import mowl.error.messages as msg
 import os
 import logging
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
+
 
 @versionchanged(version="2.0.0", reason="Added the 'load_normalized' parameter.")
 class EmbeddingELModel(TrainingLoop, Model):
@@ -39,7 +41,8 @@ reflected on the :class:`DataLoaders` that will be generated and also the model 
     contain 7 loss functions. If `False`, the model will work with 4 normal forms only, \
 merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type extended: bool, optional
-    :param load_normalized: If `True`, the ontology is assumed to be normalized and GCIs are extracted directly. Defaults to False.
+    :param load_normalized: If `True`, the ontology is assumed to be normalized and GCIs are
+        extracted directly. Defaults to False.
     :type load_normalized: bool, optional
     :param device: The device to use for training. Defaults to "cpu".
     :type device: str, optional
@@ -68,13 +71,15 @@ normalized training axioms is appended to :attr:`class_index_dict` and \
 embedding while the indices of the dataset entities are unchanged. ``dataset.classes`` and \
 ``dataset.evaluation_classes`` are not modified, so auxiliary classes are never ranking \
 candidates, and the ``"classes"`` pool for negative sampling contains named classes only \
-(:attr:`named_class_index_dict`); auxiliary classes do appear in the embedding dictionaries. Axioms of the validation and testing ontologies that mention auxiliary \
+(:attr:`named_class_index_dict`); auxiliary classes do appear in the embedding dictionaries. \
+Axioms of the validation and testing ontologies that mention auxiliary \
 entities of their own cannot be indexed and are skipped (see :class:`~mowl.datasets.el.ELDataset`).
     """
 
     axiom_scoring = "module"
 
-    #: Default per-GCI negative sampling configuration used by :meth:`get_negative_sampling_config`.
+    #: Default per-GCI negative sampling configuration used by
+    #: :meth:`get_negative_sampling_config`.
     #: Bot GCIs are intentionally excluded — subsumption by bottom has no meaningful negative.
     #: Each entry specifies the entity pool(s) to sample from (``"classes"`` or
     #: ``"individuals"``) and which column(s) of the data tensor to corrupt with random
@@ -82,11 +87,11 @@ entities of their own cannot be indexed and are skipped (see :class:`~mowl.datas
     #: negatives is generated per column); ``index_pool`` may be a single pool name applied
     #: to all columns or a list of pool names, one per column.
     _DEFAULT_NEG_SAMPLING_CONFIG = {
-        "gci0":     {"index_pool": "classes",     "corrupt_column": 1},
-        "gci1":     {"index_pool": "classes",     "corrupt_column": 2},
-        "gci2":     {"index_pool": "classes",     "corrupt_column": 2},
-        "gci3":     {"index_pool": "classes",     "corrupt_column": 2},
-        "class_assertion":           {"index_pool": "classes",     "corrupt_column": 1},
+        "gci0": {"index_pool": "classes", "corrupt_column": 1},
+        "gci1": {"index_pool": "classes", "corrupt_column": 2},
+        "gci2": {"index_pool": "classes", "corrupt_column": 2},
+        "gci3": {"index_pool": "classes", "corrupt_column": 2},
+        "class_assertion": {"index_pool": "classes", "corrupt_column": 1},
         "object_property_assertion": {"index_pool": "individuals", "corrupt_column": 2},
     }
 
@@ -621,9 +626,16 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
         :return: Regularization loss value
         :rtype: torch.Tensor
         """
+        base = 0
         if hasattr(self.module, 'regularization_loss'):
-            return self.module.regularization_loss()
-        return 0
+            base = self.module.regularization_loss()
+        return add_penalties(base, self.default_penalties(), self)
+
+    def default_penalties(self):
+        """Penalties added to the regularisation term of every step: the anchor of the boxes
+        to their initialisation when the model has ``init_boxes`` and ``anchor_weight > 0``
+        (:class:`mowl.training.regularization.AnchorPenalty`)."""
+        return AnchorPenalty.of(self)
 
     def step_regularization_loss(self):
         """The regularisation term of one optimisation step: :meth:`get_regularization_loss`
@@ -777,11 +789,11 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
             string += f"\t{k}: {len(v)}\n"
         logger.info(string)
 
-    def validate_epoch(self, epoch, loss):
+    def validate_epoch(self, epoch: int, loss):
         """Validation after an epoch: the mean loss of the module on the validation axioms of
         ``eval_gci_name``; the best state is saved to ``model_filepath``."""
         if self.dataset.validation is None:
-            print(f'Epoch {epoch+1}: Train loss: {loss}')
+            print(f'Epoch {epoch + 1}: Train loss: {loss}')
             return
         if self._eval_gci_name is None:
             raise ValueError(
@@ -794,7 +806,7 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
             self._best_validation_loss = valid_loss
             with th.no_grad():
                 th.save(self.module.state_dict(), self.model_filepath)
-        print(f'Epoch {epoch+1}: Train loss: {loss} Valid loss: {valid_loss}')
+        print(f'Epoch {epoch + 1}: Train loss: {loss} Valid loss: {valid_loss}')
 
     def eval_method(self, data):
         """Evaluation method used for scoring. Override if needed.
@@ -884,7 +896,7 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
             data_point = th.tensor(data_point, dtype=th.long, device=self.device)
             data_point = data_point.unsqueeze(0)
             return data_point
-        
+
         not_el_error_msg = "This axiom does not belong to the EL description logic specification."
         sub, super_ = axiom.getSubClass(), axiom.getSuperClass()
 
@@ -910,12 +922,12 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
                 filler = super_.getFiller()
                 if not isinstance(filler, OWLClass):
                     raise TypeError(not_el_error_msg)
-                
+
                 rel_id = self.dataset.object_property_to_id[rel]
                 filler_id = self.dataset.class_to_id[filler]
                 gci_name = "gci2"
                 gci_data = data_point_to_tensor([sub_id, rel_id, filler_id])
-                
+
         elif isinstance(sub, OWLObjectSomeValuesFrom):
             rel = sub.getProperty()
             filler = sub.getFiller()
@@ -934,9 +946,9 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
                     gci_name = "gci3"
             else:
                 gci_name = "gci3"
-            
+
             gci_data = data_point_to_tensor([rel_id, filler_id, super_id])
-            
+
         elif isinstance(sub, OWLObjectIntersectionOf):
             operands = sub.getOperandsAsList()
             if len(operands) != 2:
@@ -962,14 +974,12 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
                 gci_name = "gci1"
 
             gci_data = data_point_to_tensor([left_id, right_id, super_id])
-            
+
         else:
             raise TypeError("This axiom does not belong to EL.")
 
-        
         score = self.module(gci_data, gci_name)
         return score
-
 
     @property
     def class_embeddings(self):
@@ -983,28 +993,25 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
         rel_embeds = {
             k: v for k, v in zip(self.object_property_index_dict.keys(),
                                  self.module.rel_embed.weight.cpu().detach().numpy())}
-        
+
         return rel_embeds
-        
-    
+
     @property
     def individual_embeddings(self):
         if self.module.ind_embed is None:
             return dict()
-        
+
         ind_embeds = {
             k: v for k, v in zip(self.individual_index_dict.keys(),
                                  self.module.ind_embed.weight.cpu().detach().numpy())}
-        
-        return ind_embeds
-        
 
+        return ind_embeds
 
     def add_axioms(self, *axioms):
         prev_class_embeds = None
         prev_object_property_embeds = None
         prev_individual_embeds = None
-        
+
         if len(self.class_embeddings) > 0:
             prev_class_embeds = copy.deepcopy(self.class_embeddings)
 
@@ -1036,8 +1043,6 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
                 [str(ind.toStringID()) for ind in self.dataset.individuals], self.embed_dim)
             self.module.ind_embed.weight.data = th.from_numpy(new_individual_embeds).float()
 
-            
-
     def from_pretrained(self, model):
         if not isinstance(model, str):
             raise TypeError("Parameter model must be a string pointing to the model file.")
@@ -1045,18 +1050,14 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
         if not os.path.exists(model):
             raise FileNotFoundError("Pretrained model path does not exist")
 
-        #self._model_filepath = model
+        # self._model_filepath = model
 
-        
         self._is_pretrained = True
         if not isinstance(model, str):
             raise TypeError
 
         self.module.load_state_dict(th.load(model, weights_only=True))
-        #self._kge_method = kge_method
-    
-
-
+        # self._kge_method = kge_method
 
     def load_pairwise_eval_data(self):
 
@@ -1067,7 +1068,7 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
         head_classes, tail_classes = self.dataset.evaluation_classes
         self._head_entities = head_classes.as_str
         self._tail_entities = tail_classes.as_str
-                        
+
         eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
                                            relations=[eval_property])
 
@@ -1075,7 +1076,6 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
         self._testing_set = eval_projector.project(self.dataset.testing)
 
         self._loaded_eval = True
-
 
     @property
     def training_set(self):

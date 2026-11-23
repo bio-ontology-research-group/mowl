@@ -8,6 +8,7 @@ from mowl.base_models.alcmodel import EmbeddingALCModel
 from mowl.evaluation.validation import reached_parameters
 from mowl.representation import methods as M
 from mowl.representation.regions import ConstructorUnavailable
+from mowl.training.regularization import sum_terms
 from mowl.representation.swap import NO_PART, build_method, current_parts
 from mowl.representation.library.logic_alc import ExpressionGeometry
 
@@ -275,8 +276,7 @@ class ComposedALC(EmbeddingALCModel):
         """The weighted loss of ``{axiom: batches}`` plus the regularisers of the geometry."""
         total = super()._epoch_loss(dataloaders, e_emb)
         if self.module.regularizers:
-            reg = self.module.regularization_loss()
-            total = reg if total is None else total + reg
+            total = sum_terms(total, self.module.regularization_loss())
         return total
 
     def check_combination(self):

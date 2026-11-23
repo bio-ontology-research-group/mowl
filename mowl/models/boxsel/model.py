@@ -4,8 +4,8 @@ import torch as th
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn.el.boxsel.module import BoxSELModule
 
-from mowl.training.conditional import (Conditional, as_conditional as _as_conditional,
-                                       compile_conditional_expression)
+from mowl.training.conditional import (  # noqa: F401  (Conditional is re-exported)
+    Conditional, as_conditional as _as_conditional, compile_conditional_expression)
 
 
 class BoxSEL(EmbeddingELModel):
@@ -130,11 +130,8 @@ class BoxSEL(EmbeddingELModel):
         """Per conditional, the distance of its embedded probability to ``[l, u]`` (zero
         if inside), as a list in the order of :attr:`conditionals`. The mean is the mean
         absolute error of the paper for point conditionals ``l = u``."""
-        out = []
-        for c in self.conditionals:
-            p = self.probability(c.conclusion, c.premise)
-            out.append(max(c.lower - p, p - c.upper, 0.0) if p == p else float("nan"))
-        return out
+        from mowl.evaluation.sel_probability import conditional_errors
+        return conditional_errors(self)
 
     def mean_absolute_error(self):
         from mowl.evaluation.sel_probability import mean_interval_error

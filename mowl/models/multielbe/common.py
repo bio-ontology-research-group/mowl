@@ -70,7 +70,8 @@ class MultiELBEOptions(EmbeddingELModel):
         eff_tau_end = float(tau_end)
         if eff_tau_start <= 0.0 or eff_tau_end <= 0.0:
             raise ValueError(
-                f"tau_start and tau_end must be > 0, got tau_start={eff_tau_start!r}, tau_end={eff_tau_end!r}"
+                f"tau_start and tau_end must be > 0, got tau_start={eff_tau_start!r}, "
+                f"tau_end={eff_tau_end!r}"
             )
         if float(diversity_reg) < 0.0:
             raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
@@ -182,7 +183,8 @@ class MultiELBEOptions(EmbeddingELModel):
         return self._point_supervision
 
     def _ensure_point_supervision(self) -> PointSupervision:
-        """Lazily build or load :class:`~mowl.datasets.el.points.PointSupervision` and attach to ``module``.
+        """Lazily build or load :class:`~mowl.datasets.el.points.PointSupervision` and attach it
+        to ``module``.
 
         Guarantees:
 
@@ -257,13 +259,6 @@ class MultiELBEOptions(EmbeddingELModel):
         if self.objective in ("point", "mixed") and self.neg_sampling_gcis is None:
             return {}
         return super().get_negative_sampling_config()
-
-    def get_regularization_loss(self):
-        """Return module regularisation loss plus weighted anchor loss when active."""
-        loss = super().get_regularization_loss()
-        if self.init_boxes is not None and self.anchor_weight > 0:
-            loss = loss + self.anchor_weight * self.init_boxes.anchor_loss(self.module)
-        return loss
 
     # -- data the extra training loss reads -------------------------------------------------
     def _point_batch(self, epoch: int):

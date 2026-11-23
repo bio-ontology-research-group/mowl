@@ -141,7 +141,7 @@ class ConvexRegionModel(DictInterpretation):
     def __init__(self, model: FiniteInterpretation, axioms: Optional[Iterable[Axiom]] = None):
         from mowl.representation.construction import construct
 
-        m = model.size
+        m = int(model.size)
         self.finite_model: FiniteInterpretation = model
         self.dimension: int = m - 1
         # the combination of parts: the finite model, read as faces of the simplex

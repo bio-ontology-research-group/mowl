@@ -147,6 +147,54 @@ class _Projection(Regularizer):
             view.copy_(self._projected(view))
 
 
+def sum_terms(*terms):
+    """The sum of the terms that are not ``None`` (``None`` if all are): how a loss, a
+    regularisation term and the penalties of regularisers are added up."""
+    total = None
+    for term in terms:
+        if term is not None:
+            total = term if total is None else total + term
+    return total
+
+
+def add_penalties(default, penalties, model):
+    """``default`` plus the :meth:`Regularizer.penalty` of every regulariser in
+    ``penalties``, for ``model`` (``default`` alone if there are none)."""
+    total = default
+    for regulariser in penalties:
+        total = total + regulariser.penalty(model)
+    return total
+
+
+class AnchorPenalty(_Penalty):
+    """:math:`w \\cdot` ``init.anchor_loss(model.module)``: the mean squared distance of the
+    boxes to the ones an initialiser (:class:`~mowl.geometric.ExactBoxInit`) placed, weighted
+    by ``weight``. It keeps an embedding near its initialisation; any geometry whose
+    initialiser has an ``anchor_loss`` can use it.
+
+    :param init: Object with ``anchor_loss(module)``.
+    :param weight: Factor of the penalty.
+    """
+
+    def __init__(self, init, weight=1.0):
+        super().__init__(parameters=(), weight=weight)
+        self.init = init
+
+    @classmethod
+    def of(cls, model):
+        """The penalties a model asks for with its ``init_boxes`` and ``anchor_weight``
+        attributes: one anchor penalty if both are set (``anchor_weight > 0``), else none."""
+        init = getattr(model, "init_boxes", None)
+        weight = getattr(model, "anchor_weight", 0.0)
+        return (cls(init, weight),) if init is not None and weight > 0 else ()
+
+    def tensors(self, model):
+        return []
+
+    def penalty(self, model):
+        return self.weight * self.init.anchor_loss(model.module)
+
+
 class NormPenalty(_Penalty):
     """:math:`\\operatorname{mean}_x |\\lVert x \\rVert_p - \\text{target}|`: every vector
     is pulled towards the sphere of radius ``target``. With the defaults this is the
@@ -239,7 +287,8 @@ class IntervalProjection(_Projection):
 
 
 class ModuleProjection(Regularizer):
-    """After every step, the projection that the module of the model defines (``module.project()``):
+    """After every step, the projection that the module of the model defines
+    (``module.project()``):
     for a geometry whose parts keep their parameters in a region, for example the balls around
     the centroids of FaithEL. A module without ``project`` is refused."""
 

@@ -199,8 +199,10 @@ work on other methods; ``embedding_tables`` lists what can be constrained:
    ('class_embed', ...)...
 
 The penalties are :class:`~mowl.training.NormPenalty` (norm near a target),
-:class:`~mowl.training.MaxNormPenalty` (norm below a bound) and
-:class:`~mowl.training.PowerPenalty` (L1, L2, N3); the projections are
+:class:`~mowl.training.MaxNormPenalty` (norm below a bound),
+:class:`~mowl.training.PowerPenalty` (L1, L2, N3) and
+:class:`~mowl.training.AnchorPenalty` (boxes near the placement of their initialiser, the
+``anchor_weight`` of ELBE, Box\ :sup:`2`\ EL, MultiELBE, MultiBoxEL and PrismEL); the projections are
 :class:`~mowl.training.SphereProjection`, :class:`~mowl.training.BallProjection` and
 :class:`~mowl.training.IntervalProjection`. A term a module adds inside the loss of every
 axiom (EmEL++) is part of that loss and is not switched off.

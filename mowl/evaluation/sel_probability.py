@@ -52,6 +52,23 @@ def batch_probabilities(model, conditionals):
     return out
 
 
+def interval_error(probability, lower, upper):
+    """Distance of a probability to the interval ``[lower, upper]``: ``0`` if inside, ``nan``
+    if the probability is ``nan`` (a premise without volume). The per-conditional error whose
+    mean is :func:`mean_interval_error`."""
+    if probability != probability:
+        return float("nan")
+    return max(lower - probability, probability - upper, 0.0)
+
+
+def conditional_errors(model):
+    """:func:`interval_error` of every conditional of ``model`` (a model with
+    ``conditionals`` and ``probability(conclusion, premise)``), in the order of
+    ``model.conditionals``."""
+    return [interval_error(model.probability(c.conclusion, c.premise), c.lower, c.upper)
+            for c in model.conditionals]
+
+
 def mean_interval_error(errors):
     """Mean of per-conditional distances to their intervals (the paper's MAE for point
     conditionals), ``0.0`` for an empty list. ``nan`` entries (premises without volume)

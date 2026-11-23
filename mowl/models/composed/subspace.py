@@ -3,7 +3,8 @@ r"""Models of subspace logic (Embed2Reason and relatives) put together from part
 :class:`SubspaceAxiomModel` is what such models share, whatever trains them: the extraction
 of the axioms into rows (one row kind per axiom form of the quantum logic), the
 hierarchy-derived data (siblings, separation pairs, range negatives) and the reasoning and
-scoring on a trained embedding. The maths of the scores is that of the subspace geometry of the module.
+scoring on a trained embedding. The maths of the scores is that of the subspace geometry
+of the module.
 
 :class:`ComposedSubspace` trains it with the regimes of :mod:`mowl.training`, for any method
 whose geometry is a :class:`~mowl.representation.library.logic_subspace.SubspaceGeometry`
@@ -14,6 +15,7 @@ assembly and loop for the comparison in ``tests/baselines``."""
 import math
 import random
 from collections import defaultdict
+from itertools import combinations
 from functools import partial
 
 import torch as th
@@ -184,9 +186,7 @@ class SubspaceAxiomModel(Model):
             idx = self._named_classes(list(axiom.getClassExpressionsAsList()))
             if idx is None:
                 return False
-            for k, i in enumerate(idx):
-                for j in idx[k + 1:]:
-                    rows["concept_disjointness"].append([i, j])
+            rows["concept_disjointness"].extend([i, j] for i, j in combinations(idx, 2))
             return True
         if name == "SubObjectPropertyOf":
             r = self._named_property(axiom.getSubProperty())
@@ -401,7 +401,8 @@ class SubspaceAxiomModel(Model):
 
     def axiom_costs(self, gci_name, rows):
         """Cost of every candidate axiom in ``rows`` (model indices), lower is more
-        plausible (see :meth:`~mowl.representation.library.logic_subspace.SubspaceGeometry.axiom_costs`)."""
+        plausible (see
+        :meth:`~mowl.representation.library.logic_subspace.SubspaceGeometry.axiom_costs`)."""
         return self.module.axiom_costs(gci_name, rows)
 
     def score_subsumption(self, sub, sup, binary=False):

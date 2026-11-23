@@ -117,7 +117,8 @@ class MultiBoxELOptions(EmbeddingELModel):
         eff_tau_end = float(tau_end)
         if eff_tau_start <= 0.0 or eff_tau_end <= 0.0:
             raise ValueError(
-                f"tau_start and tau_end must be > 0, got tau_start={eff_tau_start!r}, tau_end={eff_tau_end!r}"
+                f"tau_start and tau_end must be > 0, got tau_start={eff_tau_start!r}, "
+                f"tau_end={eff_tau_end!r}"
             )
         if (
             isinstance(points_per_epoch, bool)
@@ -262,7 +263,8 @@ class MultiBoxELOptions(EmbeddingELModel):
         return self._point_supervision
 
     def _ensure_point_supervision(self) -> PointSupervision:
-        """Lazily build or load :class:`~mowl.datasets.el.points.PointSupervision` and attach to ``module``.
+        """Lazily build or load :class:`~mowl.datasets.el.points.PointSupervision` and attach it
+        to ``module``.
 
         Guarantees:
 
@@ -368,7 +370,8 @@ class MultiBoxELOptions(EmbeddingELModel):
         return self.module.reseed(epoch_rng(self.points_seed, epoch))
 
     def _peek_checkpoint_witness_rows(self, path: Optional[str]) -> Optional[int]:
-        """Return ``num_embeddings`` if ``witness_embed.weight`` is present in the checkpoint at ``path``."""
+        """Return ``num_embeddings`` if ``witness_embed.weight`` is present in the checkpoint at
+        ``path``."""
         if not isinstance(path, str) or not os.path.exists(path):
             return None
         try:
@@ -382,7 +385,8 @@ class MultiBoxELOptions(EmbeddingELModel):
         return None
 
     def load_best_model(self):
-        """Reload the best checkpoint and re-attach structural tables when ``objective='structural'``."""
+        """Reload the best checkpoint and re-attach structural tables when
+        ``objective='structural'``."""
         if self.objective == "structural" and self._structural_tables is None:
             self._structural_tables = build_structural_tables(
                 self,
@@ -397,7 +401,8 @@ class MultiBoxELOptions(EmbeddingELModel):
         super().load_best_model()
 
     def from_pretrained(self, model):
-        """Load pretrained weights and ensure structural tables are attached before ``load_state_dict``."""
+        """Load pretrained weights and ensure structural tables are attached before
+        ``load_state_dict``."""
         if not isinstance(model, str):
             raise TypeError(
                 "Parameter model must be a string pointing to the model file."
@@ -432,13 +437,6 @@ class MultiBoxELOptions(EmbeddingELModel):
 
         super().from_pretrained(model)
 
-    def get_regularization_loss(self):
-        """Return module regularisation loss plus weighted anchor loss when active."""
-        loss = super().get_regularization_loss()
-        if self.init_boxes is not None and self.anchor_weight > 0:
-            loss = loss + self.anchor_weight * self.init_boxes.anchor_loss(self.module)
-        return loss
-
     # -- data the extra training loss reads -------------------------------------------------
     def _point_batch(self, epoch: int):
         """The sample of point pairs and role triples of an epoch (seed
@@ -452,4 +450,3 @@ class MultiBoxELOptions(EmbeddingELModel):
         ``owl:Nothing``."""
         return [int(idx) for iri, idx in self.named_class_index_dict.items()
                 if iri not in (TOP, BOTTOM)]
-

@@ -13,7 +13,7 @@ import torch as th
 import torch.nn as nn
 
 from mowl.representation.library.query_parts import (  # noqa: F401
-    positive_beta_parameters as _clamp_positive)  # the name the baselines import
+    positive_beta_parameters as _clamp_positive, margin_logit)  # the name the baselines import
 from mowl.training.initialisation import margin_embedding_range
 
 __all__ = ["QueryGeometry", "UnsupportedOperator"]
@@ -72,21 +72,20 @@ class QueryGeometry(nn.Module):
 
     # -- shared -------------------------------------------------------------------------
     def logit(self, state, entity_ids):
-        return self.gamma - self.distance(state, entity_ids)
+        return margin_logit(self.gamma, self.distance(state, entity_ids))
 
-    def embed(self, signature, id_matrix, _cursor=None):
+    def embed(self, signature, id_matrix, _columns=None):
         """State of a batch of union-free queries of one shape.
 
         :param signature: From :func:`mowl.nn.query.expression.signature`.
         :param id_matrix: ``LongTensor (B, n)`` with the ids of
             :func:`mowl.nn.query.expression.ids`, one row per query.
         """
-        cursor = [0] if _cursor is None else _cursor
+        columns = iter(range(id_matrix.shape[1])) if _columns is None else _columns
         kind = signature[0]
-        children = [self.embed(s, id_matrix, cursor) for s in signature[1:]]
+        children = [self.embed(s, id_matrix, columns) for s in signature[1:]]
         if kind in ("a", "p"):
-            col = id_matrix[:, cursor[0]]
-            cursor[0] += 1
+            col = id_matrix[:, next(columns)]
         if kind == "a":
             return self.anchor(col)
         if kind == "p":

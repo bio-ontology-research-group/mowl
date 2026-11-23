@@ -207,7 +207,7 @@ class HiTBase(Model):
             parents.setdefault(a, set()).add(b)
         triplets = []
         for a, b in edges:
-            excluded = closure.get(a, set()) | {a}
+            excluded = set(closure.get(a, ())) | {a}
             negs = []
             if self.hard_negatives:
                 sibs = {s for p in parents[a] for s in children.get(p, ())}
@@ -254,7 +254,7 @@ class HiTBase(Model):
         gci0 = rows.get("gci0")
         return gci0 if gci0 is not None and len(gci0) else None
 
-    def _query(self, gci_name, rows, target_col):
+    def _query(self, gci_name, rows, target_col: int):
         """Embeddings of the fixed side of every query row and whether the candidates are
         subclasses (``True``) or superclasses (``False``)."""
         from mowl.owlapi import OWLAPIAdapter
@@ -381,6 +381,7 @@ class HiTBase(Model):
         x = self.embed([axiom.getSubClass(), axiom.getSuperClass()])
         lam = self.centri_weight or 0.0
         return self._score_pair(x, lam)
+
     # -- what depends on the module of a side --------------------------------------------
     def _embed_points(self, texts):
         """Points of the ball for a list of texts."""

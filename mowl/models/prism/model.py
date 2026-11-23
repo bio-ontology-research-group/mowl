@@ -98,7 +98,8 @@ class PrismEL(ComposedEL):
         auxiliaries :math:`A \\sqsubseteq \\exists r.C \\sqsubseteq \\text{Aux}`)
         via :class:`~mowl.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
-        Non-negative weight multiplying :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`
+        Non-negative weight multiplying
+        :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`
         in :meth:`~mowl.nn.PrismModule.structural_extra_loss` under
         ``objective="structural"``.
     size_reg : float, default 1e-3
@@ -243,13 +244,6 @@ class PrismEL(ComposedEL):
             + self.module.box_center.weight.shape[1]
             + self.module.box_offset.weight.shape[1]
         )
-
-    def get_regularization_loss(self):
-        """Return module regularisation loss plus weighted anchor loss when active."""
-        loss = super().get_regularization_loss()
-        if self.init_boxes is not None and self.anchor_weight > 0:
-            loss = loss + self.anchor_weight * self.init_boxes.anchor_loss(self.module)
-        return loss
 
     def compute_loss(self, pos_scores, neg_scores=None):
         """The loss of one batch of one axiom form, that of the regime

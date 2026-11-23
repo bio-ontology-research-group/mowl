@@ -51,7 +51,7 @@ from mowl.training.loop import RegimeTrained, Rows
 from mowl.training.regularization import (Regularization, Regularizer, NormPenalty,
                                           MaxNormPenalty, PowerPenalty, SphereProjection,
                                           BallProjection, IntervalProjection, ModuleProjection,
-                                          embedding_tables)
+                                          AnchorPenalty, embedding_tables)
 from mowl.training.alternating import AlternatingMinibatches, FullBatch, FormSelection
 from mowl.training.text import LinearWarmupDecay, SampledLogicalLosses
 
@@ -64,7 +64,8 @@ __all__ = [
     "RegDCodeTraining",
     "CateCodeTraining",
     "Regularization", "Regularizer", "NormPenalty", "MaxNormPenalty", "PowerPenalty",
-    "SphereProjection", "BallProjection", "IntervalProjection", "embedding_tables",
+    "SphereProjection", "BallProjection", "IntervalProjection", "AnchorPenalty",
+    "embedding_tables",
     "DeductiveClosure", "NORMAL_FORMS",
     "DELECodeLoss", "DELECodeLosses", "DELECodeTraining",
     "AllNormalFormNegatives", "ClosureFilteredNegatives", "ClosurePositives", "dele_regime",

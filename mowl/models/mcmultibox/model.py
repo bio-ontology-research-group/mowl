@@ -91,7 +91,7 @@ class VolumeMultiBoxEL(VolumeMultiBoxELOptions):
         from mowl.training.elkem import ValidationCheckpoint
         return ValidationCheckpoint("loss", steps_per_epoch=self.num_batches)
 
-    def train(self, epochs, validate_every=1, epoch_callback=None):
+    def train(self, epochs: int, validate_every=1, epoch_callback=None):
         """Train with ``num_batches`` optimiser steps per epoch (the regime
         :class:`~mowl.training.splits.ShuffledSplits`; a model whose regime was removed gets
         it again). With another regime attached an epoch is one optimiser step, unless that
@@ -104,12 +104,13 @@ class VolumeMultiBoxEL(VolumeMultiBoxELOptions):
         """
         if self.training_regime is None:
             self._attach_default_regimes()
-        steps = _steps_per_epoch(self.training_regime)
+        steps = int(_steps_per_epoch(self.training_regime))
         callback = epoch_callback
         if epoch_callback is not None and steps > 1:
-            def callback(step, model):
+            def every_epoch(step: int, model):
                 if (step + 1) % steps == 0:
                     epoch_callback(step // steps, model)
+            callback = every_epoch
         self.training_losses = []
         return super().train(epochs * steps, validate_every=validate_every,
                              epoch_callback=callback)
