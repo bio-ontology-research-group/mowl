@@ -46,10 +46,29 @@ TOY_PLUGIN = "--plugin tests.benchmarks.toy_benchmarks"
 
 #: Default methods also run as baseline on the joint benchmarks: one or two per family.
 DEFAULT_COMMON_BASELINE = (
-    "elbe", "box2el", "elem", "transbox", "multiboxel", "octagon", "cate", "e2r", "falcon",
-    "dfalc", "query2box", "graph_kge", "dl2vec", "onto2vec", "hyperbolic_cones",
-    "order_embeddings", "grounded", "canonical_mixture",
+    "elbe", "box2el", "elem", "transbox", "regd", "multiboxel", "octagon", "cate", "e2r",
+    "falcon", "dfalc", "query2box", "graph_kge", "boxe", "dl2vec", "onto2vec",
+    "hyperbolic_cones", "order_embeddings",
 )
+
+#: (benchmark pattern, method) -> reason: runs on the joint benchmarks that fail in both
+#: implementations (seen in the toy runs); left out unless --include-known-failures.
+KNOWN_FAILURES = {
+    ("common-", "canonical_mixture"): "needs individuals; the joint benchmarks are TBox only",
+    ("common-", "grounded"): "the grounded model scores class assertions only "
+                             "(NotImplementedError for gci0/gci2)",
+    ("-existential-prediction", "cate"): "CatE scores C ⊑ ∃r.D only for fillers added to its "
+                                         "lattice before training (model argument "
+                                         "'existentials'); UnseenConceptError otherwise",
+}
+
+
+def known_failure(benchmark, method):
+    for (pattern, m), reason in KNOWN_FAILURES.items():
+        if m == method and pattern in benchmark:
+            return reason
+    return ""
+
 
 # ---------------------------------------------------------------------------------------
 # Expected cost
@@ -197,7 +216,7 @@ def common_benchmarks(toy=False):
 
 
 def common_runs(seeds, baseline_methods=(), epochs=None, methods=None, benchmarks=None,
-                toy=False, extra=""):
+                toy=False, extra="", include_known_failures=False):
     """``(runs, skipped)`` of the joint benchmarks."""
     from mowl.benchmarks.comparison import runnable_methods
     from mowl.benchmarks.recipes import list_recipes
@@ -212,6 +231,10 @@ def common_runs(seeds, baseline_methods=(), epochs=None, methods=None, benchmark
                 skipped[(bench, method, "-", "parts")] = reason
         for method in runnable:
             if methods and method not in methods:
+                continue
+            failure = known_failure(bench, method)
+            if failure and not include_known_failures:
+                skipped[(bench, method, "-", "parts")] = "known failure: " + failure
                 continue
             recipes = list_recipes(bench, method)
             if len(recipes) != 1:
@@ -297,6 +320,8 @@ def _parser():
                    help="override the recipes' epochs (for tests)")
     p.add_argument("--extra", default="", help="appended to every line's extra arguments")
     p.add_argument("--no-split", action="store_true", help="one manifest per family")
+    p.add_argument("--include-known-failures", action="store_true",
+                   help="also write the runs of KNOWN_FAILURES")
     p.add_argument("--toy", action="store_true",
                    help="the toy copies of tests/benchmarks/toy_benchmarks.py (local test)")
     return p
@@ -321,7 +346,7 @@ def main(argv=None):
         skipped.update(s)
     if "common" in families:
         r, s = common_runs(seeds, common_baseline, args.epochs, methods, benchmarks,
-                           args.toy, args.extra)
+                           args.toy, args.extra, args.include_known_failures)
         runs += r
         skipped.update(s)
     check_unique(runs)
