@@ -134,13 +134,30 @@ class Relations(Operations, nn.Module):
 
     @generic
     def subsumed_negative(self, measure, sub, ids, filler, margin, delta):
-        """The negative loss of :math:`C \\sqsubseteq \\exists r.D` of Box2EL and DELE:
-        :math:`(\\delta - \\mu(C, \\exists r.D))^2 + (\\delta - \\mu(D, r(C)))^2` with
-        :math:`\\mu` the measure's ``meets`` (with ``margin``): the two pairs are pushed
-        :math:`\\delta` apart."""
+        """The negative loss of :math:`C \\sqsubseteq \\exists r.D`: the two pairs
+        :math:`(C, \\exists r.D)` and :math:`(D, r(C))` should be apart, with :math:`\\mu` the
+        measure's ``meets`` (zero iff the regions overlap, growing with their separation).
+
+        * A measure whose ``meets`` *is the distance* of the two regions
+          (``meets_is_distance``: boxes, balls) reads the published form of Box2EL and DELE,
+          :math:`(\\delta - \\mu_1)^2 + (\\delta - \\mu_2)^2`: the distances are pushed to
+          :math:`\\delta`, which is zero at :math:`\\mu = \\delta` and also penalises a pair that
+          is further apart.
+        * Any other measure reads the hinge
+          :math:`\\max(0, \\delta - \\mu_1)^2 + \\max(0, \\delta - \\mu_2)^2`, which is zero
+          exactly when both pairs are at least :math:`\\delta` apart in the measure's own units
+          (:math:`\\mu > 0` means no overlap, so a zero cost implies the negative holds). It
+          needs :math:`\\delta > 0`.
+        """
         first = measure.meets(sub, self.sharp_preimage(ids, filler), margin)
         second = measure.meets(filler, self.image(ids, sub), margin)
-        return (delta - first).square() + (delta - second).square()
+        if getattr(measure, "meets_is_distance", False):
+            return (delta - first).square() + (delta - second).square()
+        if not delta > 0:
+            raise ConstructorUnavailable(
+                f"The negative of {type(measure).__name__} is read as 'at least delta apart', "
+                f"which a delta of {delta!r} (not positive) always satisfies.")
+        return th.relu(delta - first).square() + th.relu(delta - second).square()
 
     @generic
     def preimage_all(self, ids, region, clamp=True):

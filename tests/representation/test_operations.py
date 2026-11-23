@@ -344,3 +344,66 @@ def test_generic_non_inclusion_is_zero_only_where_a_point_of_a_is_outside_b():
     in_b = ((a.centre >= b.lower) & (a.centre <= b.upper)).all(1)
     inside = ((a.lower >= b.lower) & (a.upper <= b.upper)).all(1)
     assert not bool(in_b[zero].any()) and not bool(inside[zero].any())
+
+
+# -- the generic negative of an existential is sound for any measure --------------------------
+class _NotADistance(Bounds):
+    """Boxes with a ``meets`` that is not declared to be the distance."""
+    meets_is_distance = False
+
+
+class _BallNotADistance(CentreDistance):
+    meets_is_distance = False
+
+
+def _negative_parts(measure, make, delta=0.5, n=400):
+    th.manual_seed(0)
+    rel = Translation(3, D)
+    with th.no_grad():
+        rel.vectors.weight.mul_(0.2)
+    ids = th.zeros(n, dtype=th.long)
+    c, d = make(n, 21), make(n, 22)
+    first = measure.meets(c, rel.sharp_preimage(ids, d), 0.0)
+    second = measure.meets(d, rel.image(ids, c), 0.0)
+    return rel, ids, c, d, first, second
+
+
+@pytest.mark.parametrize("measure, make", [(_NotADistance(), boxes), (_BallNotADistance(), balls)],
+                         ids=["boxes", "balls"])
+def test_generic_negative_is_zero_exactly_when_both_pairs_are_apart_by_delta(measure, make):
+    delta = 0.3
+    rel, ids, c, d, first, second = _negative_parts(measure, make)
+    cost = rel.subsumed_negative(measure, c, ids, d, 0.0, delta).squeeze(-1)
+    satisfied = ((first >= delta) & (second >= delta)).squeeze(-1)
+    assert bool(satisfied.any()) and bool((~satisfied).any())
+    assert bool((cost[satisfied] == 0).all()) and bool((cost[~satisfied] > 0).all())
+    # a zero cost means that neither pair overlaps: the negative is satisfied
+    assert bool((first[satisfied] > 0).all()) and bool((second[satisfied] > 0).all())
+    # the distance measures keep the published form (zero only at the distance delta)
+    published = Bounds() if make is boxes else CentreDistance()
+    pushed = rel.subsumed_negative(published, c, ids, d, 0.0, delta).squeeze(-1)
+    first_p = published.meets(c, rel.sharp_preimage(ids, d), 0.0)
+    assert th.allclose(pushed, ((delta - first_p).square()
+                                + (delta - published.meets(d, rel.image(ids, c), 0.0)
+                                   ).square()).squeeze(-1))
+    with pytest.raises(ConstructorUnavailable, match="not positive"):
+        rel.subsumed_negative(measure, c, ids, d, 0.0, 0.0)
+
+
+def test_generic_negative_refuses_a_measure_without_an_overlap_test_for_cones():
+    from mowl.representation.library.hierarchy_measures import ConeAngle
+    from mowl.representation.library.hierarchy_regions import ConePoint
+    from mowl.representation.library.manifolds import Euclidean
+
+    class Identity(Translation):
+        def sharp_preimage(self, ids, region):
+            return region
+
+        def image(self, ids, region):
+            return region
+
+    g = th.Generator().manual_seed(1)
+    cone = ConePoint(th.randn(2, D, generator=g), Euclidean(), None)
+    with pytest.raises(ConstructorUnavailable, match="^not implemented: ConeAngle has no formula for the overlap"):
+        Identity(3, D).subsumed_negative(ConeAngle(), cone, th.zeros(2, dtype=th.long), cone,
+                                         0.0, 0.5)

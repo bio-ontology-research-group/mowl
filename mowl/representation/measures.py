@@ -103,6 +103,13 @@ class RegionMeasure(Operations):
     #: former and require the latter to be declared.
     reading = "truth"
 
+    #: Whether ``meets`` is the distance of the two regions (zero iff they overlap, otherwise
+    #: how far apart they are): the Euclidean distance of two boxes or of two balls. The
+    #: negative of an existential reads such a measure in the published form of Box2EL and
+    #: DELE; for any other measure it is a hinge
+    #: (:meth:`~mowl.representation.Relations.subsumed_negative`).
+    meets_is_distance = False
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         for name in RELATIONS:
@@ -322,6 +329,8 @@ class CentreDistance(RegionMeasure):
     Part (vocabulary value): ``centre distance``. Used by: ``elem``, ``emelpp``, ``emelvar``.
     """
 
+    meets_is_distance = True
+
     accepts = (Ball,)
     part = "centre distance"
     exact_intersection = False
@@ -431,6 +440,8 @@ class Bounds(RegionMeasure):
     Part (vocabulary value): ``bounds per coordinate``. Used by: ``box2el``, ``elbe``,
     ``multiboxel``, ``multielbe``, ``query2box``.
     """
+
+    meets_is_distance = True
 
     accepts = (Box,)
     part = "bounds per coordinate"
