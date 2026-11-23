@@ -126,6 +126,9 @@ class SlotBoxes(UnionOfBoxes):
     w: th.Tensor = None
     active: th.Tensor = None
 
+    #: Not mapped box by box: the mask of the slots would be lost.
+    component = None
+
     @classmethod
     def make(cls, centre, w, active, bump=None):
         return cls(centre, th.abs(w), bump, w, active)

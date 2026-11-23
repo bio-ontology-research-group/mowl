@@ -9,12 +9,19 @@ from dataclasses import dataclass, replace
 
 import torch as th
 
-__all__ = ["Region", "Ball", "Box", "CornerBox", "ConstructorUnavailable"]
+__all__ = ["Region", "Ball", "Box", "CornerBox", "ConstructorUnavailable",
+           "MarginUnavailable"]
 
 
 class ConstructorUnavailable(TypeError):
     """The region family is not closed under the requested constructor (two balls do not
     intersect in a ball), or the geometry does not define it."""
+
+
+class MarginUnavailable(ConstructorUnavailable, ValueError):
+    """A measure (or objective) that cannot read the margin it is given: a graded truth
+    value, a signed score that a constant shift does not change, a log-probability under a
+    slack. A :class:`ValueError` as well, for the code that checks margins as values."""
 
 
 class Region:
@@ -54,6 +61,57 @@ class Region:
         """The region of :math:`C \\sqcup D` (families closed under union: fuzzy sets,
         unions of boxes)."""
         raise ConstructorUnavailable(f"{type(self).__name__} has no union.")
+
+    #: Region classes this family is an exact special case of (a point is a box of no
+    #: width): a measure of those families compares it through :meth:`view_as`.
+    views = ()
+
+    @classmethod
+    def viewable_as(cls, families):
+        """Whether the regions of this class are exactly regions of one of ``families``
+        (declared by this class, :attr:`views`, or by the family, :meth:`represents`)."""
+        families = families if isinstance(families, tuple) else (families,)
+        return any(issubclass(view, families) for view in cls.views) or any(
+            isinstance(f, type) and issubclass(f, Region) and f.represents(cls)
+            for f in families)
+
+    def view_as(self, families):
+        """The same set as a region of one of ``families`` (``None`` if it is none)."""
+        families = families if isinstance(families, tuple) else (families,)
+        for family in families:
+            if isinstance(family, type) and issubclass(family, Region) \
+                    and family.represents(type(self)):
+                return family.from_region(self)
+        return None
+
+    @classmethod
+    def represents(cls, region_class):
+        """Whether every region of ``region_class`` is exactly a region of this family (an
+        octagon product represents boxes); default: none other."""
+        return False
+
+    @classmethod
+    def from_region(cls, region):
+        """The region of this family that equals ``region`` (see :meth:`represents`)."""
+        raise ConstructorUnavailable(f"{cls.__name__} does not represent "
+                                     f"{type(region).__name__} regions.")
+
+    def volume(self):
+        """``(B, 1)``: the Lebesgue volume of each region (zero for an empty one). Families
+        with a closed form have it."""
+        raise ConstructorUnavailable(f"{type(self).__name__} has no volume.")
+
+    def contract(self):
+        """The region contracted to its centre: the degenerate region of the same family
+        (a box or ball of size zero) at the centre."""
+        raise ConstructorUnavailable(f"{type(self).__name__} cannot be contracted to its "
+                                     f"centre.")
+
+    def detach_size(self):
+        """The same region with its size (radius, half-widths) detached from the graph, so
+        that a loss computed from it moves only the location (the frozen negatives of the
+        box lattice model)."""
+        raise ConstructorUnavailable(f"{type(self).__name__} cannot detach its size.")
 
     def is_empty(self):
         """``(B,)`` boolean tensor: whether the region of each row is the empty set. A
@@ -97,6 +155,13 @@ class Ball(Region):
     def translate(self, vector):
         return replace(self, centre=self.centre + vector)
 
+    def contract(self):
+        return replace(self, radius=th.zeros_like(self.radius), raw=None)
+
+    def detach_size(self):
+        return replace(self, radius=self.radius.detach(),
+                       raw=None if self.raw is None else self.raw.detach())
+
     def is_empty(self):
         """Never: the radius is non-negative (a ball of radius 0 is a point)."""
         return th.zeros(len(self), dtype=th.bool, device=self.centre.device)
@@ -130,6 +195,16 @@ class Box(Region):
     @property
     def upper(self):
         return self.centre + self.offset
+
+    def volume(self):
+        """The product of the side lengths, zero where the box is empty."""
+        return th.relu(self.upper - self.lower).prod(dim=-1, keepdim=True)
+
+    def contract(self):
+        return replace(self, offset=th.zeros_like(self.offset))
+
+    def detach_size(self):
+        return replace(self, offset=self.offset.detach())
 
     def is_empty(self):
         """Whether the upper corner lies below the lower one in some coordinate. With
@@ -198,6 +273,16 @@ class CornerBox(Box):
     @property
     def upper(self):
         return self.high
+
+    def contract(self):
+        middle = (self.low + self.high) / 2
+        return replace(self, centre=middle, offset=th.zeros_like(self.offset), low=middle,
+                       high=middle)
+
+    def detach_size(self):
+        middle, half = (self.low + self.high) / 2, ((self.high - self.low) / 2).detach()
+        return replace(self, centre=middle, offset=half.abs(), low=middle - half,
+                       high=middle + half)
 
     def translate(self, vector):
         return CornerBox.from_corners(self.low + vector, self.high + vector)

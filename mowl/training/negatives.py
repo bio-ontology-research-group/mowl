@@ -208,7 +208,8 @@ class CorruptionNegatives(TrainingRegime):
                 absent = set(self._loaded_but_absent(model))
                 missing = sorted(set(self.columns) - set(capable) - absent)
                 if missing:
-                    raise TypeError(
+                    from mowl.representation.regions import ConstructorUnavailable
+                    raise ConstructorUnavailable(
                         f"{type(self).__name__} was asked for negatives of {missing}, but "
                         f"{type(model.module).__name__} has no negative loss for them "
                         f"(neg_capable_gcis={sorted(capable)}). Restrict 'columns', or "

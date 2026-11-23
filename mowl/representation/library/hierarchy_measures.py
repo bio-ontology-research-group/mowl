@@ -32,7 +32,8 @@ import torch.nn.functional as F
 from mowl.representation.library.manifolds import Euclidean, UpperHalfSpace
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import DEFAULT_MEASURE, register_measure
-from mowl.representation.regions import Ball, Box, ConstructorUnavailable, CornerBox
+from mowl.representation.regions import (Ball, Box, ConstructorUnavailable, CornerBox,
+                                         MarginUnavailable)
 from mowl.representation.library.hierarchy_regions import (
     CodedBox, ConePoint, Disk, OrderCone, ManifoldPoint, depth, join, meet, volume)
 from mowl.representation.library.cone_regions import (
@@ -51,7 +52,7 @@ class _LogProbability:
     @staticmethod
     def _no_margin(margin, what):
         if margin:
-            raise ValueError(f"{what} is a log-probability and has no margin; pass 0.")
+            raise MarginUnavailable(f"{what} is a log-probability and has no margin; pass 0.")
 
 
 class HierarchyMeasure(_LogProbability, RegionMeasure):
@@ -116,9 +117,22 @@ class EnergyMeasure(HierarchyMeasure):
         self.check(a, b)
         if self.signed:
             if margin:
-                raise ValueError("A signed energy has no margin; pass 0.")
+                raise MarginUnavailable(
+                    "A signed energy has no margin: a constant added to an unhinged score "
+                    "changes neither the ranking nor the gradient; pass 0.")
             return self.raw(a, b)
         return th.relu(self.raw(a, b) + margin)
+
+    def outside(self, a, b, margin=0.0):
+        """Zero iff ``a`` is not inside ``b`` by at least ``margin``: the energy, which is
+        :math:`\\le 0` exactly where ``a`` lies inside ``b``, is at least ``margin``
+        (:math:`\\max(0, m - e)`)."""
+        self.check(a, b)
+        if self.reading != "truth":
+            raise ConstructorUnavailable(
+                f"{type(self).__name__} is a ranking score, so its energy says nothing about "
+                f"non-inclusion.")
+        return th.relu(margin - self.raw(a, b))
 
     def negative_of(self, energy, margin=0.0):
         """The cost of a pair that is not ordered, from its ``energy``: the hinge
@@ -370,7 +384,10 @@ class LogVolumeRatio(_LogProbability, Bounds):
 
     # -- the costs ---------------------------------------------------------------------------
     def inside(self, a, b, margin=0.0):
-        self._no_margin(margin, "The log volume ratio")
+        """:math:`-\\log P(b \\mid a)`; with a strict margin :math:`m`, of ``a`` enlarged by
+        :math:`m` (zero iff the enlarged box lies inside ``b``, as
+        :class:`~mowl.representation.Bounds` reads a margin); a slack is refused."""
+        a = self.grown(a, margin, "The log volume ratio")
         if self.smoothed:
             return self.energy(a, b).clamp(min=0.0).to(a.centre.dtype)
         p, gap = self.conditional(a, b)
@@ -390,8 +407,9 @@ class LogVolumeRatio(_LogProbability, Bounds):
         return (-th.log1p(-p.clamp(min=0.0, max=1.0 - self.eps))).to(a.centre.dtype)
 
     def apart(self, a, b, margin=0.0):
-        """:math:`P(b \\mid a)`: small when the boxes are (nearly) disjoint."""
-        self._no_margin(margin, "The log volume ratio")
+        """:math:`P(b \\mid a)`: small when the boxes are (nearly) disjoint; with a strict
+        margin, of ``a`` enlarged by it."""
+        a = self.grown(a, margin, "The log volume ratio")
         if self.smoothed:
             return th.exp(-self.energy(a, b)).to(a.centre.dtype)
         p, _ = self.conditional(a, b)

@@ -1,7 +1,7 @@
 """The formulas that live in the library as parts of a region kind are used by more than the
 method that publishes them.
 
-* ``octagon_bounds`` (the measure ``"octagon bounds"`` of octagon products) on boxes written
+* ``OctagonBounds`` (the measure ``"octagon bounds"`` of octagon products) on boxes written
   as octagons lies between the box measure ``Bounds`` and ``sqrt(5)`` times it (the
   documented relation to ELBE's box inclusion loss);
 * ``boundary_depth`` (the measure ``"boundary and depth"``) is a swap for ELBE: the module

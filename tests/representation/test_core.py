@@ -76,8 +76,16 @@ class TestMeasures(TestCase):
         self.assertTrue(th.equal(measure.negative(a, b, 0.1), measure.apart(a, b, 0.1)))
         self.assertTrue(th.equal(measure.meets_all(a, b), measure.meets(a, b)))
         self.assertIs(measure.bind(None), measure)
+        # non-inclusion has no generic definition: a measure without its own refuses it
+        from mowl.representation.measures import RegionMeasure
+
+        class Bare(RegionMeasure):
+            accepts = (Box,)
         with self.assertRaises(ConstructorUnavailable):
-            measure.outside(a, b)
+            Bare().outside(a, b)
+        # boxes have one: zero where a box sticks out of the other
+        far = Box(a.centre + 10, a.offset)
+        self.assertTrue(bool((measure.outside(far, b) == 0).all()))
 
     def test_empty_takes_a_margin(self):
         a = BoxClasses(3, 2)(th.arange(3))

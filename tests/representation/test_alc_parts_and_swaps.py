@@ -258,7 +258,6 @@ REFUSED = [
     ("falcon", "relations", "translation", "open domain"),
     ("falcon", "individuals", "fuzzy set", "not read"),
     ("falcon", "measure", "half-axis hinge", "member_at"),
-    ("falcon", "objective_options", {"rule": True}, "rule=True"),
     ("falcon", "objective_options", {"margin": 0.07}, "no margin"),
     ("dfalc", "measure", "half-axis hinge", "logits"),
     ("dfalc", "classes", "half-axis cone", "logits"),
@@ -291,6 +290,8 @@ WORKS = [
     ("dfalc", "measure", "conflict"),
     ("dfalc", "individuals", "fuzzy set"),
     ("dfalc", "objective_options", {"rule": True}),
+    # the rule-based losses read the degrees of the pairs of FALCON's domain as a matrix
+    ("falcon", "objective_options", {"rule": True}),
     ("alcone", "objective", F.FuzzyObjective.dfalc()),
     ("alcone", "objective_options", {"weighting": AxiomKindWeighting(0.6, 0.2)}),
 ]

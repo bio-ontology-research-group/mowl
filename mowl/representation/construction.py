@@ -655,7 +655,9 @@ class ExactMeasure(RegionMeasure):
     @staticmethod
     def _margin(margin):
         if margin:
-            raise ValueError("An exact measure has no margin (the relations hold or do not).")
+            from mowl.representation.regions import MarginUnavailable
+            raise MarginUnavailable("An exact measure has no margin (the relations hold or "
+                                    "do not).")
 
     # -- the three questions, as booleans ------------------------------------------------------
     def _empty(self, a):

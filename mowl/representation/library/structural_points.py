@@ -195,17 +195,21 @@ class PointTerms(nn.Module):
                         out)
 
     def bumps(self, g, elements):
-        """The bump vector of the class or individual each element stands for."""
+        """The bump vector of the class or individual each element stands for (zero for a
+        class or individual model without bumps, as the head and tail boxes read a region
+        without one)."""
         ps = self.supervision
         idx = elements.to(self.elem_embed.weight.device, th.long)
         is_individual = ps.element_is_individual.to(idx.device)[idx]
         own = ps.element_class_index.to(idx.device)[idx]
-        classes = g.class_model.bumps
-        out = classes(own.clamp(max=len(g.class_model) - 1))
+        zero = self.elem_embed.weight.new_zeros(len(idx), self.elem_embed.embedding_dim)
+        classes = getattr(g.class_model, "bumps", None)
+        out = zero if classes is None else classes(own.clamp(max=len(g.class_model) - 1))
         if bool(is_individual.any()):
-            individuals = g.individual_model.bumps
+            individuals = getattr(g.individual_model, "bumps", None)
             out = out.clone()
-            out[is_individual] = individuals(own[is_individual])
+            out[is_individual] = 0.0 if individuals is None \
+                else individuals(own[is_individual])
         return out
 
     # -- the losses -----------------------------------------------------------------------

@@ -13,7 +13,6 @@ Everything the four methods share is an option of the core
   empty boxes inside everything, hinged negative assertions).
 """
 
-from mowl.representation.library.boxrel_boxes import signed_intersection
 from mowl.representation.objectives import Objective
 import torch as th
 
@@ -85,7 +84,7 @@ class TransBoxObjective(Objective):
 
     def gci2(self, g, rows, neg=False):
         sub, filler = g.classes(rows[:, 0]), g.classes(rows[:, 2])
-        exists = g.relation_model.preimage(rows[:, 1], filler)
+        exists = g.exists(rows[:, 1], filler)
         if neg:
             if self.reference:
                 return g.measure.apart(sub, exists, -self.margin)
@@ -96,7 +95,8 @@ class TransBoxObjective(Objective):
     def _target(self, g, relation, filler, exists):
         if not self.enhanced:
             return exists
-        return g.relation_model.preimage_all(relation, filler, clamp=not self.reference)
+        return g.relation_model.operation("preimage_all", "enhanced=True")(
+            relation, filler, clamp=not self.reference)
 
 
 # ==========================================================================================
@@ -172,7 +172,8 @@ class ELKEmObjective(Objective):
     def gci1(self, g, rows, neg=False):
         m = self._m_of(g)
         a, b, e = (g.classes(rows[:, i]) for i in range(3))
-        cost = g.measure.inside(signed_intersection(a, b), e, m)
+        region, _ = g.measure.intersect(a, b)    # boxes: the signed intersection
+        cost = g.measure.inside(region, e, m)
         over = g.measure.meets(a, b, m)
         trivial = g.measure.is_empty(a) | g.measure.is_empty(b)
         return cost + th.where(trivial, th.zeros_like(over), over)
@@ -190,24 +191,39 @@ class ELKEmObjective(Objective):
         cost = g.measure.apart(a, b, self._m_of(g))
         return self._trivial_to_zero(cost, g.measure.is_empty(a), g.measure.is_empty(b))
 
+    @staticmethod
+    def _range(g, ids):
+        """The range of the relations ``ids`` (``None``: the whole space, for a relation
+        model onto the space, which constrains nothing)."""
+        return g.relation_model.operation("range", "ELKEmObjective")(ids)
+
     def gci2(self, g, rows, neg=False):
         m = self._m_of(g)
         filler = g.classes(rows[:, 2])
         cost = g.measure.inside(g.classes(rows[:, 0]), g.exists(rows[:, 1], filler), m)
         if self.gci2_overlap:
-            cost = cost + g.measure.meets(g.relation_model.range(rows[:, 1]), filler, m)
+            box = self._range(g, rows[:, 1])
+            if box is not None:
+                cost = cost + g.measure.meets(box, filler, m)
         return cost
 
     def gci3(self, g, rows, neg=False):
         m = self._m_of(g)
         filler = g.classes(rows[:, 1])
         cost = g.measure.inside(g.exists(rows[:, 0], filler), g.classes(rows[:, 2]), m)
-        over = g.measure.meets(g.relation_model.range(rows[:, 0]), filler, m)
+        box = self._range(g, rows[:, 0])
+        if box is None:              # the whole space meets every non-empty filler
+            return cost
+        over = g.measure.meets(box, filler, m)
         return cost + th.where(g.measure.is_empty(filler), th.zeros_like(over), over)
 
     def gci3_bot(self, g, rows, neg=False):
         filler = g.classes(rows[:, 1])
-        cost = g.measure.apart(g.relation_model.range(rows[:, 0]), filler, self._m_of(g))
+        box = self._range(g, rows[:, 0])
+        if box is None:              # the whole space is apart only from an empty filler
+            cost = g.measure.empty(filler, self._m_of(g))
+        else:
+            cost = g.measure.apart(box, filler, self._m_of(g))
         return self._trivial_to_zero(cost, g.measure.is_empty(filler))
 
     def class_assertion(self, g, rows, neg=False):
@@ -219,6 +235,9 @@ class ELKEmObjective(Objective):
         m = self._m_of(g)
         a, b = g.individuals(rows[:, 0]), g.individuals(rows[:, 2])
         relations = g.relation_model
-        cost = g.measure.inside(a, relations.image_with_error(rows[:, 1], b), m)
-        cost = cost + g.measure.inside(b, relations.range(rows[:, 1]), m)
+        image = relations.operation("image_with_error", "ELKEmObjective")
+        cost = g.measure.inside(a, image(rows[:, 1], b), m)
+        box = self._range(g, rows[:, 1])
+        if box is not None:
+            cost = cost + g.measure.inside(b, box, m)
         return self._hinge(cost) if neg else cost

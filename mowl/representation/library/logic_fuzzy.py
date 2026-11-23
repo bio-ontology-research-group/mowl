@@ -46,6 +46,7 @@ from mowl.representation.library.logic_alc import (
     AnnealedRelaxation, ExpressionGeometry, ExpressionReading, Relaxation)
 from mowl.representation.library.logic_expressions import pattern_region
 from mowl.representation.measures import RegionMeasure
+from mowl.representation.regions import MarginUnavailable
 from mowl.representation.methods import (register_class_model, register_measure,
                                          register_method, register_relation_model)
 from mowl.representation.objectives import Objective
@@ -792,6 +793,12 @@ class PairNetworkRelations(Relations):
         return self.network(head_vectors.unsqueeze(1).expand(-1, e.shape[0], -1),
                             e.unsqueeze(0).expand(head_vectors.shape[0], -1, -1))
 
+    def matrix(self, ids):
+        """The degrees of all pairs of the domain, ``(B, N, N)``, source first: the relation
+        as the table that the rule-based readings of DF-ALC read
+        (:class:`TruthMatrix.matrix`)."""
+        return self._pairs(ids)
+
     def _pairs(self, ids):
         """``(B, N, N)``: degree of ``r(x, y)`` for all pairs of the domain."""
         r = self.vectors(ids)
@@ -904,10 +911,6 @@ class MeanViolation(_FuzzyMeasure):
     def apart_at(self, degree):
         """The cost :math:`C(a)` of an element that is not to be in :math:`C`."""
         return th.relu(degree)
-
-
-class MarginUnavailable(ConstructorUnavailable, ValueError):
-    """A measure that has no margin was given one (a :class:`ValueError` too)."""
 
 
 class ConflictMeasure(_FuzzyMeasure):
