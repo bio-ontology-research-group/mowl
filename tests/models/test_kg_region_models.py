@@ -92,6 +92,20 @@ def test_reshuffle_defaults_are_those_of_the_authors_best_configuration(dataset)
     assert (classes.l, classes.k, classes.num_layers) == (4, 5, 1)
 
 
+def test_reshuffle_takes_the_loss_options_of_the_published_configurations(dataset):
+    """Every published RESHUFFLE recipe gives the margin as ``loss_kwargs``."""
+    from mowl.benchmarks.recipe_sets.pavlovic2025 import RECIPES
+    for recipe in RECIPES:
+        loss_kwargs = recipe.model_kwargs["kge_kwargs"]["loss_kwargs"]
+        kge_kwargs = dict(recipe.model_kwargs["kge_kwargs"])
+        model = Reshuffle(dataset, l=4, k=5, num_layers=1, kge_kwargs=kge_kwargs)
+        loss = model.module.loss
+        assert (loss.margin, loss.reduction) == (loss_kwargs["margin"], "mean")
+    with pytest.raises(TypeError, match="not both"):
+        Reshuffle(dataset, l=4, k=5, num_layers=1, loss="margin_ranking",
+                  kge_kwargs={"loss_kwargs": {"margin": 1.0}})
+
+
 def test_expressive_options_reach_the_interaction(dataset):
     model = ExpressivE(dataset, embed_dim=4, min_denom=0.3, p=1, tanh_map=False)
     interaction = model.module.relation_model.interaction
