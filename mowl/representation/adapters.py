@@ -8,7 +8,6 @@ parts get a geometry of their own.
 
 import inspect
 
-from mowl.representation import methods
 from mowl.representation.geometry import Geometry
 
 __all__ = ["geometry_of", "register_adapter", "ADAPTERS"]
@@ -99,19 +98,3 @@ def _call(adapter, obj, model):
     if "model" in parameters[1:]:
         return adapter(obj, model=model if model is not obj else None)
     return adapter(obj)
-
-
-@register_adapter("ELEmModule")
-def _elem(module):
-    return methods.elem(
-        None, None, embed_dim=module.embed_dim, margin=module.margin,
-        reg_norm=module.reg_norm, all_negatives=module.all_negative_losses,
-        linear_negative=module.negative_loss_form == "linear", epsilon=module.epsilon,
-        gci1_radius_term=module.gci1_radius_term, tables=module)
-
-
-@register_adapter("ELBEModule")
-def _elbe(module):
-    return methods.elbe(None, None, margin=module.margin,
-                        all_negatives=module.all_negative_losses, epsilon=module.epsilon,
-                        gci3=module.gci3_form, tables=module)

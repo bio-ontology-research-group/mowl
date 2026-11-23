@@ -29,7 +29,6 @@ from mowl.representation.library.multibox_parts import (
     BumpedBoxClasses, HeadTailRelations, PackedUnionClasses, PairUnions, SampledVolume,
     UnionClasses, UnionMeasure, _packed_init, sobol_points)
 from mowl.representation.measures import Bounds
-from mowl.representation.adapters import register_adapter
 from mowl.representation.methods import (CLASS_MODELS, MEASURES, RELATION_MODELS,
                                          register_method)
 from mowl.representation.relation_models import Translation
@@ -487,44 +486,3 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
 # ------------------------------------------------------------------------------------
 # adapters
 # ------------------------------------------------------------------------------------
-
-@register_adapter("BoxSquaredELModule")
-def _box2el(module):
-    return box2el(None, None, embed_dim=module.embed_dim, margin=module.gamma,
-                  delta=module.delta, reg_factor=module.reg_factor,
-                  all_negatives=module.all_negative_losses, epsilon=module.epsilon,
-                  tables=module)
-
-
-@register_adapter("MultiBoxELModule")
-def _multiboxel(module):
-    """The geometry of the module in its own objective (``module.objective``); with the
-    structural objective the geometry has the module's definition table, targets and
-    witness points as they are *now* (call again after ``set_structural_tables``)."""
-    structural = module.objective == "structural"
-    return multiboxel(None, None, embed_dim=module.embed_dim,
-                      margin=module.margin if structural else module.gamma,
-                      n_components=module.n_components, delta=module.delta,
-                      reg_factor=module.reg_factor, component_reg=module.component_reg,
-                      component_aggregation=module.component_aggregation,
-                      diversity_reg=module.diversity_reg, reading=module.objective,
-                      max_components=module.max_components,
-                      existence_weight=module.existence_weight, size_reg=module.size_reg,
-                      bot_agg=module.bot_agg, witness_weight=module.witness_weight,
-                      size_reg_without_tables=getattr(module, "size_reg_without_tables", False),
-                      structural_definitions=getattr(module, "structural_definitions", True),
-                      tables=module)
-
-
-@register_adapter("MultiELBEModule")
-def _multielbe(module):
-    return multielbe(None, None, embed_dim=module.embed_dim, margin=module.margin,
-                     n_components=module.n_components, component_reg=module.component_reg,
-                     component_aggregation=module.component_aggregation,
-                     diversity_reg=module.diversity_reg, reading=module.objective,
-                     tables=module)
-
-
-@register_adapter("VolumeMultiBoxELModule")
-def _mcmultibox(module):
-    return mcmultibox(None, None, embed_dim=module.embed_dim, tables=module)

@@ -192,9 +192,6 @@ class GroundedGeometry(Geometry):
                 "conjunction": "exact"}
 
 
-register_adapter("GroundedELModule")(GroundedGeometry)
-
-
 # -- canonical mixture -----------------------------------------------------------------------
 class ElementSet(Region):
     """A set of canonical elements: ``mask`` is ``(B, |S|)`` with entries 0.0 or 1.0."""
@@ -302,9 +299,6 @@ class CanonicalMixtureGeometry(Geometry):
     def parts(self):
         return {"classes": "canonical element", "relations": "fixed by reasoning",
                 "individuals": "distribution", "measure": "exact", "conjunction": "exact"}
-
-
-register_adapter("CanonicalMixtureModule")(CanonicalMixtureGeometry)
 
 
 # -- faithel ---------------------------------------------------------------------------------

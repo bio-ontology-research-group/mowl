@@ -4,7 +4,7 @@ import numpy as np
 import torch as th
 from tqdm import trange
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.elkem.losses import pearson_contrastive_loss
 from mowl.baselines.nn.el.elkem.module import ELKEmModule
 

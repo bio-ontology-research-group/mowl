@@ -4,7 +4,7 @@ from collections import namedtuple
 import numpy as np
 import torch as th
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.boxsel import losses as S
 from mowl.baselines.nn.el.boxsel.module import BoxSELModule
 

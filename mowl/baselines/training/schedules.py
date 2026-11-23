@@ -6,7 +6,7 @@ builds the optimiser (the model's own, from
 ``base_optimizer``) and changes its learning rate at the start of every epoch, i.e. after
 the step of the previous epoch -- which is where ``scheduler.step()`` sits in the
 reference loops of the papers. A schedule regime must be the regime that provides the
-optimiser: in a :class:`~mowl.baselines.training.ComposedRegime`, no earlier regime may return an
+optimiser: in a :class:`~mowl.training.ComposedRegime`, no earlier regime may return an
 optimiser.
 
 * :class:`StepDecay`: multiply the learning rate by ``gamma`` at given epochs --
@@ -179,11 +179,10 @@ class TemperatureAnnealing(TrainingRegime):
 
     def attach(self, model):
         module = getattr(model, "module", None)
-        if not (hasattr(module, "set_tau") or hasattr(module, "tau")
-                or hasattr(module, "temperature")):
+        if not (hasattr(module, "set_tau") or hasattr(module, "tau")):
             raise TypeError(
                 f"TemperatureAnnealing needs a model whose module has a temperature "
-                f"('set_tau', 'tau' or 'temperature'); {type(model).__name__} has none.")
+                f"('set_tau' or 'tau'); {type(model).__name__} has none.")
         super().attach(model)
 
     def value_at(self, epoch, epochs):
@@ -200,12 +199,10 @@ class TemperatureAnnealing(TrainingRegime):
         module = self.model.module
         if hasattr(module, "set_tau"):
             module.set_tau(tau)
-        elif hasattr(module, "tau"):
+        else:
             module.tau = tau
             if hasattr(self.model, "tau") and not callable(self.model.tau):
                 self.model.tau = tau
-        else:
-            module.temperature = tau
         self.history.append(tau)
 
 
@@ -270,7 +267,7 @@ class ReduceOnPlateau(_Schedule):
     optimizer and ReduceLROnPlateau scheduler with patience parameter 10", monitoring the
     validation loss of the predicted normal form (reference implementation), and stop
     early "if validation loss does not improve for 20 epochs". With
-    :class:`~mowl.baselines.training.PerNormalFormMiniBatches` one epoch of mOWL is one *step*, so
+    :class:`~mowl.training.PerNormalFormMiniBatches` one epoch of mOWL is one *step*, so
     pass ``every`` (or ``every=None`` to take the steps per epoch of the batching regime
     of the same composition) to reduce and stop once per paper epoch, and ``stop=True``
     to end training when ``stop_patience`` paper epochs passed without improvement (the
@@ -283,7 +280,7 @@ class ReduceOnPlateau(_Schedule):
     :param every: Monitor (and step the scheduler) every ``every`` epochs (mOWL epochs,
         i.e. optimisation steps when a batching regime is composed). ``1`` (the default)
         monitors every epoch; ``None`` takes the steps per epoch of a
-        :class:`~mowl.baselines.training.PerNormalFormMiniBatches` regime of the same composition.
+        :class:`~mowl.training.PerNormalFormMiniBatches` regime of the same composition.
     :param stop: End training (:meth:`should_stop`) once ``stop_patience`` monitored
         epochs passed without improvement. The default ``False`` only records
         :attr:`stop_epoch`, as before.

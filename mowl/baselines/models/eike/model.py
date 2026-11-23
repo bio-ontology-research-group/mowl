@@ -5,7 +5,7 @@ from urllib.parse import unquote
 import numpy as np
 import torch as th
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.eike.module import EIKEModule
 
 

@@ -727,20 +727,6 @@ class PairHull:
             )
         self.points: np.ndarray = arr
 
-    @classmethod
-    def of_pairs(cls, points: np.ndarray, pairs) -> "PairHull":
-        """Hull of the pairs ``(i, j)`` of rows of ``points``: the rows
-        :math:`v_i \\oplus v_j` (an empty hull for no pairs)."""
-        pairs = list(pairs)
-        k = np.asarray(points).shape[1]
-        if not pairs:
-            return cls(np.zeros((0, 2 * k), dtype=float))
-        return cls(np.vstack([cls.pair_point(points, i, j) for i, j in pairs]))
-
-    @staticmethod
-    def pair_point(points: np.ndarray, i: int, j: int) -> np.ndarray:
-        """The point :math:`v_i \\oplus v_j \\in \\mathbb{R}^{2k}`."""
-        return np.concatenate([points[i], points[j]])
 
     @property
     def is_empty(self) -> bool:

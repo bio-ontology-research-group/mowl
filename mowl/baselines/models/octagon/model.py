@@ -1,5 +1,5 @@
 r"""Octagon-product :math:`\mathcal{EL}^{++}` embedding model."""
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.octagon.module import OctagonELModule
 
 

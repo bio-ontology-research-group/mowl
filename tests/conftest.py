@@ -1,6 +1,8 @@
 import logging
 import pytest
 
+import tests.baselines.adapters  # noqa: F401  (reading baseline objects as library geometries)
+
 from tests.datasetFactory import (
     FamilyDataset,
     FoodOnSubsumptionDataset,

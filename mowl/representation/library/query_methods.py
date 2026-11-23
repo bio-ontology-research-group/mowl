@@ -30,7 +30,6 @@ import torch as th
 import torch.nn as nn
 
 from mowl.nn.query.base import QueryGeometry, UnsupportedOperator
-from mowl.representation.adapters import register_adapter
 from mowl.representation.class_models import Classes
 from mowl.representation.geometry import Geometry
 from mowl.representation.library.query_parts import (
@@ -617,26 +616,6 @@ def acone(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, ga
 
 def _number_of_classes(module):
     return getattr(module, "num_classes", None)
-
-
-@register_adapter("Query2BoxGeometry")
-def _query2box(module):
-    return query2box(tables=module, num_classes=_number_of_classes(module))
-
-
-@register_adapter("BetaEGeometry")
-def _betae(module):
-    return betae(tables=module, num_classes=_number_of_classes(module))
-
-
-@register_adapter("ConEGeometry")
-def _cone(module):
-    return cone_qe(tables=module, num_classes=_number_of_classes(module))
-
-
-@register_adapter("AConEGeometry")
-def _acone(module):
-    return acone(tables=module, num_classes=_number_of_classes(module))
 
 
 def query_geometry(model, extension=None):

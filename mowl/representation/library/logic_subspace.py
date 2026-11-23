@@ -35,7 +35,6 @@ import torch as th
 import torch.nn as nn
 
 from mowl.nn.alc.module import ALCModule
-from mowl.representation.adapters import register_adapter
 from mowl.representation.class_models import Classes
 from mowl.representation.geometry import ComposedGeometry, Geometry
 from mowl.representation.library import logic_subspace_algebra as _algebra
@@ -244,11 +243,6 @@ class E2RGeometry(Geometry):
         return {"classes": "subspace", "relations": "subspace", "individuals": "point",
                 "measure": "point-to-region distance", "conjunction": "exact",
                 "negation": "exact", "disjunction": "exact"}
-
-
-@register_adapter("E2RModule")
-def _e2r(module):
-    return E2RGeometry(module)
 
 
 # =========================================================================================

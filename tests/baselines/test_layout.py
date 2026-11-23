@@ -76,6 +76,9 @@ ALLOWED_NAMES = {
                                               "extraction)",
     ("mowl.projection", "OWL2VecStarProjector"): "reads the ontology into edges (data "
                                                   "extraction)",
+    ("mowl.projection", "projector_factory"): "builds a projector that reads the ontology "
+                                              "into edges (data extraction; the evaluation "
+                                              "filter of the original EL model base)",
 }
 
 

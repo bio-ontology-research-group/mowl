@@ -1,4 +1,4 @@
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
 
 

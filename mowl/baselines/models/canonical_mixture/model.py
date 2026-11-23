@@ -12,7 +12,7 @@ from tqdm import trange
 
 import mowl.baselines.geometric.core.completion as completion_mod
 import mowl.baselines.geometric.core.membership as membership_mod
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.geometric.core.completion import CanonicalModel
 from mowl.baselines.geometric.core.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
 from mowl.baselines.nn.el.canonical_mixture import (

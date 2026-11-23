@@ -1362,5 +1362,4 @@ class PyKEENGeometry(Geometry):
                                   f"module.")
 
 
-register_adapter("GraphPlusPyKEENModel", "RegionKGEModel", "BoxE", "ExpressivE",
-                 "Reshuffle")(PyKEENGeometry)
+register_adapter("GraphPlusPyKEENModel", "BoxE", "ExpressivE", "Reshuffle")(PyKEENGeometry)

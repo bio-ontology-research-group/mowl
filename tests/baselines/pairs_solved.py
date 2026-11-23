@@ -36,8 +36,12 @@ def _kb():
 _DIM = None   # the dimension of Corollary 2 for the KB (set below)
 
 
-def _dim():
-    from mowl.representation.library.solved_boxlite import kb_faithful_dimension
+def _dim(side="new"):
+    """The dimension of Corollary 2, each side by its own code."""
+    if side == "old":
+        from mowl.baselines.models.boxlite.model import kb_faithful_dimension
+    else:
+        from mowl.representation.library.solved_boxlite import kb_faithful_dimension
     return kb_faithful_dimension(_kb())
 
 
@@ -46,9 +50,9 @@ def _boxlite_old(variant):
         from mowl.baselines.models.boxlite.embedding import BoxLitEEmbedding
         from mowl.baselines.models.boxlite.model import BoxLitE
         kb = _kb()
-        model = BoxLitE.from_kb(kb, embed_dim=_dim(), variant=variant)
+        model = BoxLitE.from_kb(kb, embed_dim=_dim("old"), variant=variant)
         rng = np.random.default_rng(1)
-        d = _dim()
+        d = _dim("old")
         ni, nc, nr = len(kb.individuals), len(kb.concepts), len(kb.roles)
 
         def boxes(n):
@@ -119,7 +123,7 @@ def _boxlite_losses(model):
             [[e.concept_loss(int(b), [int(a)])[0]] for a, b in concept.tolist()])
         out["object_property_assertion"] = th.tensor(
             [[e.role_loss(int(r), [int(a)], [int(b)])[0]] for a, r, b in role.tolist()])
-        from mowl.representation.library.solved_boxlite_check import check_model
+        from mowl.baselines.models.boxlite.solved_check import check_model
         out["class_assertion/neg"] = th.tensor(
             [[_negative_loss(e, int(b), int(a))] for a, b in concept.tolist()])
         check = check_model(e, kb, tol=1e-6, max_reports=10 ** 6)
@@ -152,8 +156,8 @@ def _boxlite_scores(model):
 
 def _boxlite_train(model, epochs):
     """The solver run: needs cvxpy."""
-    from mowl.representation.library.solved_solver import CvxpySolver
-    if not CvxpySolver.available():
+    import importlib.util
+    if importlib.util.find_spec("cvxpy") is None:
         if os.environ.get("MOWL_REQUIRE_CVXPY") == "1":
             pytest.fail("MOWL_REQUIRE_CVXPY=1 but cvxpy is not installed")
         pytest.skip("the optional package cvxpy is not installed, so the BoxLitE programme "

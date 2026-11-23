@@ -1,6 +1,6 @@
 import torch as th
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.baselines.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.regd.dissimilarity import contrastive_loss
 from mowl.baselines.nn.el.regd.module import RegDELBEModule, RegDELEmModule
 
