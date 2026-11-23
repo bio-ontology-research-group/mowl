@@ -56,6 +56,10 @@ class Reshuffle(GraphKGEModel):
 
     METHOD = "reshuffle"
 
+    #: ``GraphKGEModel(dataset, method="reshuffle", ...)`` builds the same combination; this
+    #: class names it with the authors' defaults, the early stopping of the paper and the
+    #: inductive scores.
+
     def __init__(self, dataset, l=25,  # noqa: E741
                  k=80, num_layers=4, learning_rate=5e-3, num_negs_per_pos=100,
                  early_stopping=None, inverse_triples=True, kge_kwargs=None, batch_size=1024,
@@ -75,22 +79,6 @@ class Reshuffle(GraphKGEModel):
         self.early_stopping = None if early_stopping is None else dict(early_stopping)
         if self.early_stopping is not None:
             self.training_regime = HitsEarlyStopping(**self.early_stopping)
-
-    def _graph_arguments(self):
-        factory = self.triples_factory
-        subclass = factory.relation_to_id.get(self.SUBCLASS_RELATION, -1)
-        return dict(nb_classes=factory.num_entities, nb_relations=factory.real_num_relations,
-                    subclass_id=subclass, triples=factory.mapped_triples)
-
-    def _embedding_options(self):
-        return {}
-
-    def _entity_table(self):
-        classes = self.module.class_model
-        return lambda idxs: classes.centres(idxs).view(len(idxs), classes.k, classes.l)
-
-    def _relation_table(self):
-        return lambda idxs: self.module.relation_model.raw()[idxs]
 
     def train(self, epochs=0):
         self._inductive = None

@@ -19,11 +19,8 @@ import torch as th
 from functools import partial
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.geometric.faithfulness import StronglyFaithfulModel
-from mowl.geometric.normal_forms import (BOTTOM, TOP, NormalisedOntology, is_nominal_name,
-                                         normalise)
-from mowl.representation.library.solved_faithel import (FaithfulTBox, faith_centroids,
-                                                        faithel as _faithel)
+from mowl.representation.library.solved_faithel import (faith_centroids, faithel_inputs,
+                                                        faithful_tbox, faithel as _faithel)
 from mowl.training.alternating import AlternatingMinibatches
 from mowl.training.loop import RegimeTrained
 from mowl.training.regularization import ModuleProjection, Regularization
@@ -31,17 +28,6 @@ from mowl.training.regularization import ModuleProjection, Regularization
 logger = logging.getLogger(__name__)
 
 __all__ = ["FaithEL"]
-
-
-def _tbox_only(no):
-    """The normalised ontology without ABox axioms (those mentioning a nominal name)."""
-    def nominal(ax):
-        return any(isinstance(v, str) and is_nominal_name(v) for v in vars(ax).values())
-
-    return NormalisedOntology(
-        axioms=[ax for ax in no.axioms if not nominal(ax)],
-        concept_names={c for c in no.concept_names if not is_nominal_name(c)},
-        role_names=set(no.role_names), dropped_axioms=no.dropped_axioms)
 
 
 class FaithEL(RegimeTrained, EmbeddingELModel):
@@ -96,16 +82,7 @@ class FaithEL(RegimeTrained, EmbeddingELModel):
                  centroid_score=True, batch_size=512, learning_rate=0.001,
                  model_filepath=None, device="cpu", seed=None, max_elements=3000,
                  training=None, negative_term="unbounded", neg_margin=1.0):
-        no = _tbox_only(normalise(dataset.ontology))
-        n = len([c for c in no.concept_names if c not in (TOP, BOTTOM)])
-        size = 1 + n + n * (n - 1) // 2 + len(no.role_names) * (n + 1)
-        if size > max_elements:
-            raise ValueError(
-                f"The canonical model of Definition 26 has about {size} elements (one per "
-                f"pair of concept names and per role and concept), more than max_elements="
-                f"{max_elements}; the dimension of FaithEL grows with it. Use a smaller "
-                f"ontology or raise max_elements.")
-        self.tbox = StronglyFaithfulModel(no, regions="convex")
+        self.tbox = faithful_tbox(dataset.ontology, max_elements)
         d = self.tbox.dimension
         super().__init__(dataset, embed_dim=max(d, 1), batch_size=batch_size,
                          extended=True, model_filepath=model_filepath, device=device,
@@ -126,23 +103,18 @@ class FaithEL(RegimeTrained, EmbeddingELModel):
                                self.object_property_index_dict)
 
     def init_module(self):
-        cents, rcents = self._centroids()
-        d = self.tbox.dimension
+        """The geometry of the method (:func:`~mowl.representation.library.solved_faithel.
+        faithel`) with the constructed inputs of :func:`~mowl.representation.library.
+        solved_faithel.faithel_inputs`, which :class:`~mowl.models.ComposedEL` uses too."""
+        inputs = faithel_inputs(self, self.tbox)
         if self.seed is not None:
             th.manual_seed(self.seed)
-        names = {i: n for n, i in self.class_index_dict.items()}
-        roles = {i: n for n, i in self.object_property_index_dict.items()}
-        individuals = {i: n for n, i in self.individual_index_dict.items()}
-        tbox = FaithfulTBox(self.tbox, [names[i] for i in sorted(names)],
-                            [roles[i] for i in sorted(roles)],
-                            [individuals[i] for i in sorted(individuals)])
         module = _faithel(
             len(self.class_index_dict), len(self.object_property_index_dict),
-            len(self.individual_index_dict), embed_dim=d, radius=self.radius, phi=self.phi,
+            len(self.individual_index_dict), radius=self.radius, phi=self.phi,
             gamma=self.gamma, psi=self.psi, neg_sampling=self.neg_sampling,
-            centroid_score=self.centroid_score, tbox=tbox,
-            negative_term=self.negative_term, neg_margin=self.neg_margin, centroids=cents,
-            role_centroids=rcents)
+            centroid_score=self.centroid_score, negative_term=self.negative_term,
+            neg_margin=self.neg_margin, **inputs)
         self.module = module.to(self.device)
 
     @property

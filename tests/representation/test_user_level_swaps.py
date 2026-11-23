@@ -68,6 +68,9 @@ def data(name):
         elif name == "query":
             from tests.datasetFactory import FamilyDataset
             _DATA[name] = FamilyDataset()
+        elif name == "abox":
+            from tests.baselines.pairs_solved import _faithel_dataset
+            _DATA[name] = _faithel_dataset()
         elif name == "ranked":
             from tests.representation.test_recomp_construct import ranked_dataset
             _DATA[name] = ranked_dataset()
@@ -76,8 +79,6 @@ def data(name):
 
 #: Keys that no general model can train from a dataset alone, and why.
 UNSUPPORTED_BY_GENERAL_MODEL = {
-    "faithel": "its TBox is constructed by a reasoner from the ontology and its classes are "
-               "anchored to it; ComposedEL builds from sizes. Train it with FaithEL.",
     "grounded": "GroundedELModule is a grounded program over a shared element domain, "
                 "not an ELModule: ComposedEL refuses it; train it with GroundedEL.",
 }
@@ -106,9 +107,18 @@ def el_options(key):
     return options
 
 
+#: Methods that learn the ABox only (their TBox is constructed): trained on a dataset with
+#: individuals.
+ABOX_METHODS = {"faithel"}
+
+
 def axioms_model(key, **parts):
     th.manual_seed(0)
-    return ComposedEL(data("family"), method=key, **el_options(key), **parts)
+    model = ComposedEL(data("abox" if key in ABOX_METHODS else "family"), method=key,
+                       **el_options(key), **parts)
+    if key in ABOX_METHODS:
+        model.eval_gci_name = "class_assertion"
+    return model
 
 
 def alc_model(key, **parts):
@@ -336,6 +346,10 @@ _NO_CLASS_FOR_MEASURE = (
 #: report of this test); written for inspection.
 UNREAD_OPTIONS = {}
 REFUSES_EVERY = {
+    ("faithel", "classes"): "a class of FaithEL is a moving point anchored at the centroid of "
+                            "its region in the constructed TBox model, and the anchor distance "
+                            "compares anchored regions: a class model without anchors is "
+                            "refused",
     ("boxsel", "objective_options"): "the only option it has is the margin, and its volume "
                                      "measure ignores a margin (BoxEL and BoxSEL have none)",
     ("boxlite", "classes"): "the measure reads the lower and upper corner tables of its own "
@@ -498,11 +512,11 @@ def test_a_method_no_general_model_trains_says_so(key):
             OUTCOMES[(key, kind)] = (UNSUPPORTED, UNSUPPORTED_BY_GENERAL_MODEL[key])
 
 
-def test_faithel_is_refused_at_build_not_in_training():
-    """FaithEL's TBox is constructed from the ontology: a model built from sizes used to be
-    accepted and to crash in the first training step."""
-    with pytest.raises(ConstructorUnavailable, match="faithel"):
-        ComposedEL(data("family"), method="faithel", embed_dim=D)
+def test_faithel_is_built_with_its_constructed_tbox():
+    """FaithEL's TBox is constructed from the ontology: ComposedEL takes it from the dataset
+    (:mod:`mowl.representation.dataset_inputs`), with the dimension it fixes."""
+    model = ComposedEL(data("abox"), method="faithel", embed_dim=D)
+    assert model.module.tbox is not None and model.embed_dim != D
 
 
 def test_a_relation_model_no_trained_form_reads_is_refused_at_build():
@@ -1035,11 +1049,14 @@ def _graph_effect(base, model, kind):
     return a.shape != b.shape or not th.equal(a, b)
 
 
-GRAPH_REFUSES_EVERY = {}
-#: Reshuffle is a named combination whose entities are encoded by a graph network that uses
-#: the matrices of its own relations: its class and relation models are not swappable, and
-#: the model says so (TypeError, like every named class).
-GRAPH_NOT_SWAPPABLE = {("reshuffle", "classes"), ("reshuffle", "relations")}
+GRAPH_REFUSES_EVERY = {
+    ("reshuffle", "relations"): "RESHUFFLE reads an entity as a k x l matrix and a relation as "
+                                "an l x l matrix, and the encoding of the graph multiplies by "
+                                "them: a relation model without matrices is refused",
+}
+#: Reshuffle takes a class model (learned entity matrices of k * l coordinates instead of the
+#: encoding of the graph); nothing is refused as a whole.
+GRAPH_NOT_SWAPPABLE = set()
 
 
 @pytest.mark.parametrize("kind", GRAPH_KINDS)

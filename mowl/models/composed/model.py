@@ -7,6 +7,7 @@ import torch as th
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn.el.elmodule import ELModule
 from mowl.representation import methods as M
+from mowl.representation.dataset_inputs import dataset_inputs
 from mowl.representation.objectives import Objective
 from mowl.representation.swap import NO_PART, build_method, check_relations_are_read, swap
 from mowl.training.losses import ranking_hinge_loss
@@ -121,6 +122,10 @@ class ComposedEL(EmbeddingELModel):
         if self.method is not None:
             build = M.METHODS[self.method]
             options = dict(self.method_options)
+            # a part constructed from the ontology (FaithEL's TBox), and the dimension it fixes
+            inputs = dataset_inputs(self.method, self)
+            self.embed_dim = inputs.pop("embed_dim", self.embed_dim)
+            options.update(inputs)
             if "margin" in inspect.signature(build).parameters:
                 options["margin"] = self.margin
             module = build_method(

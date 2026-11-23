@@ -40,6 +40,7 @@ from mowl.representation.library.other_constructed import (ConstructedGeometry,
 from mowl.representation.library.shapes_classes import Points
 from mowl.representation.library.shapes_regions import Point
 from mowl.representation.measures import RegionMeasure
+from mowl.representation.dataset_inputs import register_dataset_inputs
 from mowl.representation.methods import register_method
 from mowl.representation.objectives import Objective
 from mowl.representation.regions import ConstructorUnavailable, Region
@@ -48,7 +49,8 @@ from mowl.training.alternating import AlternatingMinibatches, FullBatch  # noqa:
 
 __all__ = ["Anchored", "AnchoredPair", "AnchoredExists", "AnchoredClasses", "AnchoredPairs",
            "AnchorDistance", "AnchoredObjective", "FaithfulTBox", "FaithELGeometry",
-           "AlternatingMinibatches", "FullBatch", "faithel", "faith_centroids"]
+           "AlternatingMinibatches", "FullBatch", "faithel", "faith_centroids",
+           "faithful_tbox", "faithel_inputs"]
 
 
 # -- regions -----------------------------------------------------------------------------------
@@ -149,6 +151,56 @@ class FaithfulTBox(ConstructedGeometry):
             return self.inside(self.exists(rows[:, 0], self.classes(rows[:, 1])),
                                self.classes(rows[:, 2]))
         raise ConstructorUnavailable(f"The constructed TBox has no cost for {form!r}.")
+
+
+def faithful_tbox(ontology, max_elements=3000):
+    """The constructed part of FaithEL: the strongly TBox faithful convex model
+    (:class:`~mowl.geometric.faithfulness.StronglyFaithfulModel`) of the TBox of
+    ``ontology`` (its normal forms without the axioms that mention a nominal).
+
+    :raises ValueError: If the canonical model of Definition 26 would have more than
+        ``max_elements`` elements (the dimension grows with it)."""
+    from mowl.geometric.faithfulness import StronglyFaithfulModel
+    from mowl.geometric.normal_forms import (BOTTOM, TOP, NormalisedOntology,
+                                             is_nominal_name, normalise)
+    no = normalise(ontology)
+
+    def nominal(ax):
+        return any(isinstance(v, str) and is_nominal_name(v) for v in vars(ax).values())
+
+    no = NormalisedOntology(
+        axioms=[ax for ax in no.axioms if not nominal(ax)],
+        concept_names={c for c in no.concept_names if not is_nominal_name(c)},
+        role_names=set(no.role_names), dropped_axioms=no.dropped_axioms)
+    n = len([c for c in no.concept_names if c not in (TOP, BOTTOM)])
+    size = 1 + n + n * (n - 1) // 2 + len(no.role_names) * (n + 1)
+    if size > max_elements:
+        raise ValueError(
+            f"The canonical model of Definition 26 has about {size} elements (one per "
+            f"pair of concept names and per role and concept), more than max_elements="
+            f"{max_elements}; the dimension of FaithEL grows with it. Use a smaller "
+            f"ontology or raise max_elements.")
+    return StronglyFaithfulModel(no, regions="convex")
+
+
+def faithel_inputs(model, tbox=None):
+    """What the builder of ``faithel`` takes from a model (its dataset and index maps): the
+    constructed TBox (:func:`faithful_tbox`, or ``tbox``) as a :class:`FaithfulTBox`, the
+    centroids of its regions and the dimension of its space (``embed_dim``). Registered as
+    the dataset inputs of ``faithel`` (:mod:`mowl.representation.dataset_inputs`), so that
+    :class:`~mowl.models.ComposedEL` builds the method as :class:`~mowl.models.FaithEL`
+    does."""
+    tbox = faithful_tbox(model.dataset.ontology) if tbox is None else tbox
+    cents, rcents = faith_centroids(tbox, model.class_index_dict,
+                                    model.object_property_index_dict)
+
+    def by_id(index):
+        names = {i: n for n, i in index.items()}
+        return [names[i] for i in sorted(names)]
+    return dict(embed_dim=tbox.dimension, centroids=cents, role_centroids=rcents,
+                tbox=FaithfulTBox(tbox, by_id(model.class_index_dict),
+                                  by_id(model.object_property_index_dict),
+                                  by_id(model.individual_index_dict)))
 
 
 def faith_centroids(tbox, class_index_dict, role_index_dict):
@@ -419,6 +471,20 @@ class FaithELGeometry(ComposedGeometry):
                          neg_capable_gcis=())
         self.tbox = tbox
 
+    @property
+    def supported_forms(self):
+        """The forms the geometry scores: the TBox forms (by the constructed TBox) and the
+        assertions; the role assertions only with a relation model (``relations="none"``
+        removes them)."""
+        forms = self._faithel_forms
+        if self.relation_model is None:
+            return frozenset(f for f in forms if f != "object_property_assertion")
+        return forms
+
+    @supported_forms.setter
+    def supported_forms(self, forms):
+        self._faithel_forms = frozenset(forms)
+
     # names of the tables of the module of the earlier implementation (its ``individuals``
     # table is ``individual_model.centres``: ``individuals`` is the method of the interface)
     @property
@@ -463,11 +529,13 @@ class FaithELGeometry(ComposedGeometry):
 
     def project(self):
         for part in (self.class_model, self.relation_model):
-            part.project()
+            if part is not None:
+                part.project()
 
     @property
     def parts(self):
-        return {"classes": self.class_model.part, "relations": self.relation_model.part,
+        relations = "none" if self.relation_model is None else self.relation_model.part
+        return {"classes": self.class_model.part, "relations": relations,
                 "individuals": "point", "measure": self.measure.part,
                 "conjunction": self.class_model.conjunction_kind, "existential": "exact"}
 
@@ -476,6 +544,9 @@ class FaithELGeometry(ComposedGeometry):
 
 
 # -- the method ------------------------------------------------------------------------------------
+register_dataset_inputs("faithel")(lambda model: faithel_inputs(model))
+
+
 @register_method("faithel")
 def faithel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, radius=0.6, phi=1.0,
             gamma=1.0, psi=0.7, neg_sampling=True, centroid_score=True, tbox=None,
@@ -515,9 +586,13 @@ def faithel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, radius=0.6
         with th.no_grad():
             table.weight.normal_(mean=0.5, std=0.7)
         individuals = Points(family="point", centres=table)
-    return FaithELGeometry(
+    geometry = FaithELGeometry(
         classes, relations, individuals,
         measure if measure is not None else AnchorDistance(centroid_score),
         objective if objective is not None else AnchoredObjective(phi, gamma, psi, neg_sampling, negative_term,
                                                     neg_margin),
         tbox=tbox, regularizers=regularizers)
+    # the training of the method (what a general model attaches): the authors' alternating
+    # minibatches of the assertions; the projection into the balls is ``project``
+    geometry.default_regimes = (AlternatingMinibatches,)
+    return geometry

@@ -375,12 +375,15 @@ class GraphKGEModel(TripleGraphModel):
     method (:data:`mowl.representation.METHODS`).
 
     ``GraphKGEModel(dataset, method="boxe")`` is BoxE and ``method="expressive"`` ExpressivE;
+    ``method="reshuffle"`` RESHUFFLE (entities encoded from the edges of the graph, trained
+    on the inverse triples unless ``inverse_triples=False``);
     ``method="graph_kge"`` (the default: TransE) and ``method="gda_projection"`` take any
     relation model, and every part of a method can be swapped by naming it:
 
     :param dataset: mOWL dataset.
     :param method: Key of the method (see above).
-    :param embed_dim: Entity dimension.
+    :param embed_dim: Entity dimension (default 50; a method whose entity size is given by
+        its own options, such as RESHUFFLE's ``l`` and ``k``, has none).
     :param projector: The projection: a projector of :mod:`mowl.projection`, its class, or a
         name of :data:`mowl.representation.library.graph_projection.PROJECTIONS`. Default:
         that of the method (``"owl2vec_star"``; ``"gda"`` for ``gda_projection``).
@@ -404,7 +407,7 @@ class GraphKGEModel(TripleGraphModel):
     #: The key of the method; subclasses name theirs.
     METHOD = "graph_kge"
 
-    def __init__(self, dataset, method=None, embed_dim=50, projector=None,
+    def __init__(self, dataset, method=None, embed_dim=None, projector=None,
                  learning_rate=1e-3, batch_size=1024, num_negs_per_pos=None, seed=0,
                  model_filepath=None, device="cpu", optimizer=None, classes=None,
                  relations=None, loss=None, sampler=None, regularizers=(),
@@ -416,7 +419,19 @@ class GraphKGEModel(TripleGraphModel):
         if method not in M.METHODS:
             raise ValueError(f"Unknown method {method!r}; available: {sorted(M.METHODS)}.")
         self.method = method
+        builder = self._builder_parameters(method)
+        if builder.get("embed_dim", 50) is None:
+            # the size of an entity is given by the method's own options (RESHUFFLE: l, k)
+            if embed_dim is not None:
+                raise TypeError(f"{method!r} has no embed_dim: the size of its entities is "
+                                f"given by its own options.")
+        elif embed_dim is None:
+            embed_dim = 50
         self.embed_dim = embed_dim
+        if "inverse_triples" in builder:
+            # a method that trains on the inverse triples says so by an option
+            self.create_inverse_triples = bool(method_options.get(
+                "inverse_triples", builder["inverse_triples"]))
         self.seed = seed
         self.classes, self.relations = classes, relations
         self.loss, self.sampler = loss, sampler
@@ -435,14 +450,33 @@ class GraphKGEModel(TripleGraphModel):
         self._axiom_index_maps = None
         self._module = self._make_module()
 
+    @staticmethod
+    def _builder_parameters(method):
+        """The parameters of the builder of ``method`` with their defaults."""
+        import inspect
+        from mowl.representation import methods as M
+        return {name: p.default for name, p in
+                inspect.signature(M.METHODS[method]).parameters.items()
+                if p.kind is not inspect.Parameter.VAR_KEYWORD}
+
     def _graph_arguments(self):
-        """What the builder of the method needs of the graph."""
+        """What the builder of the method needs of the graph: the numbers of entities and
+        relations and the row of the ``subclass`` edge; the edges themselves (``triples``)
+        for a method defined on the graph (its entities are encoded from it); a method that
+        takes ``inverse_triples`` counts the relations of the graph and makes the rows of the
+        inverses itself."""
         factory = self.triples_factory
+        builder = self._builder_parameters(self.method)
         subclass = factory.relation_to_id.get(self.SUBCLASS_RELATION, -1)
-        if self.create_inverse_triples and subclass >= 0:
+        own_inverses = "inverse_triples" in builder
+        if self.create_inverse_triples and subclass >= 0 and not own_inverses:
             subclass *= 2
-        return dict(nb_classes=factory.num_entities, nb_relations=factory.num_relations,
-                    subclass_id=subclass)
+        out = dict(nb_classes=factory.num_entities,
+                   nb_relations=factory.real_num_relations if own_inverses
+                   else factory.num_relations, subclass_id=subclass)
+        if "triples" in builder:
+            out["triples"] = factory.mapped_triples
+        return out
 
     def _make_module(self):
         from mowl.representation import methods as M
@@ -484,13 +518,15 @@ class GraphKGEModel(TripleGraphModel):
                 f"{module.parts}).") from error
 
     def _embedding_options(self):
-        return dict(embed_dim=self.embed_dim)
+        return {} if self.embed_dim is None else dict(embed_dim=self.embed_dim)
 
     def _entity_table(self):
-        return self.module.class_model.centres
+        classes = self.module.class_model
+        return getattr(classes, "embedding_rows", None) or classes.centres
 
     def _relation_table(self):
-        return self.module.relation_model.vectors
+        relations = self.module.relation_model
+        return getattr(relations, "embedding_rows", None) or relations.vectors
 
     @property
     def kge_method(self):
