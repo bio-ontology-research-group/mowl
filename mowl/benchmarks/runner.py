@@ -219,10 +219,12 @@ class ELFamily(ModelFamily):
     def _selection_regime(model):
         """The model selection regime attached to the model, if any."""
         from mowl.training.selection import ValidationSelection
-        regime = getattr(model, "training_regime", None)
-        for part in getattr(regime, "regimes", None) or [regime]:
+        stack = [getattr(model, "training_regime", None)]
+        while stack:
+            part = stack.pop(0)
             if isinstance(part, ValidationSelection):
                 return part
+            stack.extend(getattr(part, "regimes", None) or ())
         return None
 
 

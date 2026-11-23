@@ -96,9 +96,10 @@ _DEFAULTS = {
     "taxonomy_walks": {"model_kwargs": {"embed_dim": 100}, "epochs": 10},
     "onto2vec": {"model_kwargs": {"embed_dim": 100}, "epochs": 10},
     "opa2vec": {"model_kwargs": {"embed_dim": 100}, "epochs": 10},
-    # the general model of these methods: DL2Vec's parts unless others are chosen
-    "composed_sequences": {"model_kwargs": {"embed_dim": 100, "method": "dl2vec"},
-                           "epochs": 10},
+    # the general model of these methods: DL2Vec's parts unless others are chosen; one
+    # worker, as the factories of the named methods: with more the runs are not reproducible
+    "composed_sequences": {"model_kwargs": {"embed_dim": 100, "method": "dl2vec",
+                                            "workers": 1}, "epochs": 10},
     # language models: one pass over the training triplets
     "hit": {"model_kwargs": {}, "epochs": 1},
     "ont": {"model_kwargs": {}, "epochs": 1},

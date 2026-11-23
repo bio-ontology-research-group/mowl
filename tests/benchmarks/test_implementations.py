@@ -133,9 +133,10 @@ def test_the_baseline_implementation_covers_every_compared_method():
         assert not impl.supports(method)
 
 
-@pytest.mark.parametrize("method", ["elbe", "elem"])
+@pytest.mark.parametrize("method", ["elbe", "elem", "regd"])
 def test_parts_and_baseline_give_the_same_metrics(method):
-    """The same benchmark, regime, model arguments and seed: the same numbers."""
+    """The same benchmark, regime, model arguments and seed: the same numbers. RegD has its
+    loss as a regime of the method; the recipe's regime must not replace it."""
     import mowl.baselines.benchmarks  # noqa: F401
     from mowl.benchmarks.runner import run_benchmark
     out = {}
@@ -148,6 +149,9 @@ def test_parts_and_baseline_give_the_same_metrics(method):
     assert out["parts"].implementation["model_class"].startswith("mowl.models.")
     assert out["parts"].metrics == out["baseline"].metrics
     assert out["parts"].training_regime == out["baseline"].training_regime
+    if method == "regd":
+        assert "GroupedLogSumExpContrastiveLoss" in \
+            out["parts"].implementation["method_regimes_kept"]
 
 
 def test_the_baseline_refuses_an_option_it_does_not_have():

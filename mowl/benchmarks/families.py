@@ -11,9 +11,11 @@ Some catalogue methods are a configuration of a general class: DL2Vec is
 name a *factory* (``MethodCard.factory``) that builds the configured model, so that
 ``run_benchmark(benchmark, method="dl2vec")`` works like for any other method. The
 factories here are plain defaults for comparison runs, not the settings of a paper.
-Every factory takes ``model_class``: the class it configures (default: the one of
-:mod:`mowl.models`), so that another implementation of the same interface is configured
-in exactly the same way.
+The walker and Word2Vec run with one worker by default (``workers=1``): with several
+workers their output depends on thread scheduling, so two runs with the same seed differ;
+pass ``workers`` to trade reproducibility for speed. Every factory takes
+``model_class``: the class it configures (default: the one of :mod:`mowl.models`), so that
+another implementation of the same interface is configured in exactly the same way.
 """
 
 import inspect
@@ -69,7 +71,7 @@ class ScoredModelFamily(runner.ModelFamily):
 # ---------------------------------------------------------------------------------------
 
 def _walk_model(dataset, projector, embed_dim=100, num_walks=10, walk_length=20, alpha=0.1,
-                window=5, min_count=1, workers=4, seed=0, model_filepath=None, device="cpu",
+                window=5, min_count=1, workers=1, seed=0, model_filepath=None, device="cpu",
                 walker="deepwalk", p=1.0, q=1.0, model_class=None):
     from mowl.walking import DeepWalk, Node2Vec
     if model_class is None:
@@ -119,7 +121,7 @@ def taxonomy_walks(dataset, bidirectional_taxonomy=True, seed=0, **kwargs):
 
 
 def _corpus_model(dataset, with_annotations, embed_dim=100, window=5, min_count=1,
-                  workers=4, seed=0, model_filepath=None, device="cpu", model_class=None):
+                  workers=1, seed=0, model_filepath=None, device="cpu", model_class=None):
     if model_class is None:
         from mowl.models import SyntacticPlusW2VModel as model_class
     corpus = (model_filepath + ".corpus") if model_filepath else None

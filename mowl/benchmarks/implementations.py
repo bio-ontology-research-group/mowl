@@ -146,6 +146,69 @@ class PartsImplementation(Implementation):
         kwargs = with_run_seed(cls, model_kwargs, seed)
         return family.build(cls, dataset, kwargs, device, model_filepath), family
 
+    def attach_regime(self, model, regime):
+        """Attach ``regime`` and keep the regimes that belong to the method.
+
+        Many methods have parts of their training as regimes of their own
+        (``default_regimes``: the loss of the paper, its negatives, an annealing). Assigning
+        ``model.training_regime`` replaces them, so that, for example, RegD under the
+        training design of the Box\ :sup:`2`\ EL code would lose its contrastive loss. The
+        runner attaches ``ComposedRegime(regime, *method_regimes)`` instead, leaving out
+        a regime of the method whose class ``regime`` already contains: the recipe's regime
+        decides first, the method's regimes apply where it does not (as a direct
+        implementation's own loss applies where an attached regime does not)."""
+        defaults = method_regimes(model)
+        present = {type(r) for r in _leaves(regime)}
+        extra = [r for r in defaults if not any(type(x) in present for x in _leaves(r))]
+        if extra:
+            regime = _with_method_regimes(regime, extra)
+        super().attach_regime(model, regime)
+        self._kept = [type(r).__name__ for r in extra]
+
+    def describe(self, model):
+        out = super().describe(model)
+        kept = getattr(self, "_kept", None)
+        if kept:
+            out["method_regimes_kept"] = kept
+        self._kept = None
+        return out
+
+
+def _with_method_regimes(regime, extra):
+    """``regime`` first, then the regimes of the method; reported under the key of
+    ``regime``."""
+    from mowl.training import ComposedRegime
+
+    class WithMethodRegimes(ComposedRegime):
+        pass
+
+    out = WithMethodRegimes(regime, *extra)
+    out.key = getattr(regime, "key", "") or out.key
+    return out
+
+
+def _leaves(regime):
+    parts = getattr(regime, "regimes", None)
+    if parts is None:
+        return [regime]
+    return [leaf for r in parts for leaf in _leaves(r)] + [regime]
+
+
+def method_regimes(model):
+    """Fresh instances of the regimes that belong to the method of ``model``
+    (``model.default_regimes`` or ``model.module.default_regimes``)."""
+    factories = getattr(model, "default_regimes", None)
+    if not factories:
+        factories = getattr(getattr(model, "module", None), "default_regimes", None) or ()
+    if callable(factories) and not isinstance(factories, (tuple, list)):
+        factories = factories()
+    out = []
+    for make in factories or ():
+        r = make() if callable(make) else make
+        if r is not None:
+            out.append(r)
+    return out
+
 
 _IMPLEMENTATIONS = {}
 
