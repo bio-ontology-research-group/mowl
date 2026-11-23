@@ -365,6 +365,7 @@ class ContextualSoftBoxClasses(Classes):
     :param num_relations: Number of relations.
     :param beta: Gumbel scale.
     :param hidden_dim: Hidden size (default ``2 * embed_dim``).
+    :param init_scale: Standard deviation of the initial class and context vectors.
     :param centres, contexts, project: Existing class table, context table (``num_relations
         + 2`` rows) and network.
     """
@@ -374,14 +375,14 @@ class ContextualSoftBoxClasses(Classes):
     exact_conjunction = True
 
     def __init__(self, size=None, embed_dim=None, num_relations=0, beta=1.0, hidden_dim=None,
-                 centres=None, contexts=None, project=None):
+                 centres=None, contexts=None, project=None, init_scale=0.5):
         super().__init__()
         self.beta = float(beta)
         self.centres = centres if centres is not None else table(
-            size, embed_dim, "normal", 0.5)
+            size, embed_dim, "normal", init_scale)
         dim = self.embed_dim
         self.contexts = contexts if contexts is not None else table(
-            num_relations + 2, dim, "normal", 0.5)
+            num_relations + 2, dim, "normal", init_scale)
         self.project = project if project is not None else nn.Sequential(
             nn.Linear(2 * dim, hidden_dim or 2 * dim), nn.ReLU(),
             nn.Linear(hidden_dim or 2 * dim, 2 * dim))

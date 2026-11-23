@@ -125,12 +125,18 @@ def _abox():
     return abox_dataset()
 
 
+#: Defaults of the combination that differ from the direct module on purpose: the pair is
+#: built with the values of the direct module (Concept2Box: the Gumbel scale 1 and the
+#: initial scale 0.5, with which the model does not learn beyond a few tens of dimensions).
+DIRECT_VALUES = {"concept2box": {"beta": 1.0, "init_scale": 0.5}}
+
+
 def _pair(method, variant=None, dataset=None, **options):
     name, baseline = CLASSES[method]
 
     def new(dataset):
         return getattr(importlib.import_module("mowl.models"), name)(
-            dataset, embed_dim=EMBED, **options)
+            dataset, embed_dim=EMBED, **{**DIRECT_VALUES.get(method, {}), **options})
 
     def old(dataset):
         return _with_structural_tables(getattr(importlib.import_module(baseline), name)(

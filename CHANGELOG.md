@@ -217,6 +217,12 @@ Behaviour that changed, and how to get the 2.1.0 behaviour back:
 
 ### Fixed
 
+- `Concept2Box` learns at the dimensions it is used with: the Gumbel scale defaults to
+  `0.25 / embed_dim` and the initial vectors to a standard deviation of `1 / embed_dim`
+  (new argument `init_scale`). With the earlier values (1 and 0.5, still those of
+  `mowl.baselines`) the sigmoid of the cross-view loss and the volume ratio of the ontology
+  view were constant from a few tens of dimensions on: no gradient, and all classes tied
+  when ranked (MRR 0.008 on the DBpedia concept linking benchmark at 256 dimensions).
 - The three-way benchmark table compares a run with the published numbers of its own
   variant: `PublishedResult` has a `recipe` field, and without one the stated settings
   decide. Before, every variant of a method was compared with the first numbers registered

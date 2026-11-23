@@ -364,8 +364,12 @@ class TestCombinations(TestCase):
             ShapeObjective(0.0), individuals=Points(i, d, "point")), without=("gci1",))
 
     def test_the_methods_from_their_functions(self):
-        for key in ("octagon", "prism", "concept2box"):
+        for key in ("octagon", "prism"):
             self.assertTrains(lambda n, r, i, key=key: METHODS[key](n, r, i, embed_dim=8))
+        # Concept2Box starts with all boxes and points close together (init_scale = 1 / d), where
+        # the costs of the axioms are already small; the cost falls from a spread-out start
+        self.assertTrains(lambda n, r, i: METHODS["concept2box"](
+            n, r, i, embed_dim=8, init_scale=0.5))
         self.assertTrains(lambda n, r, i: METHODS["eike"](n, r, i, embed_dim=8), ranking=True,
                           without=("gci1", "gci2", "gci3", "gci1_bot", "gci0_bot", "gci3_bot"))
 

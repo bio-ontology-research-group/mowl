@@ -254,7 +254,7 @@ class TestConcept2Box(TestCase):
 
     def test_rebuilt_from_parts_with_copied_parameters(self):
         module = self.make()
-        geometry = METHODS["concept2box"](N, R, I, embed_dim=D)
+        geometry = METHODS["concept2box"](N, R, I, embed_dim=D, beta=1.0)  # the module's scale
         cm = geometry.class_model
         _copy([cm.centres.weight, cm.contexts.weight, geometry.relation_model.vectors.weight,
                geometry.individual_model.centres.weight,

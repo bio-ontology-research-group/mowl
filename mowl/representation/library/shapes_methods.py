@@ -180,8 +180,17 @@ def _redraw_eike(g, a):
             g.individual_model.second.matrix.copy_(th.eye(d) + 0.01 * th.randn(d, d))
 
 
+def _concept2box_beta(beta, embed_dim):
+    return 0.25 / embed_dim if beta is None else float(beta)
+
+
+def _concept2box_scale(init_scale, embed_dim):
+    return 1.0 / embed_dim if init_scale is None else float(init_scale)
+
+
 def _redraw_concept2box(g, a):
     n, d, r = len(g.class_model), a["embed_dim"], a["nb_relations"]
+    scale = _concept2box_scale(a.get("init_scale"), d)
     hidden = a["hidden_dim"] or 2 * d
     centres = nn.Embedding(n, d)
     contexts = nn.Embedding(r + 2, d)
@@ -190,7 +199,7 @@ def _redraw_concept2box(g, a):
     points = nn.Embedding(a["nb_individuals"], d) if a["nb_individuals"] else None
     for e in (centres, contexts, translations, points):
         if e is not None:
-            nn.init.normal_(e.weight, std=0.5)
+            nn.init.normal_(e.weight, std=scale)
     _put(g.class_model.centres, centres.weight.detach())
     _put(g.class_model.contexts, contexts.weight.detach())
     g.class_model.project.load_state_dict(network.state_dict())
@@ -447,9 +456,9 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
 @register_method("concept2box")
 @_in_the_order_of_the_modules(_redraw_concept2box)
 def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin=0.0,
-                beta=1.0, alpha=0.5, kge_margin=0.3, cross_margin=0.15, hidden_dim=None,
+                beta=None, alpha=0.5, kge_margin=0.3, cross_margin=0.15, hidden_dim=None,
                 instance_weight=1.0, cross_weight=1.0, gci2_reading="axiom", tables=None,
-                _into=None):
+                init_scale=None, _into=None):
     r"""Concept2Box (Huang et al. 2023): classes are Gumbel boxes that depend on a context
     (a relation), individuals are points translated by relations, a class assertion links
     the two by the distance of a point to a box.
@@ -464,6 +473,19 @@ def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin
     margins (``kge_margin``, ``cross_margin``) and weights.
 
     :param gci2_reading: ``"axiom"`` or ``"triple"``, see above.
+    :param beta: Gumbel scale of the boxes. Default ``0.25 / embed_dim``: the volume ratio
+        of a Gumbel box with itself falls by a factor per dimension that depends on the
+        scale relative to the side, so with a fixed scale it underflows to zero in a few
+        tens of dimensions and the loss of the ontology view has no gradient; with this
+        default the ratio of a box of side 1.4 (the initial one) with itself is about 0.78
+        in any dimension. ``1.0`` is the scale of the earlier module.
+    :param init_scale: Standard deviation of the initial class, context, relation and
+        individual vectors. Default ``1 / embed_dim``: the :math:`L_1` distance of a point
+        to a box is then about 1 at the start in any dimension, in the range where the
+        sigmoid of the cross-view loss has a gradient. ``0.5`` is the value of the earlier
+        module, with which the sigmoid is saturated (exactly 1 in single precision) from
+        about 30 dimensions on, so that class assertions are not learned and all classes
+        tie when ranked.
     :param tables: A :class:`~mowl.nn.el.concept2box.module.Concept2BoxModule` to share
         parameters with (its ``gci2_reading`` is used).
     """
@@ -471,11 +493,13 @@ def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin
         raise ValueError("alpha must be in (0, 1).")
     t = tables
     if t is None:
+        beta = _concept2box_beta(beta, embed_dim)
+        scale = _concept2box_scale(init_scale, embed_dim)
         classes = ContextualSoftBoxClasses(nb_classes, embed_dim, nb_relations, beta,
-                                           hidden_dim)
+                                           hidden_dim, init_scale=scale)
         translations = Translation(vectors=table(max(nb_relations, 1), embed_dim, "normal",
-                                                 0.5))
-        points = Points(nb_individuals, embed_dim, init="normal", scale=0.5) \
+                                                 scale))
+        points = Points(nb_individuals, embed_dim, init="normal", scale=scale) \
             if nb_individuals else None
     else:
         beta, alpha = t.beta, t.alpha
@@ -784,7 +808,9 @@ class Concept2BoxModule(_ReadsItsForms, ComposedGeometry):
     :param nb_rels: Number of object properties.
     :param nb_inds: Number of individuals (``None``: no ABox).
     :param embed_dim: Dimension of boxes and vectors.
-    :param beta: Gumbel scale.
+    :param beta: Gumbel scale (default ``0.25 / embed_dim``, see :func:`concept2box`).
+    :param init_scale: Standard deviation of the initial vectors (default
+        ``1 / embed_dim``, see :func:`concept2box`).
     :param alpha: Weight of the distance to the centre of a point inside a box
         (``0 < alpha < 1``).
     :param kge_margin: Margin of the instance view.
@@ -795,13 +821,14 @@ class Concept2BoxModule(_ReadsItsForms, ComposedGeometry):
     :param gci2_reading: ``"axiom"`` or ``"triple"`` (see :func:`concept2box`).
     """
 
-    def __init__(self, nb_classes, nb_rels, nb_inds=None, embed_dim=32, beta=1.0, alpha=0.5,
+    def __init__(self, nb_classes, nb_rels, nb_inds=None, embed_dim=32, beta=None, alpha=0.5,
                  kge_margin=0.3, cross_margin=0.15, hidden_dim=None, instance_weight=1.0,
-                 cross_weight=1.0, gci2_reading="axiom"):
+                 cross_weight=1.0, gci2_reading="axiom", init_scale=None):
         concept2box(nb_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, beta=beta,
                     alpha=alpha, kge_margin=kge_margin, cross_margin=cross_margin,
                     hidden_dim=hidden_dim, instance_weight=instance_weight,
-                    cross_weight=cross_weight, gci2_reading=gci2_reading, _into=self)
+                    cross_weight=cross_weight, gci2_reading=gci2_reading,
+                    init_scale=init_scale, _into=self)
 
     @property
     def embed_dim(self):

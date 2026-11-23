@@ -33,7 +33,13 @@ class Concept2Box(ComposedEL):
 
     :param dataset: mOWL dataset.
     :param embed_dim: Dimension of boxes and vectors.
-    :param beta: Gumbel scale.
+    :param beta: Gumbel scale (default ``0.25 / embed_dim``; ``1.0`` in the earlier
+        module, with which the ontology-view loss has no gradient beyond a few tens of
+        dimensions).
+    :param init_scale: Standard deviation of the initial vectors (default
+        ``1 / embed_dim``; ``0.5`` in the earlier module, with which the sigmoid of the
+        cross-view loss is saturated beyond about 30 dimensions). See
+        :func:`~mowl.representation.library.shapes_methods.concept2box`.
     :param alpha: Weight of the inside distance.
     :param kge_margin: Margin of the instance view.
     :param cross_margin: Margin of the cross view.
@@ -49,19 +55,24 @@ class Concept2Box(ComposedEL):
     scored_forms = ("gci0", "gci2", "class_assertion", "object_property_assertion")
     SUPPORTED_GCIS = scored_forms
 
-    def __init__(self, dataset, embed_dim=32, beta=1.0, alpha=0.5, kge_margin=0.3,
+    def __init__(self, dataset, embed_dim=32, beta=None, alpha=0.5, kge_margin=0.3,
                  cross_margin=0.15, instance_weight=1.0, cross_weight=1.0,
                  learning_rate=0.005, batch_size=4096, model_filepath=None, device="cpu",
-                 neg_sampling_gcis=None, gci2_reading="axiom"):
+                 neg_sampling_gcis=None, gci2_reading="axiom", init_scale=None):
         self._warned = False
         super().__init__(dataset, method="concept2box", embed_dim=embed_dim,
                          batch_size=batch_size, model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis,
                          beta=beta, alpha=alpha, kge_margin=kge_margin,
                          cross_margin=cross_margin, instance_weight=instance_weight,
-                         cross_weight=cross_weight, gci2_reading=gci2_reading)
+                         cross_weight=cross_weight, gci2_reading=gci2_reading,
+                         init_scale=init_scale)
 
-    beta = property(lambda self: self.method_options["beta"])
+    @property
+    def beta(self):
+        """The Gumbel scale in use (``0.25 / embed_dim`` unless one was given)."""
+        given = self.method_options["beta"]
+        return 0.25 / self.embed_dim if given is None else given
     alpha = property(lambda self: self.method_options["alpha"])
     kge_margin = property(lambda self: self.method_options["kge_margin"])
     cross_margin = property(lambda self: self.method_options["cross_margin"])

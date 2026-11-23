@@ -62,3 +62,25 @@ def test_scoring_interface(model):
 def test_embeddings_are_available(model):
     assert len(model.class_embeddings) == len(model.class_index_dict)
     assert len(model.individual_embeddings) == len(model.individual_index_dict) > 0
+
+
+def test_the_losses_have_a_gradient_at_the_published_dimension():
+    """At 256 dimensions (the paper's) the cross-view sigmoid and the volume ratio of the
+    ontology view must not be saturated at the start: with the earlier initial scale 0.5 and
+    Gumbel scale 1 both were constant (0.5 and 1), without gradient, and all classes tied."""
+    import torch as th
+    from mowl.nn import Concept2BoxModule
+    th.manual_seed(0)
+    module = Concept2BoxModule(20, 3, 30, embed_dim=256)
+    assertions = th.stack([th.arange(20) % 30, th.arange(20)], dim=1)
+    triples = th.stack([th.arange(20), th.arange(20) % 3, (th.arange(20) + 1) % 20], dim=1)
+    for form, rows in (("class_assertion", assertions), ("gci2", triples)):
+        cost = module(rows, form)
+        assert len(th.unique(cost.detach())) > 1, form
+        module.zero_grad()
+        cost.sum().backward()
+        assert any(p.grad is not None and float(p.grad.abs().sum()) > 0
+                   for p in module.parameters()), form
+    th.manual_seed(0)
+    old = Concept2BoxModule(20, 3, 30, embed_dim=256, beta=1.0, init_scale=0.5)
+    assert len(th.unique(old(assertions, "class_assertion").detach())) == 1
