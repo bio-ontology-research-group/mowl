@@ -14,7 +14,7 @@ parameter that HiT needs, see its docstring for what merging the two hyperbolic 
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch as th
 
@@ -72,6 +72,10 @@ class ManifoldPoint(Region):
     manifold: object = None
     ids: th.Tensor = None
 
+    def detach_size(self):
+        """A point has no size: itself."""
+        return self
+
 
 @dataclass(frozen=True)
 class OrderCone(ManifoldPoint):
@@ -85,6 +89,11 @@ class ConePoint(ManifoldPoint):
     (hyperbolic entailment cones)."""
 
     aperture: th.Tensor = None
+
+    def detach_size(self):
+        """The aperture detached (the size of the cone; its apex stays trained)."""
+        return replace(self, aperture=None if self.aperture is None
+                       else self.aperture.detach())
 
     def contains(self, points):
         """Whether the points ``(P, n)`` of the Poincare ball lie in the entailment cones,
@@ -104,6 +113,9 @@ class Disk(ManifoldPoint):
     formal disk, Suzuki et al. 2019)."""
 
     radius: th.Tensor = None
+
+    def detach_size(self):
+        return replace(self, radius=None if self.radius is None else self.radius.detach())
 
     def contains(self, points):
         """Whether the points ``(P, n)`` lie within ``radius`` of the centre in the metric of

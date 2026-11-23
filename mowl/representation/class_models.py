@@ -3,6 +3,8 @@ turns a row into a region (:mod:`mowl.representation.regions`). The same classes
 individual models when individuals are small regions of the same kind.
 """
 
+import inspect
+
 import torch as th
 import torch.nn as nn
 
@@ -75,6 +77,28 @@ class Classes(nn.Module):
     def forward(self, ids):
         """The regions of the classes ``ids`` (``LongTensor (B,)``)."""
         raise NotImplementedError
+
+    #: The context of :math:`C \\sqsubseteq D` for :meth:`in_context` (a class model with
+    #: contexts sets it; for the others every context is the same).
+    subclass_id = None
+
+    def in_context(self, ids, context):
+        """The regions of the classes ``ids`` in the context ``context`` (a relation, or
+        :attr:`subclass_id`): the view of a class that depends on the triple it is read in
+        (Concept2Box). A class model without contexts has one region per class, the same
+        in every context."""
+        return self(ids)
+
+    def regions(self, ids, detach_size=False):
+        """The regions of ``ids``; ``detach_size``: with their sizes detached
+        (:meth:`Region.detach_size <mowl.representation.Region.detach_size>`), unless the
+        class model's own ``forward`` takes the option (and detaches the parameter it stores
+        the size in)."""
+        if not detach_size:
+            return self(ids)
+        if "detach_size" in inspect.signature(self.forward).parameters:
+            return self(ids, detach_size=True)
+        return self(ids).detach_size()
 
     def __len__(self):
         return self.centres.num_embeddings

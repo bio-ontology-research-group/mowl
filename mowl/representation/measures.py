@@ -20,7 +20,9 @@ import functools
 
 import torch as th
 
-from mowl.representation.regions import Ball, Box, ConstructorUnavailable, CornerBox, Region
+from mowl.representation.operations import Operations, generic, unavailable
+from mowl.representation.regions import (Ball, Box, ConstructorUnavailable, CornerBox,
+                                         MarginUnavailable, Region)
 
 __all__ = ["RegionMeasure", "CentreDistance", "Bounds", "lens_balls"]
 
@@ -38,6 +40,12 @@ def _checked(method):
     @functools.wraps(method)
     def relation(self, *args, **kwargs):
         accepts = self.accepts
+        if accepts and any(isinstance(r, Region) and not isinstance(r, accepts)
+                           and type(r).viewable_as(accepts) for r in args):
+            # a region that is exactly one of the accepted family (a point is a box of no
+            # width) is compared as that region
+            args = tuple(r.view_as(accepts) if isinstance(r, Region) and not isinstance(
+                r, accepts) and type(r).viewable_as(accepts) else r for r in args)
         for region in args:
             if not isinstance(region, Region):
                 continue
@@ -56,11 +64,34 @@ def _checked(method):
     return relation
 
 
-class RegionMeasure:
+class RegionMeasure(Operations):
     """Base class of measures.
 
     :cvar accepts: The region classes the measure compares.
+
+    Besides the relations every measure has, a measure may provide the optional operations
+    of :attr:`OPERATIONS` (:mod:`mowl.representation.operations`); an objective asks for
+    them with :meth:`~mowl.representation.operations.Operations.operation`. Those with a
+    definition in terms of the common interface have it here (``negative``,
+    ``product_overlap``, ``meets_shrunk``, ``is_empty``), so that every measure has them;
+    a measure overrides one where its own formula is exact or is the published one.
     """
+
+    OPERATIONS = {
+        "outside": "zero iff a is not inside b, by at least the margin (non-inclusion)",
+        "negative": "the cost of a pair that should not be included; generic: apart",
+        "product_overlap": "Vol(A n B) / (Vol(A) Vol(B)), the BoxEL code's reading of "
+                           "disjointness; generic: the measure's intersection and the "
+                           "regions' volumes",
+        "meets_shrunk": "zero when a, contracted towards its centre, meets b (the published "
+                        "negative of the prism module); generic: meets(a contracted to its "
+                        "centre, b)",
+        "is_empty": "(B, 1) boolean: the region has no point; generic: the region's own "
+                    "is_empty",
+        "host_for": "the measure that reads the relations this one does not define, for a "
+                    "region family (RegD's energy defines inclusion only); generic: the "
+                    "measure itself",
+    }
 
     accepts = ()
     #: Vocabulary entry (:class:`mowl.representation.Measure` value) of the measure.
@@ -135,11 +166,12 @@ class RegionMeasure:
         (a point against a region)."""
         return self.inside(a, b, margin)
 
-    def outside(self, a, b, margin=0.0):
-        """Zero iff ``a`` is *not* inside ``b``, by at least ``margin`` (non-inclusion; the
-        negative term of RegD). Not every measure has it."""
-        raise ConstructorUnavailable(f"{type(self).__name__} has no non-inclusion.")
+    outside = unavailable("outside")
+    outside.__doc__ = """Zero iff ``a`` is *not* inside ``b``, by at least ``margin``
+        (non-inclusion; the negative term of RegD). Not every measure has it: there is no
+        generic definition."""
 
+    @generic
     def negative(self, a, b, margin=0.0):
         """The cost of a pair ``a``, ``b`` that should *not* be included. Default:
         ``apart`` (the semantic reading, which DELE uses); measures of methods that read a
@@ -152,6 +184,59 @@ class RegionMeasure:
         measure. Default: the regions intersect themselves (families closed under
         intersection); a measure on membership functions forms the minimum instead."""
         return a.intersect(b)
+
+    @generic
+    def product_overlap(self, a, b, eps=1e-12):
+        """:math:`\\mathrm{Vol}(A \\cap B) / (\\mathrm{Vol}(A)\\,\\mathrm{Vol}(B))`, ``(B,
+        1)``, from the exact intersection (:meth:`intersect`) and the volumes of the
+        regions (:meth:`Region.volume <mowl.representation.Region.volume>`): zero iff the
+        two regions do not overlap in a set of positive volume. A region family without an
+        intersection in the family or without a volume refuses."""
+        region, _ = self.intersect(a, b)
+        return region.volume() / (a.volume() * b.volume()).clamp_min(eps)
+
+    @generic
+    def meets_shrunk(self, a, b, margin=0.0):
+        """Zero when ``a`` contracted to its centre (:meth:`Region.contract
+        <mowl.representation.Region.contract>`) meets ``b`` (with ``margin``): the centre of
+        ``a`` lies in ``b``, which is stronger than an overlap."""
+        return self.meets(a.contract(), b, margin)
+
+    @generic
+    def host_for(self, region_class):
+        """The measure of the relations this measure does not define, for regions of
+        ``region_class``: a measure that defines them all is its own host."""
+        return self
+
+    @generic
+    def is_empty(self, a):
+        """``(B, 1)`` boolean: the region has no point (:meth:`Region.is_empty
+        <mowl.representation.Region.is_empty>`)."""
+        return a.is_empty().reshape(-1, 1)
+
+    @staticmethod
+    def grown(a, margin, what):
+        """The region ``a`` enlarged by a strict ``margin`` (the Minkowski sum with a ball or
+        box of that radius), for a measure whose formula has no margin of its own: the
+        relation holds with room ``margin`` iff it holds for the enlarged region, which is
+        how :class:`Bounds` and :class:`CentreDistance` read a strict margin. A slack (a
+        negative margin) is refused (:class:`~mowl.representation.MarginUnavailable`):
+        shrinking a region makes it empty, which such a measure does not read as the empty
+        set."""
+        if not margin:
+            return a
+        if margin < 0:
+            raise MarginUnavailable(
+                f"{what} reads a strict margin as the enlarged region, but has no reading of "
+                f"a slack (margin {margin!r}).")
+        if not isinstance(a, Region):
+            raise MarginUnavailable(f"{what} reads a strict margin as the enlarged region; "
+                                    f"a {type(a).__name__} cannot be enlarged.")
+        try:
+            return a.grow(margin)
+        except ConstructorUnavailable as error:
+            raise MarginUnavailable(f"{what} reads a strict margin as the enlarged region: "
+                                    f"{error}") from error
 
     def bind(self, relations):
         """Called with the relation model by a geometry that is built from this measure,
@@ -301,6 +386,12 @@ class CentreDistance(RegionMeasure):
         self.check(a)
         return th.relu(epsilon - a.radius)
 
+    def outside(self, a, b, margin=0.0):
+        """Zero iff ``a`` sticks out of ``b`` by at least ``margin``:
+        :math:`\\lVert c_A - c_B \\rVert + r_A - r_B \\ge m`."""
+        self.check(a, b)
+        return th.relu(b.radius - a.radius - self._distance(a, b) + margin)
+
 
 class Bounds(RegionMeasure):
     """Boxes compared coordinate by coordinate: :math:`A \\subseteq B` iff
@@ -418,6 +509,16 @@ class Bounds(RegionMeasure):
         """The exact intersection (an empty box where they are apart) and its gap."""
         self.check(a, b)
         return a.intersect(b, signed=True)
+
+    def outside(self, a, b, margin=0.0):
+        """Zero iff ``a`` sticks out of ``b`` by at least ``margin`` in some coordinate:
+        :math:`\\max_i |c_{A,i} - c_{B,i}| + o_{A,i} - o_{B,i} \\ge m`. An empty ``a`` lies
+        inside every box: its cost is never zero (the amount by which its upper corner lies
+        below its lower one is added)."""
+        self.check(a, b)
+        stick_out = th.abs(a.centre - b.centre) + th.relu(self._half(a)) - b.offset
+        cost = th.relu(margin - stick_out.max(dim=1, keepdim=True).values)
+        return cost + self._norm(a.lower - a.upper)
 
     def intersection_inside(self, a, b, c, margin=0.0):
         """Zero iff :math:`A \\cap B \\subseteq C` (``conjunction="exact"``), or iff it

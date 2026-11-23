@@ -15,16 +15,35 @@ compares parameters (shift vectors) may ignore. A relation model that defines th
 import torch as th
 import torch.nn as nn
 
+from mowl.representation.operations import Operations, generic
 from mowl.representation.regions import ConstructorUnavailable
 
 __all__ = ["Relations", "Translation"]
 
 
-class Relations(nn.Module):
+class Relations(Operations, nn.Module):
     """Base class of relation models.
 
     :cvar part: The vocabulary entry (:class:`mowl.representation.RelationModel` value).
+
+    The optional operations of :attr:`OPERATIONS` (:mod:`mowl.representation.operations`)
+    have generic definitions here in terms of :meth:`preimage` and :meth:`image`; a relation
+    model overrides them where its own reading differs (head and tail boxes, a box of
+    translations, a relation with a range).
     """
+
+    OPERATIONS = {
+        "subsumed_negative": "the negative loss of C subClassOf r some D of Box2EL and DELE, "
+                             "(delta - mu(C, exists r.D))^2 + (delta - mu(D, image of C))^2 "
+                             "with mu the measure's meets",
+        "preimage_all": "the region of the points every successor of which lies in C "
+                        "(exists r^all.C of TransBox); generic for a functional relation: "
+                        "the preimage",
+        "range": "the region of the points that are successors of some point; generic for "
+                 "a relation onto the whole space: None (no constraint)",
+        "image_with_error": "the image of a region with the error of the relation (ELK-Em); "
+                            "generic: the image",
+    }
 
     part = ""
     #: The region classes whose regions :meth:`image` and :meth:`preimage` map (``None``:
@@ -37,11 +56,33 @@ class Relations(nn.Module):
     #: :meth:`successor`); the preimage of a region is then the set of points whose
     #: successor lies in it.
     functional = False
+    #: Whether every point is the successor of some point (the range is the whole space).
+    surjective = False
+
+    #: The maps that are applied to every component of a region made of components (a
+    #: union of boxes) when the relation model maps the components but not the union: the
+    #: image and the preimage of a union are the unions of the images and preimages.
+    LIFTED = ("image", "preimage", "sharp_preimage", "image_with_error")
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for name in cls.LIFTED:
+            method = cls.__dict__.get(name)
+            if callable(method) and not getattr(method, "lifted", False):
+                setattr(cls, name, _lifted(method))
+
+    def maps(self, region_class):
+        """Whether the relation model maps the regions of ``region_class``, itself or (for a
+        region made of components) component by component."""
+        if self.accepts is None or issubclass(region_class, self.accepts):
+            return True
+        component = getattr(region_class, "component", None)
+        return component is not None and issubclass(component, self.accepts)
 
     def check_region(self, region_class):
         """Raise :class:`ConstructorUnavailable` if the regions of ``region_class`` are not
         mapped by this relation model."""
-        if self.accepts is not None and not issubclass(region_class, self.accepts):
+        if not self.maps(region_class):
             raise ConstructorUnavailable(
                 f"{type(self).__name__} maps {[c.__name__ for c in self.accepts]} regions, "
                 f"not {region_class.__name__}: this combination of parts cannot read "
@@ -90,6 +131,41 @@ class Relations(nn.Module):
         condition (head and tail boxes) defines its own reading."""
         return measure.inside(sub, self.preimage(ids, filler), margin)
 
+    @generic
+    def subsumed_negative(self, measure, sub, ids, filler, margin, delta):
+        """The negative loss of :math:`C \\sqsubseteq \\exists r.D` of Box2EL and DELE:
+        :math:`(\\delta - \\mu(C, \\exists r.D))^2 + (\\delta - \\mu(D, r(C)))^2` with
+        :math:`\\mu` the measure's ``meets`` (with ``margin``): the two pairs are pushed
+        :math:`\\delta` apart."""
+        first = measure.meets(sub, self.sharp_preimage(ids, filler), margin)
+        second = measure.meets(filler, self.image(ids, sub), margin)
+        return (delta - first).square() + (delta - second).square()
+
+    @generic
+    def preimage_all(self, ids, region, clamp=True):
+        """:math:`\\exists r^{all}.C`, the points all successors of which lie in ``region``.
+        For a functional relation (one successor per point) this is the preimage; other
+        relation models define it or refuse."""
+        if not self.functional:
+            raise ConstructorUnavailable(self._missing("preimage_all") + " It has a "
+                                         "generic definition only for functional relations.")
+        return self.preimage(ids, region)
+
+    @generic
+    def range(self, ids):
+        """The region of the successors of the relations ``ids``; ``None`` for a relation
+        onto the whole space (no constraint), which is all a generic definition can say."""
+        if not self.surjective:
+            raise ConstructorUnavailable(self._missing("range") + " It has a generic "
+                                         "definition only for relations onto the space.")
+        return None
+
+    @generic
+    def image_with_error(self, ids, region):
+        """The image of ``region`` with the error of the relation; a relation without one:
+        the image."""
+        return self.image(ids, region)
+
     def role_inclusion(self, sub, sup, measure, margin=0.0):
         """Cost ``(B, 1)`` of :math:`r \\sqsubseteq s` for the relation ids ``sub``,
         ``sup``; ``measure`` and ``margin`` are those of the objective."""
@@ -113,6 +189,26 @@ class Relations(nn.Module):
 
     def __len__(self):
         return self.vectors.num_embeddings
+
+
+def _lifted(method):
+    """``method(ids, region, ...)`` applied to every component of ``region`` when the relation
+    model maps its components and not the region itself (exact: a relation maps a union to
+    the union of the maps of its parts)."""
+    import functools
+
+    @functools.wraps(method)
+    def lifted(self, ids, region, *args, **kwargs):
+        accepts = self.accepts
+        component = getattr(type(region), "component", None)
+        if accepts is not None and not isinstance(region, accepts) \
+                and component is not None and issubclass(component, accepts):
+            flat, count = region.flat_components()
+            mapped = method(self, ids.repeat_interleave(count), flat, *args, **kwargs)
+            return region.from_components(mapped)
+        return method(self, ids, region, *args, **kwargs)
+    lifted.lifted = True
+    return lifted
 
 
 def _direction_term(a, b, direction):
@@ -150,6 +246,7 @@ class Translation(Relations):
 
     part = "translation"
     functional = True
+    surjective = True
 
     def __init__(self, size=None, embed_dim=None, vectors=None, direction=None):
         super().__init__()

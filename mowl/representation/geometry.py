@@ -15,7 +15,7 @@ import torch as th
 
 from mowl.nn.el.elmodule import ELModule
 from mowl.representation.objectives import Objective, FORMS, ROLE_FORMS
-from mowl.representation.regions import ConstructorUnavailable
+from mowl.representation.regions import ConstructorUnavailable, Region
 
 __all__ = ["Geometry", "ComposedGeometry"]
 
@@ -211,13 +211,18 @@ class ComposedGeometry(ELModule, Geometry):
 
     def _check_parts(self):
         classes, measure, individuals = self.class_model, self.measure, self.individual_model
-        if not issubclass(classes.region, measure.accepts):
+
+        def compared(region):
+            return issubclass(region, measure.accepts) or (
+                isinstance(region, type) and issubclass(region, Region)
+                and region.viewable_as(measure.accepts))
+        if not compared(classes.region):
             raise ConstructorUnavailable(
                 f"{type(measure).__name__} compares "
                 f"{_names(measure.accepts, classes.region)} regions; "
                 f"{type(classes).__name__} gives {_names((classes.region,), measure.accepts)} "
                 f"regions.")
-        if individuals is not None and not issubclass(individuals.region, measure.accepts):
+        if individuals is not None and not compared(individuals.region):
             raise ConstructorUnavailable(
                 f"{type(measure).__name__} compares "
                 f"{_names(measure.accepts, individuals.region)} regions; the individual model "
@@ -240,7 +245,7 @@ class ComposedGeometry(ELModule, Geometry):
         """The regions of ``ids``; ``frozen`` detaches their sizes (the class model must
         accept ``detach_size``; see ``freeze_negatives`` of the objective)."""
         if frozen:
-            return self.class_model(ids, detach_size=True)
+            return self.class_model.regions(ids, detach_size=True)
         return self.class_model(ids)
 
     def individuals(self, ids):

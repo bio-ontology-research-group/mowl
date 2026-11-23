@@ -15,7 +15,7 @@ import torch as th
 from mowl.representation.library import octagon_geometry as G
 from mowl.representation.library.shapes_prism_math import NORMALS, supports
 from mowl.representation.library.shapes_gumbel_math import gumbel_intersection
-from mowl.representation.regions import Box, ConstructorUnavailable, Region
+from mowl.representation.regions import Ball, Box, ConstructorUnavailable, Region
 
 __all__ = ["Point", "OctagonProduct", "Prism", "Ellipsoid", "Vector", "Linked", "SoftBox"]
 
@@ -31,6 +31,16 @@ class Point(Region):
 
     centre: th.Tensor
     bump: th.Tensor = None
+
+    #: A point is a box of no width and a ball of radius zero.
+    views = (Box, Ball)
+
+    def view_as(self, families):
+        if issubclass(Box, families):
+            return Box(self.centre, th.zeros_like(self.centre))
+        if issubclass(Ball, families):
+            return Ball(self.centre, self.centre.new_zeros(len(self.centre), 1))
+        return super().view_as(families)
 
     def translate(self, vector):
         return Point(self.centre + vector, self.bump)
@@ -85,6 +95,20 @@ class OctagonProduct(Region):
         return cls(G.from_center_radius(pairs, th.zeros(*pairs.shape[:2], 8,
                                                         dtype=centre.dtype,
                                                         device=centre.device)), centre)
+
+    @classmethod
+    def represents(cls, region_class):
+        """A box is an octagon product (the diagonal bounds at the values the box gives
+        them), in an even dimension."""
+        return issubclass(region_class, Box)
+
+    @classmethod
+    def from_region(cls, region):
+        if region.centre.shape[-1] % 2:
+            raise ConstructorUnavailable("A box is an octagon product only in an even "
+                                         "dimension (the octagons are on pairs of "
+                                         "coordinates).")
+        return cls.of_box(region)
 
     @classmethod
     def of_box(cls, box):

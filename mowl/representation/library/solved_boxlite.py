@@ -859,7 +859,12 @@ class BoxLitEGeometry(ComposedGeometry):
         for a part that has no rows)."""
         out = {}
         for name in CONCEPT_TABLES:
-            table = getattr(self.class_model, name.split("_")[1])
+            table = getattr(self.class_model, name.split("_")[1], None)
+            if not isinstance(table, th.nn.Embedding):
+                raise ConstructorUnavailable(
+                    f"The variables of the BoxLitE programme are the corner tables of the "
+                    f"concept boxes ({name}); {type(self.class_model).__name__} has no table "
+                    f"{name.split('_')[1]!r}, so the programme cannot be built over it.")
             out[name] = table.weight if table.num_embeddings else None
         for name, table in (self.relation_model.tables().items()
                             if self.relation_model is not None else ()):
@@ -941,9 +946,6 @@ class BoxLitEGeometry(ComposedGeometry):
                 "individuals": "point with bump", "measure": self.measure.part,
                 "conjunction": self.class_model.conjunction_kind, "negation": "exact"}
 
-    @property
-    def device(self):
-        return self.class_model.lower.weight.device
 
 
 # -- the method ----------------------------------------------------------------------------------

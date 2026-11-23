@@ -25,7 +25,7 @@ Measures
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch as th
 import torch.nn as nn
@@ -112,9 +112,25 @@ class UnionOfBoxes(Region):
     offset: th.Tensor
     bump: th.Tensor = None
 
+    #: A union of boxes is made of boxes: a relation model that maps boxes maps it box by
+    #: box (:meth:`~mowl.representation.Relations.maps`).
+    component = Box
+
     @property
     def components(self):
         return self.centre.shape[1]
+
+    def flat_components(self):
+        """``(boxes, k)``: the ``B * k`` boxes of the unions, row by row, and ``k``."""
+        batch, k, d = self.centre.shape
+        return Box(self.centre.reshape(-1, d), self.offset.reshape(-1, d)), k
+
+    def from_components(self, boxes):
+        """The unions of ``boxes`` (``B * k`` of them, as :meth:`flat_components` gives
+        them); the bump of a mapped union is that of its class (none)."""
+        batch, k, d = self.centre.shape
+        return UnionOfBoxes(boxes.centre.reshape(batch, k, -1),
+                            boxes.offset.reshape(batch, k, -1))
 
     def contains(self, points):
         """Whether the points ``(P, d)`` lie in some box of the union, ``(B, P)``."""
@@ -128,6 +144,19 @@ class UnionOfBoxes(Region):
 
     def translate(self, vector):
         return UnionOfBoxes(self.centre + vector.unsqueeze(1), self.offset)
+
+    def grow(self, amount):
+        """Every box enlarged by ``amount`` (the Minkowski sum distributes over the union)."""
+        if isinstance(amount, th.Tensor) and amount.dim() == 2:
+            amount = amount.unsqueeze(1)
+        return replace(self, offset=self.offset + amount)
+
+    def contract(self):
+        """Every box contracted to its centre."""
+        return replace(self, offset=th.zeros_like(self.offset))
+
+    def detach_size(self):
+        return replace(self, offset=self.offset.detach())
 
     def scale(self, factor):
         return UnionOfBoxes(self.centre * factor.unsqueeze(1),
@@ -951,11 +980,6 @@ class SampledVolume(RegionMeasure, nn.Module):
         points = self.points(dim, _device(denominator_region))
         return mean_memberships(lambda p: (fn_n(p), fn_a(p)), points, self.chunk_size)
 
-    def _no_margin(self, margin):
-        if margin:
-            raise ValueError(
-                f"SampledVolume has no margin (a volume ratio is zero exactly when the "
-                f"relation holds on the sample); got margin={margin!r}. Use margin 0.")
 
     def covered(self, a, b):
         """``(B,)``: the fraction :math:`\\mathrm{Vol}(A \\cap B) / \\mathrm{Vol}(A)` of ``a``
@@ -964,11 +988,14 @@ class SampledVolume(RegionMeasure, nn.Module):
         return num / (den + self.eps)
 
     def inside(self, a, b, margin=0.0):
-        self._no_margin(margin)
+        """:math:`1 - \\mathrm{Vol}(A \\cap B)/\\mathrm{Vol}(A)`; with a strict margin, of
+        ``a`` enlarged by it (zero iff the enlarged region lies inside ``b`` on the
+        sample); a slack is refused."""
+        a = self.grown(a, margin, "SampledVolume")
         return (1.0 - self.covered(a, b)).unsqueeze(1)
 
     def apart(self, a, b, margin=0.0):
-        self._no_margin(margin)
+        a = self.grown(a, margin, "SampledVolume")
         return self.covered(a, b).unsqueeze(1)
 
     def intersect(self, a, b):

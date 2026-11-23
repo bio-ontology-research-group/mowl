@@ -13,8 +13,9 @@ class LocationPenalty(Regularizer):
     :math:`\\operatorname{mean}\\max(0, M - \\beta + \\epsilon) +
     \\operatorname{mean}\\max(0, -m - \\epsilon)` over all entries of the upper and lower
     corners (:math:`L_{loc}` of BoxSEL, Eq. 9; with :math:`\\beta = 1` the regulariser of
-    BoxEL). Needs a class model that stores a lower corner and log-widths
-    (:class:`~mowl.representation.library.boxrel_boxes.MinDeltaBoxes`).
+    BoxEL). With a class model that stores a lower corner and log-widths
+    (:class:`~mowl.representation.library.boxrel_boxes.MinDeltaBoxes`) the corners are read
+    from those tables; with any other class model of boxes, from its regions.
 
     :param beta: Side of the cube.
     """
@@ -26,8 +27,14 @@ class LocationPenalty(Regularizer):
 
     def penalty(self, model):
         classes = getattr(model, "module", model).class_model
-        low = classes.mins.weight
-        high = low + th.exp(classes.deltas.weight)
+        if hasattr(classes, "mins") and hasattr(classes, "deltas"):
+            # the stored corners (BoxEL, BoxSEL): the numbers of the parameters themselves
+            low = classes.mins.weight
+            high = low + th.exp(classes.deltas.weight)
+        else:
+            # any other class model of boxes: the corners of its regions
+            boxes = classes.all()
+            low, high = boxes.lower, boxes.upper
         upper = th.relu(high - self.beta + self.epsilon).mean()
         lower = th.relu(-low - self.epsilon).mean()
         return self.weight * (upper + lower)
@@ -44,9 +51,14 @@ class VolumePenalty(Regularizer):
         self.epsilon = epsilon
 
     def penalty(self, model):
-        deltas = getattr(model, "module", model).class_model.deltas.weight
-        volume = th.exp(deltas).prod(-1)
-        return self.weight * th.relu(self.beta ** deltas.shape[1] - volume - self.epsilon).mean()
+        classes = getattr(model, "module", model).class_model
+        if hasattr(classes, "deltas"):
+            deltas = classes.deltas.weight   # the stored log-widths (BoxEL, BoxSEL)
+            volume, dim = th.exp(deltas).prod(-1), deltas.shape[1]
+        else:
+            boxes = classes.all()            # any other class model of boxes
+            volume, dim = boxes.volume().squeeze(-1), boxes.centre.shape[1]
+        return self.weight * th.relu(self.beta ** dim - volume - self.epsilon).mean()
 
 
 class SizeCapPenalty(Regularizer):

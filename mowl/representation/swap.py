@@ -14,7 +14,10 @@ The convention, the same for every method:
 * ``objective`` is an :class:`~mowl.representation.Objective`; ``objective_options`` are
   options of the method's own objective (``{"gci3": "overlap"}``, see
   :meth:`Objective.replace <mowl.representation.Objective.replace>`).
-* ``regularizers`` are added to those of the method.
+* ``regularizers`` are added to those of the method. A regulariser of the method on a table
+  of a part that is replaced (TransBox's penalty on ``relation_model.offsets``) goes with the
+  part when the new part has no such table; the geometry lists it in
+  ``replaced_regularizers``, with the reason.
 * The method is built first, then the part is replaced in its geometry
   (:meth:`ComposedGeometry.replace_parts <mowl.representation.ComposedGeometry.replace_parts>`),
   whatever the builder does with a part argument of its own (``boxlite(measure=...)`` takes an
@@ -176,6 +179,38 @@ def build_method(key, nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
     return geometry
 
 
+def _kept_regularizers(geometry, parts, replaced):
+    """The regularisers of ``geometry`` that still have their tables once the parts
+    ``replaced`` (``"class_model"``, ...) are those of ``parts``. A regulariser of the method
+    that names a table of a replaced part (``"relation_model.offsets"``) belongs to that part
+    and goes with it when the new part has no such table; the geometry records it in
+    ``replaced_regularizers`` with the reason."""
+    new = {"class_model": parts.get("classes"), "relation_model": parts.get("relations"),
+           "individual_model": parts.get("individuals")}
+    dropped = []
+    for regularizer in geometry.regularizers:
+        names = getattr(regularizer, "parameters", None)
+        names = (names,) if isinstance(names, str) else (
+            tuple(names) if isinstance(names, (tuple, list)) else ())
+        missing = []
+        for name in names:
+            owner, _, rest = name.partition(".")
+            if owner in replaced and rest:
+                target = new[owner]
+                try:
+                    for attribute in rest.split("."):
+                        target = getattr(target, attribute)
+                except AttributeError:
+                    missing.append(name)
+        if missing:
+            dropped.append((regularizer, f"it regularises {missing}, tables of the replaced "
+                                         f"part, which the new part does not have"))
+            continue
+        yield regularizer
+    if dropped:
+        geometry.replaced_regularizers = tuple(dropped)
+
+
 def swap(geometry, key, sizes, embed_dim, classes=None, relations=None, individuals=None,
          measure=None, objective=None, objective_options=None, regularizers=None):
     """Replace parts of ``geometry`` (see :func:`build_method`)."""
@@ -224,12 +259,24 @@ def swap(geometry, key, sizes, embed_dim, classes=None, relations=None, individu
                         f"{objective_options[name]!r}: {unread[name]}, so the losses would "
                         f"not change.")
         parts["objective"] = base.replace(**objective_options) if objective_options else base
+    replaced = [name for kind, name in (("classes", "class_model"),
+                                        ("relations", "relation_model"),
+                                        ("individuals", "individual_model")) if kind in parts]
+    if replaced:
+        kept = tuple(_kept_regularizers(geometry, parts, replaced))
+        if len(kept) != len(geometry.regularizers):
+            parts["regularizers"] = kept + tuple(parts.get("regularizers", ()))
     if regularizers is not None:
-        parts["regularizers"] = tuple(geometry.regularizers) + tuple(regularizers)
+        parts["regularizers"] = tuple(parts.get("regularizers", geometry.regularizers)) \
+            + tuple(regularizers)
     try:
         geometry.replace_parts(**parts)
     except ConstructorUnavailable as error:
         raise ConstructorUnavailable(
             f"{key!r} cannot take {sorted(k for k in parts if k != 'regularizers')}: "
             f"{error} (the method's other parts: {geometry.parts}).") from error
+    if objective is not None:
+        # another objective: the forms with a negative loss are the ones it defines (the
+        # method's own choice of them belongs to the method's own objective)
+        geometry.neg_capable_gcis = frozenset(geometry.objective.neg_forms)
     return geometry

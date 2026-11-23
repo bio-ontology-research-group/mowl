@@ -78,6 +78,8 @@ class Regularizer:
     def tensors(self, model):
         """The parameter tensors this regulariser constrains in ``model`` (a model or a
         module), each two-dimensional."""
+        # (imported here: mowl.representation imports the regularisers)
+        from mowl.representation.regions import ConstructorUnavailable
         module = getattr(model, "module", model)
         if callable(self.parameters):
             found = list(self.parameters(model))
@@ -91,14 +93,16 @@ class Regularizer:
                     for part in name.split("."):
                         target = getattr(target, part)
                 except AttributeError:
-                    raise TypeError(
+                    raise ConstructorUnavailable(
                         f"{type(module).__name__} has no parameter {name!r} to regularise; "
                         f"its embedding tables are {list(embedding_tables(module))}.") from None
                 found.append(target.weight if isinstance(target, th.nn.Module) else target)
         for t in found:
             if not isinstance(t, th.Tensor) or t.dim() != 2:
-                raise TypeError("A regulariser constrains two-dimensional tensors "
-                                "(one vector per row).")
+                shape = tuple(t.shape) if isinstance(t, th.Tensor) else type(t).__name__
+                raise ConstructorUnavailable(
+                    f"{type(self).__name__} constrains two-dimensional tensors (one vector "
+                    f"per row); {self.parameters!r} of {type(module).__name__} is {shape}.")
         return found
 
     def _view(self, tensor):

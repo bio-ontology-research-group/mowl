@@ -20,8 +20,10 @@ __all__ = ["bump_penalty", "ComponentSpread", "DiversityPenalty"]
 # ====================================================================================
 
 def bump_tables(model):
-    """The bump tables of the classes (and individuals) of a geometry."""
-    tables = [model.class_model.bumps.weight]
+    """The bump tables of the classes (and individuals) of a geometry; none for a class
+    model without bumps (its regions have a zero bump, which nothing trains)."""
+    classes = getattr(model.class_model, "bumps", None)
+    tables = [] if classes is None else [classes.weight]
     individuals = model.individual_model
     if individuals is not None and getattr(individuals, "bumps", None) is not None:
         tables.append(individuals.bumps.weight)

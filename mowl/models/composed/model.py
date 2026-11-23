@@ -174,7 +174,11 @@ class ComposedEL(EmbeddingELModel):
         that a combination whose parts do not fit (or a method that this model cannot train
         from sizes alone, such as FaithEL, whose TBox is constructed from the ontology) raises
         :class:`~mowl.representation.ConstructorUnavailable` when it is built, naming the
-        method and the parts, not in the middle of training."""
+        method and the parts, not in the middle of training. Only that error is a refusal:
+        it is raised, with the reason, by the part that cannot do what the combination asks
+        (a measure of another region family, a missing operation,
+        :mod:`mowl.representation.operations`). Any other error is a defect of a part and
+        is not turned into a refusal."""
         from mowl.representation.regions import ConstructorUnavailable
         module = self.module
         swapped = sorted(self.swapped_parts)
@@ -192,13 +196,10 @@ class ComposedEL(EmbeddingELModel):
             if self.relations is not None and module.relation_model is not None:
                 check_relations_are_read(module, self.method, self.training_datasets)
         except ConstructorUnavailable as error:
+            # the library's own refusal, raised with its reason by the part that cannot do
+            # what the combination asks of it; any other error is a defect and surfaces
             raise ConstructorUnavailable(
                 f"{self.method!r} {what}: {error}") from error
-        except (TypeError, AttributeError, RuntimeError, ValueError, IndexError,
-                NotImplementedError, KeyError) as error:
-            raise ConstructorUnavailable(
-                f"{self.method!r} {what}: the combination "
-                f"{module.parts} does not evaluate ({type(error).__name__}: {error}).") from error
 
     def _attach_default_regimes(self):
         """The training regimes that belong to the method (``geometry.default_regimes``: a

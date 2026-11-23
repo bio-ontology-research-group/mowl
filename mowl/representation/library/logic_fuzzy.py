@@ -46,6 +46,7 @@ from mowl.representation.library.logic_alc import (
     AnnealedRelaxation, ExpressionGeometry, ExpressionReading, Relaxation)
 from mowl.representation.library.logic_expressions import pattern_region
 from mowl.representation.measures import RegionMeasure
+from mowl.representation.regions import MarginUnavailable
 from mowl.representation.methods import (register_class_model, register_measure,
                                          register_method, register_relation_model)
 from mowl.representation.objectives import Objective
@@ -905,10 +906,6 @@ class MeanViolation(_FuzzyMeasure):
     def apart_at(self, degree):
         """The cost :math:`C(a)` of an element that is not to be in :math:`C`."""
         return th.relu(degree)
-
-
-class MarginUnavailable(ConstructorUnavailable, ValueError):
-    """A measure that has no margin was given one (a :class:`ValueError` too)."""
 
 
 class ConflictMeasure(_FuzzyMeasure):
