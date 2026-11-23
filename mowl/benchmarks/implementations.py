@@ -46,7 +46,8 @@ selects the implementation::
 import importlib
 
 __all__ = ["Implementation", "PartsImplementation", "register_implementation",
-           "get_implementation", "list_implementations", "load_plugins", "with_run_seed"]
+           "get_implementation", "list_implementations", "load_plugins", "with_run_seed",
+           "method_regimes"]
 
 
 def with_run_seed(callable_, kwargs, seed):
@@ -154,12 +155,16 @@ class PartsImplementation(Implementation):
         ``model.training_regime`` replaces them, so that, for example, RegD under the
         training design of the Box\ :sup:`2`\ EL code would lose its contrastive loss. The
         runner attaches ``ComposedRegime(regime, *method_regimes)`` instead, leaving out
-        a regime of the method whose class ``regime`` already contains: the recipe's regime
-        decides first, the method's regimes apply where it does not (as a direct
-        implementation's own loss applies where an attached regime does not)."""
+        a regime of the method that changes a hook ``regime`` changes: the method's regimes
+        apply where the recipe's regime does not (as a direct implementation's own loss
+        applies where an attached regime does not). A regime that changes no hook before it
+        is attached is a training design that builds its parts from the method's own
+        regimes when attached (e.g. ``elkem-code-training``, ``cate-code-training``); it is
+        attached alone."""
         defaults = method_regimes(model)
-        present = {type(r) for r in _leaves(regime)}
-        extra = [r for r in defaults if not any(type(x) in present for x in _leaves(r))]
+        hooks = frozenset(regime.overridden_hooks())
+        extra = [r for r in defaults
+                 if hooks and not (frozenset(r.overridden_hooks()) & hooks)]
         if extra:
             regime = _with_method_regimes(regime, extra)
         super().attach_regime(model, regime)
@@ -185,13 +190,6 @@ def _with_method_regimes(regime, extra):
     out = WithMethodRegimes(regime, *extra)
     out.key = getattr(regime, "key", "") or out.key
     return out
-
-
-def _leaves(regime):
-    parts = getattr(regime, "regimes", None)
-    if parts is None:
-        return [regime]
-    return [leaf for r in parts for leaf in _leaves(r)] + [regime]
 
 
 def method_regimes(model):

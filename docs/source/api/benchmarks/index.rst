@@ -25,3 +25,17 @@ mowl.benchmarks.families
 .. automodapi:: mowl.benchmarks.families
    :no-heading:
    :headings: --
+
+mowl.benchmarks.implementations
+===============================
+
+.. automodapi:: mowl.benchmarks.implementations
+   :no-heading:
+   :headings: --
+
+mowl.benchmarks.collect
+=======================
+
+.. automodapi:: mowl.benchmarks.collect
+   :no-heading:
+   :headings: --

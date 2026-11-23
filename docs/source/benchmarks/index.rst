@@ -535,7 +535,12 @@ the recipe, every option of the run (``options``), the metrics, the wall time an
 git commit. The runner seeds Python, NumPy and PyTorch, and hands the run's seed to
 every model argument and training-regime argument called ``seed`` that the run does not
 set (several samplers draw from fresh operating-system entropy when their ``seed`` is
-``None``).
+``None``). The walk and corpus methods train Word2Vec and the walker with one worker by
+default, since several workers make the vectors depend on thread scheduling. When a
+recipe attaches a training regime to a method that has regimes of its own (RegD's
+contrastive loss, PRISM's squared mean), the runner keeps those that change hooks the
+recipe's regime leaves alone, as the direct implementation keeps its own loss; the
+result lists them under ``implementation["method_regimes_kept"]``.
 
 For the full-scale runs, ``scripts/benchmark_manifests.py`` writes one line per run
 (benchmark, method, recipe, implementation, seed) for every recipe of a publication whose

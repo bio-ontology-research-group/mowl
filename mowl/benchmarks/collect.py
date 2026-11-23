@@ -41,7 +41,7 @@ import os
 from mowl.benchmarks.report import _fmt, table
 
 __all__ = ["collect", "three_way_table", "write_csv", "read_results", "read_manifest",
-           "status_of_manifest", "HEADER"]
+           "status_of_manifest", "summary_counts", "to_csv_string", "HEADER"]
 
 #: Columns of :func:`three_way_table`.
 HEADER = ["benchmark", "method", "recipe", "subset", "metric", "published", "parts",
