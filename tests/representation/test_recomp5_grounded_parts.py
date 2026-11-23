@@ -412,17 +412,17 @@ def test_sampled_objective_loop_leaves_the_module_in_eval_mode_after_validation(
 
 
 # -- swapping a part of GroundedEL ---------------------------------------------------------
-def test_composed_el_refuses_grounded_at_build_and_names_its_trainer():
+def test_composed_el_builds_grounded_and_refuses_parts_of_other_families():
+    """Round 7: ComposedEL builds the grounded geometry (its joint objective) and swaps its
+    parts by the names of the general model; parts of other families are refused at build."""
     from mowl.datasets.builtin import FamilyDataset
     from mowl.models import ComposedEL
     from mowl.representation import ConstructorUnavailable
     data = FamilyDataset()
-    # with a part to swap: refused before training, naming where the parts are swapped
-    with pytest.raises(TypeError, match="GroundedEL"):
-        ComposedEL(data, method="grounded", relations="translation", embed_dim=4)
-    # without: refused because ComposedEL does not train a grounded program
-    with pytest.raises(ConstructorUnavailable, match="GroundedEL"):
-        ComposedEL(data, method="grounded", embed_dim=4)
+    model = ComposedEL(data, method="grounded", relations="translation", embed_dim=4)
+    assert model.module.joint_objective is not None
+    with pytest.raises(ConstructorUnavailable, match="element domain"):
+        ComposedEL(data, method="grounded", classes="ball", embed_dim=4)
 
 
 @pytest.mark.parametrize("swap", [dict(relation_model="translation"),
