@@ -250,6 +250,7 @@ class BaselineImplementation(Implementation):
         if reason:
             raise UnsupportedModelError(reason)
         register_scorers()   # here, not at import: the evaluation needs the JVM
+        register_region_readers()
         if card.key in FACTORIES:
             import os
             factory_path, class_path = FACTORIES[card.key]
@@ -324,6 +325,63 @@ def register_scorers():
         except (ImportError, AttributeError):
             continue
         el_scoring.CENTRE_DISTANCE_SCORERS.setdefault(path, scorer)
+
+def _regd_options(module):
+    return dict(margin=module.margin, all_negatives=module.all_negative_losses,
+                epsilon=module.epsilon, lamda=module.lamda, p=module.p,
+                gamma1=module.gamma1, gamma2=module.gamma2, eps=module.eps,
+                depth_on_containment=module.depth_on_containment,
+                flip_gci2=module.flip_gci2, tables=module)
+
+
+def _elem_regions(methods, module):
+    return methods["elem"](
+        None, None, embed_dim=module.embed_dim, margin=module.margin,
+        reg_norm=module.reg_norm, all_negatives=module.all_negative_losses,
+        linear_negative=module.negative_loss_form == "linear", epsilon=module.epsilon,
+        gci1_radius_term=module.gci1_radius_term, tables=module)
+
+
+def _elbe_regions(methods, module):
+    return methods["elbe"](None, None, margin=module.margin,
+                           all_negatives=module.all_negative_losses,
+                           epsilon=module.epsilon, gci3=module.gci3_form, tables=module)
+
+
+def _regd_regions(methods, module):
+    return methods["regd"](None, None, embed_dim=module.embed_dim, **_regd_options(module))
+
+
+def _regd_elem_regions(methods, module):
+    return methods["regd_elem"](
+        None, None, embed_dim=module.embed_dim, reg_norm=module.reg_norm,
+        gci1_radius_term=module.gci1_radius_term, radius=module.radius,
+        consistent_radius=module.consistent_radius, **_regd_options(module))
+
+
+#: Direct module -> the reader of its regions: the balls or boxes over the module's own
+#: trained tables (``tables=module``), as the code the baselines were frozen from described
+#: them. Only the evaluations that are defined on regions (the sampled F1 of RegD) read
+#: them; the direct module trains by its own code.
+REGION_READERS = {
+    "mowl.baselines.nn.el.elem.module.ELEmModule": _elem_regions,
+    "mowl.baselines.nn.el.elbe.module.ELBEModule": _elbe_regions,
+    "mowl.baselines.nn.el.regd.module.RegDELBEModule": _regd_regions,
+    "mowl.baselines.nn.el.regd.module.RegDELEmModule": _regd_elem_regions,
+}
+
+
+def register_region_readers():
+    """Let the evaluations that are defined on regions read the regions of a trained
+    direct module (:data:`REGION_READERS`), so that both implementations are measured by
+    the same evaluation."""
+    from mowl.representation import adapters
+    from mowl.representation import methods as M
+    for path, reader in REGION_READERS.items():
+        if path not in adapters.ADAPTERS:
+            adapters.ADAPTERS[path] = (
+                lambda module, reader=reader: reader(M.METHODS, module))
+
 
 IMPLEMENTATION = register_implementation(BaselineImplementation())
 

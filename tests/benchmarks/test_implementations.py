@@ -384,3 +384,21 @@ def test_the_baseline_modules_are_ranked_by_the_same_published_scores():
                      (EmELPPModule, "elem.module.ELEmModule")):
         module = cls.__new__(cls)
         assert el_scoring._scorer_of(Model(module)) is table["mowl.nn.el." + key], cls
+
+
+def test_the_evaluations_on_regions_read_the_regions_of_the_direct_modules():
+    """The sampled F1 of RegD is defined on the class regions; a trained direct module is
+    read as the balls or boxes over its own tables."""
+    import torch as th
+    from mowl.baselines import benchmarks as plugin
+    from mowl.baselines.nn.el.elbe.module import ELBEModule
+    from mowl.baselines.nn.el.elem.module import ELEmModule
+    from mowl.baselines.nn.el.regd.module import RegDELBEModule, RegDELEmModule
+    from mowl.evaluation.sampled_f1 import class_regions
+    plugin.register_region_readers()
+    for cls in (ELEmModule, ELBEModule, RegDELBEModule, RegDELEmModule):
+        module = cls(7, 2, 0, embed_dim=4)
+        centers, sizes, is_ball = class_regions(module)
+        assert th.equal(centers, module.class_embed.weight)
+        table = module.class_rad if is_ball else module.class_offset
+        assert th.allclose(sizes.reshape(7, -1), table.weight.abs().reshape(7, -1))

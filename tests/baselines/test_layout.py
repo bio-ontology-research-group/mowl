@@ -70,6 +70,12 @@ ALLOWED_NAMES = {
     ("mowl.evaluation", "el_scoring"): "the evaluation's table of published scores, in "
                                        "which the benchmark plugin registers the direct "
                                        "modules (both implementations are ranked alike)",
+    ("mowl.representation", "adapters"): "the table of region readers, in which the "
+                                         "benchmark plugin registers the direct modules for "
+                                         "the evaluations defined on regions",
+    ("mowl.representation", "methods"): "the builders that read the trained tables of a "
+                                        "direct module as balls or boxes for those "
+                                        "evaluations (after training; no part trains it)",
     ("mowl.evaluation.axiom_ranking", "rank_queries"):
         "the validation measure a regime selects the model by (the evaluation both implementations are measured with)",
     ("mowl.evaluation.el_scoring", "resolve_scorer"):
