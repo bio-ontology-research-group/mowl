@@ -217,6 +217,9 @@ Behaviour that changed, and how to get the 2.1.0 behaviour back:
 
 ### Fixed
 
+- The verbaliser of the language-model methods (`mowl.text.verbalise`) failed on a nominal
+  (`{a, b}`), calling a method the bundled OWL API does not have; it reads the individuals
+  in a fixed order now.
 - `load_best_model` of the EL models no longer fails after training with a regime that adds
   a parameter to the module (the subclass translation of the EmEL++ code regime).
 - `Reshuffle`, `BoxE` and `ExpressivE` accept the loss of a published configuration in

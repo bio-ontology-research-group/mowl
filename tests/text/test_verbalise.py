@@ -113,3 +113,13 @@ def test_non_el_constructors_raise(onto):
         v(union)
     with pytest.raises(ValueError):
         Verbaliser(ont, style="other")
+
+
+def test_a_nominal_reads_its_individuals_in_a_fixed_order(onto):
+    """``{a, b}`` (the OWL API keeps the individuals as a set)."""
+    from org.semanticweb.owlapi.model import IRI
+    ad, ont = onto
+    df = ad.data_factory
+    one_of = df.getOWLObjectOneOf(df.getOWLNamedIndividual(IRI.create(P + "zoe")),
+                                  df.getOWLNamedIndividual(IRI.create(P + "adam")))
+    assert Verbaliser(ont)(one_of) == "adam or zoe"

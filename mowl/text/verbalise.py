@@ -231,7 +231,8 @@ class Verbaliser:
         if isinstance(expr, OWLEntity):
             return self.label(expr)
         if isinstance(expr, OWLObjectOneOf):
-            return " or ".join(self.label(i) for i in expr.getIndividualsAsList())
+            # a set in the OWL API: sorted, so that the text does not depend on its order
+            return " or ".join(sorted(self.label(i) for i in expr.getIndividuals()))
         if self.style == "deeponto":
             return self._deeponto(expr, add_something=True)
         if isinstance(expr, OWLObjectIntersectionOf):
