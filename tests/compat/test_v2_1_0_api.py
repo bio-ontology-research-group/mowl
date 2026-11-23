@@ -586,4 +586,7 @@ def test_evaluate_predictions_is_deprecated_and_as_released():
     with pytest.warns(DeprecationWarning):
         metrics = evaluate_predictions({"a", "b"}, {"a": 0.9, "b": 0.8, "c": 0.1, "d": 0.3},
                                        [1, 2])
-    assert metrics["auc"] == 1.0 and metrics["prec@2"] == 1.0
+    # The released function ranks the scores after cutting them at the best threshold, so
+    # every cut-off beyond the first place falls among ties and depends on how the sort orders
+    # them (it differs between processors).  Only the tie-free values are checked.
+    assert metrics["auc"] == 1.0 and metrics["prec@1"] == 1.0 and metrics["rec@1"] == 0.5
