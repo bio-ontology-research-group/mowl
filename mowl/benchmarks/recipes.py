@@ -81,6 +81,16 @@ def _recipes():
         _RECIPES = tuple(found)
     return _RECIPES
 
+def register_recipe(recipe):
+    """Add a :class:`Recipe` at run time (for recipes defined outside
+    :mod:`mowl.benchmarks.recipe_sets`, e.g. by a plugin of the command line). Adding an
+    equal recipe twice has no effect."""
+    global _RECIPES
+    if not isinstance(recipe, Recipe):
+        raise TypeError("register_recipe takes a Recipe.")
+    if recipe not in _recipes():
+        _RECIPES = _recipes() + (recipe,)
+    return recipe
 
 
 def list_recipes(benchmark=None, method=None, source=None, name=None):

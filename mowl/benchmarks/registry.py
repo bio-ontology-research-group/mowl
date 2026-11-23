@@ -62,6 +62,21 @@ def _results():
     return _RESULTS
 
 
+def register_benchmark(benchmark, replace=False):
+    """Add a :class:`~mowl.benchmarks.Benchmark` to the registry at run time (for
+    benchmarks defined outside :mod:`mowl.benchmarks.entries`, e.g. by a plugin of the
+    command line). Re-registering the same key replaces it only with ``replace=True``
+    or when the new benchmark is equal to the old one."""
+    if not isinstance(benchmark, Benchmark):
+        raise TypeError("register_benchmark takes a Benchmark.")
+    known = _benchmarks()
+    old = known.get(benchmark.key)
+    if old is not None and old != benchmark and not replace:
+        raise ValueError(f"Duplicate benchmark key {benchmark.key!r}.")
+    known[benchmark.key] = benchmark
+    return benchmark
+
+
 def get_benchmark(key):
     """Return the benchmark registered under ``key``."""
     benchmarks = _benchmarks()
