@@ -333,3 +333,29 @@ def test_collector_reads_manifests(tmp_path):
     (tmp_path / "logs" / "b.log").write_text("error")
     assert status_of_manifest(runs, str(tmp_path), str(tmp_path / "logs")) == {
         "a": "done", "b": "failed"}
+
+
+def test_the_baseline_trains_with_the_direct_regime_where_the_library_one_needs_parts():
+    """A recipe regime that switches the objective of a geometry built from parts cannot
+    train a direct model; the baseline implementation uses the direct regime of the same
+    name instead, and leaves every other regime class alone."""
+    import importlib
+    from mowl.baselines.benchmarks import BaselineImplementation, DIRECT_REGIMES
+    from mowl.benchmarks.implementations import Implementation
+    from mowl.benchmarks.runner import resolve_training_regime
+    from mowl.training.dele import DELECodeLosses
+    from mowl.training.batching import PerNormalFormMiniBatches
+
+    baseline = BaselineImplementation()
+    direct = baseline.regime_class(DELECodeLosses)
+    assert direct.__module__ == "mowl.baselines.training.dele"
+    assert direct.__name__ == "DELECodeLosses"
+    assert baseline.regime_class(PerNormalFormMiniBatches) is PerNormalFormMiniBatches
+    assert Implementation().regime_class(DELECodeLosses) is DELECodeLosses
+    for library, frozen in DIRECT_REGIMES.items():
+        importlib.import_module(library)
+        importlib.import_module(frozen)
+    regime = resolve_training_regime("dele-code-training", seed=0, implementation=baseline)
+    assert type(regime).__module__ == "mowl.baselines.training.dele"
+    assert type(resolve_training_regime("dele-code-training", seed=0)).__module__ \
+        == "mowl.training.dele"

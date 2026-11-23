@@ -182,6 +182,19 @@ docstrings and imports) with the source at 2d0ed505.
 | `training/regime.py` | `mowl/training/regime.py` @ 162ff5fd | original; library code rewritten since |
 | `training/schedules.py` | `mowl/training/schedules.py` @ fa438240 | original; library code rewritten since |
 | `training/structure.py` | `mowl/training/structure.py` @ fa438240 | unchanged since |
+| `training/cate.py` | `mowl/training/cate.py` @ 33185480 | original; library code rewritten since |
+| `training/closure.py` | `mowl/training/closure.py` @ 850a0396 | unchanged since |
+| `training/dele.py` | `mowl/training/dele.py` @ 8f10662c | original; library code rewritten since |
+| `training/initialisation.py` | `mowl/training/initialisation.py` @ 65a79a9d | original; library code rewritten since |
+| `training/kbc.py` | `mowl/training/kbc.py` @ 683d0a0c | unchanged since |
+| `training/loss_forms.py` | `mowl/training/loss_forms.py` @ 8f10662c | original; library code rewritten since |
+| `training/losses.py` | `mowl/training/losses.py` @ 162ff5fd | original; library code rewritten since |
+| `training/margin.py` | `mowl/training/margin.py` @ 7011ffea | unchanged since |
+| `training/negatives.py` | `mowl/training/negatives.py` @ 48cd2112 | original; library code rewritten since |
+| `training/positives.py` | `mowl/training/positives.py` @ 48cd2112 | unchanged since |
+| `training/reference.py` | `mowl/training/reference.py` @ 65a79a9d | original; library code rewritten since |
+| `training/regularization.py` | `mowl/training/regularization.py` @ 7f1f5b80 | original; library code rewritten since |
+| `training/selection.py` | `mowl/training/selection.py` @ d2a436b6 | unchanged since |
 | `kge/model.py` | `mowl/kge/model.py` @ 6cc74711 (as released in v2.1.0, f8b2cb07) | original: `KGEModel` trained by PyKEEN's `SLCWATrainingLoop`; the library version trains in mOWL's loop (round 7) |
 
 ## Replaced by the original in round 7

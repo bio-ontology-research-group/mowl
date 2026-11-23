@@ -78,6 +78,10 @@ def _build_parser():
                         "has several recipes (e.g. DELE's model variants)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="cpu")
+    p.add_argument("--gpu-memory-fraction", type=float, default=None,
+                   help="cap this run at a fraction of the memory of each GPU (for several "
+                        "runs on one GPU: a run that searches for the largest batch that "
+                        "fits then stops at its share instead of taking all memory)")
     p.add_argument("--param", action="append", default=[], type=parse_assignment,
                    help="model keyword argument name=value (repeatable)")
     p.add_argument("--dataset-param", action="append", default=[], type=parse_assignment)
@@ -169,6 +173,12 @@ def main(argv=None):
         from mowl.benchmarks.implementations import load_plugins
         from mowl.benchmarks.runner import run_benchmark
         load_plugins(args.plugin)
+        if args.gpu_memory_fraction is not None:
+            import torch
+            if torch.cuda.is_available():
+                for index in range(torch.cuda.device_count()):
+                    torch.cuda.set_per_process_memory_fraction(
+                        args.gpu_memory_fraction, index)
         result = run_benchmark(
             args.benchmark, method=args.method, model_kwargs=dict(args.param),
             epochs=args.epochs, seed=args.seed, device=args.device,

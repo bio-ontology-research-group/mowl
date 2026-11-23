@@ -67,6 +67,17 @@ LIBRARY_COMPUTING = ("mowl.representation", "mowl.training", "mowl.evaluation", 
 #: Names a baseline may import from those packages because they do not compute: base classes
 #: that only dispatch, exception classes, a reader of the axioms into index rows.
 ALLOWED_NAMES = {
+    ("mowl.evaluation.axiom_ranking", "rank_queries"):
+        "the validation measure a regime selects the model by (the evaluation both implementations are measured with)",
+    ("mowl.evaluation.el_scoring", "resolve_scorer"):
+        "the validation measure a regime selects the model by (the evaluation both implementations are measured with)",
+    ("mowl.evaluation.sampled_f1", "validation_best_f1"):
+        "the validation measure a regime selects the model by (the evaluation both implementations are measured with)",
+    **{("mowl.geometric.normal_forms", name): "normal-form axiom record read by the "
+                                              "completion reasoner (data structure)"
+       for name in ("NF1", "NF2", "NF3", "NF4", "NF6", "NF7")},
+    ("mowl.geometric.completion", "Completion"): "the EL completion reasoner (deductive "
+                                                 "closure of the axioms, not an embedding)",
     ("mowl.evaluation.model_scoring", "UnsupportedAxiomForm"): "exception class",
     ("mowl.evaluation.axiom_ranking", "el_rows"): "reads the validation axioms into index "
                                                    "rows (data extraction)",

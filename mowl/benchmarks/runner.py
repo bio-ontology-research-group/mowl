@@ -377,9 +377,13 @@ def _ensure_jvm(memory):
         mowl.init_jvm(memory)
 
 
-def resolve_training_regime(regime, seed=None):
+def resolve_training_regime(regime, seed=None, implementation=None):
     """An instance of :class:`mowl.training.TrainingRegime` from an instance, a class, a
     catalogue key, a ``(key, kwargs)`` pair, or a list of these.
+
+    With ``implementation`` (an :class:`~mowl.benchmarks.implementations.Implementation`), a
+    regime class is passed through its ``regime_class`` before it is built, so that an
+    implementation whose models cannot take the library's class uses its own.
 
     With ``seed``, a regime built here whose constructor takes ``seed`` gets it unless
     its arguments set one (its samplers would otherwise draw from fresh entropy, see
@@ -393,7 +397,7 @@ def resolve_training_regime(regime, seed=None):
     if regime is None:
         return None
     if isinstance(regime, list):
-        parts = [resolve_training_regime(r, seed) for r in regime]
+        parts = [resolve_training_regime(r, seed, implementation) for r in regime]
         parts = [r for r in parts if r is not None]
         if not parts:
             return None
@@ -416,6 +420,9 @@ def resolve_training_regime(regime, seed=None):
             raise ValueError(f"Regime {regime!r} is an {card.kind.value} regime, not a "
                              f"training regime.")
         regime = card.load()
+    if isinstance(regime, type) and implementation is not None:
+        # An implementation may train with a regime class of its own for the same name.
+        regime = implementation.regime_class(regime)
     if isinstance(regime, type):
         if seed is not None:
             from mowl.benchmarks.implementations import with_run_seed
@@ -571,7 +578,7 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
         model, family = impl.build(card, dataset, model_kwargs, device, model_filepath,
                                    seed=seed)
 
-    regime = resolve_training_regime(training_regime, seed=seed)
+    regime = resolve_training_regime(training_regime, seed=seed, implementation=impl)
     if regime is not None:
         impl.attach_regime(model, regime)
     elif getattr(model, "training_regime", None) is not None:

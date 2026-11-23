@@ -32,6 +32,7 @@ Behaviour that changed, and how to get the 2.1.0 behaviour back:
 - Datasets are downloaded to `$XDG_CACHE_HOME/mowl/datasets` instead of the working directory (`MOWL_DATA_ROOT` or `data_root=`).
 
 ### Added
+- `python -m mowl.benchmarks run --gpu-memory-fraction F` caps a run at a share of the GPU memory, so that several runs can share one GPU even when one of them searches for the largest batch that fits. A benchmark implementation can name its own class for a recipe's training regime (`Implementation.regime_class`).
 - `ConstructorNotImplemented` (a `ConstructorUnavailable`): a refused combination says whether it is undefined (no such combination exists) or not implemented (it exists, no formula is written).
 - Volumes for more regions: `Ball.volume`, the lens of two balls (`BallLens`, what `Ball.intersect` returns now), prisms, octagon products and unions of boxes; a generic non-inclusion (`outside`) for every measure.
 - `BoxEL(gci3_preimage=...)` / `BoxELModule(gci3_preimage=...)` and `Affine(preimage_reading=...)`: `"as_released"` gives the box of `∃r.C` of 2.1.0.

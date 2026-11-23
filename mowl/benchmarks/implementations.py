@@ -111,6 +111,12 @@ class Implementation:
         """
         raise NotImplementedError
 
+    def regime_class(self, regime_class):
+        """The class this implementation trains with where a recipe names
+        ``regime_class``. The default is the class itself; an implementation whose models
+        cannot take it returns its own class of the same constructor arguments."""
+        return regime_class
+
     def attach_regime(self, model, regime):
         """Attach a training regime (an instance of :class:`mowl.training.TrainingRegime`)
         to ``model``. The default assigns ``model.training_regime``."""

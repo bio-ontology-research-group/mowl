@@ -33,6 +33,11 @@ regime object of :mod:`mowl.training`, so that a difference between them is a di
 of the method. The direct classes accept only their own frozen regime class in
 ``training_regime``; :meth:`BaselineImplementation.attach_regime` checks that their loop
 consults every hook the regime changes (as their setter does) and attaches it.
+The regimes that reproduce a publication's code (:data:`DIRECT_REGIMES`: the DELE, CatE,
+Box2EL-code and EmEL++-code regimes and the regimes they are built from) are the exception:
+the library's classes switch parts of a geometry, which a direct model does not have, so
+the direct code is trained by the regime as it was written for it
+(:meth:`BaselineImplementation.regime_class`).
 
 Options that differ (:data:`ARGUMENT_MAP`). Where a direct class spells an argument
 differently, or lacks an option that the combination has, the mapping is explicit:
@@ -48,6 +53,7 @@ from mowl.benchmarks.implementations import (Implementation, register_implementa
                                              with_run_seed)
 
 __all__ = ["BaselineImplementation", "MODELS", "FACTORIES", "UNSUPPORTED", "ARGUMENT_MAP",
+           "DIRECT_REGIMES",
            "REFUSED_ARGUMENTS", "baseline_path", "baseline_class", "main"]
 
 #: Methods whose direct class is not found by the naming rule: method -> dotted path.
@@ -96,6 +102,24 @@ ARGUMENT_MAP = {}
 
 #: method -> {argument: why the direct class cannot be run with it}.
 REFUSED_ARGUMENTS = {}
+
+
+#: Library regime modules whose classes need a model built from parts, and the modules of
+#: the direct regimes of the same names and constructor arguments.
+DIRECT_REGIMES = {
+    "mowl.training.dele": "mowl.baselines.training.dele",
+    "mowl.training.cate": "mowl.baselines.training.cate",
+    "mowl.training.initialisation": "mowl.baselines.training.initialisation",
+    "mowl.training.reference": "mowl.baselines.training.reference",
+    "mowl.training.losses": "mowl.baselines.training.losses",
+    "mowl.training.negatives": "mowl.baselines.training.negatives",
+    "mowl.training.positives": "mowl.baselines.training.positives",
+    "mowl.training.regularization": "mowl.baselines.training.regularization",
+    "mowl.training.margin": "mowl.baselines.training.margin",
+    "mowl.training.loss_forms": "mowl.baselines.training.loss_forms",
+    "mowl.training.selection": "mowl.baselines.training.selection",
+    "mowl.training.kbc": "mowl.baselines.training.kbc",
+}
 
 
 def _load(path):
@@ -243,6 +267,16 @@ class BaselineImplementation(Implementation):
         kwargs = with_run_seed(cls, model_kwargs, seed)
         kwargs = self._arguments(card.key, cls, kwargs)
         return family.build(cls, dataset, kwargs, device, model_filepath), family
+
+    def regime_class(self, regime_class):
+        """The direct regime class for the library regimes of :data:`DIRECT_REGIMES`: these
+        switch the objective of a geometry built from parts, which a direct model does not
+        have, so the direct code is trained by the regime as it was written for it."""
+        module = getattr(regime_class, "__module__", "")
+        if module in DIRECT_REGIMES:
+            frozen = importlib.import_module(DIRECT_REGIMES[module])
+            return getattr(frozen, regime_class.__name__, regime_class)
+        return regime_class
 
     def attach_regime(self, model, regime):
         from mowl.benchmarks.runner import UnsupportedModelError
