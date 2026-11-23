@@ -396,11 +396,12 @@ def membership_sampler(region, temperature=1.0, aggregate="min"):
 # class models
 # ====================================================================================
 
-def _unit_rows(table, parts=1):
-    """Uniform in ``[-1, 1]``, every one of ``parts`` consecutive blocks of a row of length
-    one (the initialisation of Box2EL, of its multi-box variants and of ELBE)."""
+def _unit_rows(table, parts=1, low=-1, high=1):
+    """Uniform in ``[low, high]`` (default ``[-1, 1]``), every one of ``parts`` consecutive
+    blocks of a row of length one (the initialisation of Box2EL, of its multi-box variants
+    and of ELBE)."""
     with th.no_grad():
-        nn.init.uniform_(table.weight, a=-1, b=1)
+        nn.init.uniform_(table.weight, a=low, b=high)
         if table.num_embeddings > 0:
             view = table.weight.view(table.num_embeddings, parts, -1)
             view.div_(th.linalg.norm(view, dim=-1, keepdim=True))

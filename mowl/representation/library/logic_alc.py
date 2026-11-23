@@ -412,6 +412,10 @@ class ExpressionGeometry(ComposedGeometry, ALCModule):
     def _context(self, e_emb):
         domain = self.domain
         if domain is not None and e_emb is not None:
+            if isinstance(e_emb, th.nn.Parameter):
+                # (a table itself, as a caller of the released FALCON module may pass it: a
+                # view of it, so that it is not registered as a parameter of the domain)
+                e_emb = e_emb.view_as(e_emb)
             domain.context = e_emb
         return domain
 

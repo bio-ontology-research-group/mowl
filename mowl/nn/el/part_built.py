@@ -9,6 +9,8 @@ constructor, the attribute names and the hooks that the released class had.
 """
 
 
+import torch as th
+
 from mowl.nn.el.elmodule import ELModule
 from mowl.representation.geometry import ComposedGeometry
 
@@ -37,6 +39,11 @@ class _PartBuiltModule(ComposedGeometry):
     #: "class_model.mins.weight"}``).
     state_dict_aliases = {}
 
+    #: Whether the state dict also names every table by its name in the released module
+    #: (:attr:`state_dict_aliases`), so that code reading ``state_dict()["min_embedding.weight"]``
+    #: keeps working (the module classes released in mOWL 2.1.0 set it).
+    released_state_dict_names = False
+
     #: The forms whose loss the hand-written module returned as a flat vector ``(B,)``: with
     #: ``per_axiom_column = False`` they still do (see
     #: :class:`~mowl.nn.el.per_axiom_column.PerAxiomColumn`); by default every loss is a column.
@@ -58,6 +65,20 @@ class _PartBuiltModule(ComposedGeometry):
                 del self.neg_capable_gcis
                 break
         self._register_load_state_dict_pre_hook(_rename_earlier_parameters, with_module=True)
+        if self.released_state_dict_names:
+            self._register_released_names()
+
+    def _register_released_names(self):
+        """Register every table also under its released name (one more name of the same
+        table, as :attr:`state_dict_aliases` lists them)."""
+        for old, new in self.state_dict_aliases.items():
+            name, path = old.rsplit(".", 1)[0], new.rsplit(".", 1)[0]
+            try:
+                table = self.get_submodule(path)
+            except AttributeError:
+                continue                    # (no individuals)
+            if name not in self._modules:
+                th.nn.Module.__setattr__(self, name, table)
 
     def get_loss_function(self, gci_name):
         return ELModule.get_loss_function(self, gci_name)

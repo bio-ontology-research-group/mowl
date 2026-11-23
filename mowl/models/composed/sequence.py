@@ -33,6 +33,66 @@ class SequenceScores(th.nn.Module):
         return g.inside(g.classes(x), g.classes(y)).reshape(-1).float().to(data.device)
 
 
+class EvaluationModel(th.nn.Module):
+    """The ``EvaluationModel`` of the released ``RandomWalkPlusW2VModel`` and
+    ``SyntacticPlusW2VModel`` (mOWL 2.1.0): ``forward(data)`` is
+    :math:`1 - \\sigma(x \\cdot y)` of the Word2Vec vectors of the classes in the first and
+    the last column of ``data`` (two or three columns of indices of ``dataset.classes``).
+
+    It is made of the parts of the sequence models: the encoder
+    (:class:`~mowl.representation.library.walks_encoders.Word2VecEncoder` around
+    ``w2v_model``), the reading (:class:`~mowl.representation.library.walks_encoders.TokenVectors`)
+    and the measure (:class:`~mowl.representation.library.walks_encoders.DotSigmoid`). A class
+    without a vector costs ``inf`` (the released class gave it unseeded random numbers).
+
+    .. deprecated:: 2.2.0
+       Use ``model.evaluation_model`` (:class:`SequenceScores`) of the model.
+    """
+
+    def __init__(self, w2v_model, dataset, embedding_size, device):
+        import warnings
+        from mowl.representation.library.walks_encoders import (DotSigmoid, TokenVectors,
+                                                                Word2VecEncoder)
+        warnings.warn("EvaluationModel is deprecated: use model.evaluation_model.",
+                      DeprecationWarning, stacklevel=2)
+        super().__init__()
+        self.embedding_size, self.device = embedding_size, device
+        self.classes = list(dataset.classes.as_str)
+        self.encoder = Word2VecEncoder(model=w2v_model)
+        self.reading, self.measure = TokenVectors(), DotSigmoid()
+        self._embeddings = None
+
+    def init_module(self, w2v_model, dataset):
+        """The table of the vectors of ``dataset.classes`` (zero for a class without one)."""
+        from mowl.representation.library.walks_encoders import Word2VecEncoder
+        vectors, _ = self.reading.vectors(Word2VecEncoder(model=w2v_model),
+                                          list(dataset.classes.as_str))
+        return th.nn.Embedding.from_pretrained(vectors.to(self.device))
+
+    @property
+    def embeddings(self):
+        """The table of the vectors of the classes (as the released class had it)."""
+        if self._embeddings is None:
+            vectors, _ = self.reading.vectors(self.encoder, self.classes)
+            self._embeddings = th.nn.Embedding.from_pretrained(vectors.to(self.device))
+        return self._embeddings
+
+    def _tokens(self, ids):
+        from mowl.representation.sequence import Tokens
+        vectors, known = self.reading.vectors(self.encoder,
+                                              [self.classes[i] for i in ids.tolist()])
+        return Tokens(vectors, known)
+
+    def forward(self, data, *args, **kwargs):
+        if data.shape[1] == 2:
+            x, y = data[:, 0], data[:, 1]
+        elif data.shape[1] == 3:
+            x, y = data[:, 0], data[:, 2]
+        else:
+            raise ValueError("Data must have 2 or 3 columns")
+        return self.measure.cost(self._tokens(x), self._tokens(y)).reshape(-1).to(data.device)
+
+
 class ComposedSequenceModel(Model):
     """A model that learns from walks or sentences, put together from parts
     (:mod:`mowl.representation.sequence`): a view of the ontology, a source of sequences, an

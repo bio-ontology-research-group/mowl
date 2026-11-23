@@ -394,13 +394,18 @@ class ComposedGeometry(ELModule, Geometry):
         return groups
 
 
+def _loss_method(form):
+    # (the argument is called ``data`` as in the released modules, which callers may name)
+    def loss(self, data, neg=False):
+        return self.cost(form, data, neg)
+    loss.__name__ = f"{form}_loss"
+    loss.__doc__ = f"Loss of the ``{form}`` axioms ``data`` (see the objective)."
+    return loss
+
+
 def _make_losses():
     for form in FORMS + ROLE_FORMS:
-        def loss(self, rows, neg=False, _form=form):
-            return self.cost(_form, rows, neg)
-        loss.__name__ = f"{form}_loss"
-        loss.__doc__ = f"Loss of the ``{form}`` axioms ``rows`` (see the objective)."
-        setattr(ComposedGeometry, f"{form}_loss", loss)
+        setattr(ComposedGeometry, f"{form}_loss", _loss_method(form))
 
 
 _make_losses()

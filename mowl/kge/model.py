@@ -153,7 +153,9 @@ Please train the model first.")
         loop (:func:`mowl.training.triples.train_on_triples`) with the regime
         :class:`~mowl.training.triples.SLCWABatches`, which reads PyKEEN's batches and loss;
         ``batching="mowl"`` uses mOWL's own batches and sampler
-        (:class:`~mowl.training.triples.TripleBatches`) instead."""
+        (:class:`~mowl.training.triples.TripleBatches`) instead. As in PyKEEN's loop, a
+        batch that does not fit in the memory of a GPU is split into sub-batches whose
+        gradients are accumulated (automatic memory optimisation)."""
         from types import SimpleNamespace
         from mowl.representation.library.other_graph import PyKEENGeometry
         from mowl.training.triples import SLCWABatches, positive_triples, train_on_triples

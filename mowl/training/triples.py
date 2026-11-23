@@ -152,10 +152,16 @@ class SLCWABatches(TrainingRegime):
     back-propagates, takes the optimiser step and then applies the model's constraints
     (``post_parameter_update``, the projection of the geometry), in PyKEEN's order.
 
-    What is not reproduced: sub-batching, slicing, gradient clipping, learning-rate
-    schedulers, checkpoints and stoppers of PyKEEN's loop (mOWL's regimes do the last three);
-    ``post_forward_pass`` of the model is called after the step instead of before it (a no-op
-    for PyKEEN's models).
+    PyKEEN's automatic memory optimisation is applied as PyKEEN applies it: at the start of a
+    run (``reinitialise``) the loop probes the memory, and when a batch does not fit (on a
+    GPU) the batch is split into sub-batches whose gradients are accumulated before the one
+    optimiser step (:class:`~mowl.training.Accumulated`); ``sub_batch_size`` sets the split
+    by hand.
+
+    What is not reproduced: slicing (PyKEEN's sLCWA loop has none either), gradient clipping,
+    learning-rate schedulers, checkpoints and stoppers of PyKEEN's loop (mOWL's regimes do
+    the last three); ``post_forward_pass`` of the model is called after the step instead of
+    before it (a no-op for PyKEEN's models).
 
     :param kge: The PyKEEN model (:class:`pykeen.models.ERModel`).
     :param triples_factory: The training triples.
@@ -164,14 +170,21 @@ class SLCWABatches(TrainingRegime):
     :param reinitialise: As PyKEEN's loop does unless it continues a run: probe the memory
         (when the loop optimises it automatically, the default) and draw the parameters again,
         in that order, before the first epoch.
+    :param sub_batch_size: Split every batch into sub-batches of this size (``None``: as the
+        memory probe chooses, the whole batch on a CPU).
+    :param automatic_memory_optimization: As for PyKEEN's loop (default ``True``): probe the
+        memory at the start of a run and split the batches when they do not fit.
     """
 
     key = "slcwa-batches"
 
     def __init__(self, kge, triples_factory, batch_size, negative_sampler=None,
-                 negative_sampler_kwargs=None, drop_last=None, reinitialise=True):
+                 negative_sampler_kwargs=None, drop_last=None, reinitialise=True,
+                 sub_batch_size=None, automatic_memory_optimization=True):
         super().__init__()
+        self.automatic_memory_optimization = bool(automatic_memory_optimization)
         self.reinitialise = bool(reinitialise)
+        self.sub_batch_size = None if sub_batch_size is None else int(sub_batch_size)
         self.kge, self.triples_factory, self.batch_size = kge, triples_factory, batch_size
         self.negative_sampler = negative_sampler
         self.negative_sampler_kwargs = negative_sampler_kwargs
@@ -185,7 +198,8 @@ class SLCWABatches(TrainingRegime):
             model=self.kge, triples_factory=self.triples_factory,
             optimizer=th.optim.Adam(params=self.kge.get_grad_params()),
             negative_sampler=self.negative_sampler,
-            negative_sampler_kwargs=self.negative_sampler_kwargs)
+            negative_sampler_kwargs=self.negative_sampler_kwargs,
+            automatic_memory_optimization=self.automatic_memory_optimization)
         drop_last = self.drop_last if self.drop_last is not None \
             else bool(get_batchnorm_modules(self.kge))
         if self.reinitialise:
@@ -196,10 +210,16 @@ class SLCWABatches(TrainingRegime):
                 sub, slices = self._loop.sub_batch_and_slice(
                     batch_size=self.batch_size, sampler=None,
                     triples_factory=self.triples_factory)
-                if (sub is not None and sub != self.batch_size) or slices is not None:
-                    raise ValueError("SLCWABatches does not split batches (PyKEEN chose "
-                                     f"sub-batches of {sub}, slices of {slices}).")
+                if slices is not None:
+                    raise MemoryError(f"PyKEEN's memory probe chose slices of {slices}, which "
+                                      f"its sLCWA loop cannot train with either.")
+                if self.sub_batch_size is None and sub is not None and sub != self.batch_size:
+                    self.sub_batch_size = int(sub)
             self.kge.reset_parameters_()
+        if self.sub_batch_size is not None and self.sub_batch_size < self.batch_size and \
+                get_batchnorm_modules(self.kge):
+            from pykeen.training.training_loop import SubBatchingNotSupportedError
+            raise SubBatchingNotSupportedError(self.kge)
         # as PyKEEN's ``_train`` makes it (shuffled, no worker processes, pinned memory)
         self._batches = self._loop._create_training_data_loader(
             self.triples_factory, batch_size=self.batch_size, drop_last=drop_last,
@@ -215,13 +235,31 @@ class SLCWABatches(TrainingRegime):
     def on_epoch_start(self, epoch, epochs):
         self._iterator = iter(self._batches)
 
-    def step_loss(self, step):
+    def _batch_loss(self, batch, start, stop):
         loop = self._loop
         loss = loop._process_batch_static(model=self.kge, loss=loop.loss, mode=loop.mode,
-                                          batch=next(self._iterator), start=None, stop=None)
+                                          batch=batch, start=start, stop=stop)
         if not th.isfinite(loss):
             raise FloatingPointError("The loss is not finite.")
         return loss
+
+    def step_loss(self, step):
+        from mowl.training.loop import accumulate_backward
+        from mowl.training.regime import Accumulated
+        batch = next(self._iterator)
+        size = self._loop._get_batch_size(batch)
+        sub = self.sub_batch_size
+        if sub is None or sub >= size:
+            return self._batch_loss(batch, None, None)
+        # PyKEEN's sub-batches (``_train_epoch``, ``_forward_pass``): the gradient of every
+        # part is accumulated, a mean loss weighted by the share of the part in the batch
+        mean = self._loop.loss.reduction == "mean"
+        value = 0.0
+        for start in range(0, size, sub):
+            stop = min(start + sub, size)
+            value += accumulate_backward(self._batch_loss(batch, start, stop),
+                                         (stop - start) / size if mean else 1.0)
+        return Accumulated(value)
 
 
 class _TripleRun(TrainingLoop):

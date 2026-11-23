@@ -7,7 +7,10 @@ the loop of ``TripleGraphModel``; the comparison shows that the two give the sam
 scores and trained parameters.
 """
 import contextlib
+import copy
+import random
 
+import numpy as np
 import torch as th
 
 from tests.baselines.harness import Pair
@@ -77,47 +80,89 @@ def triple_loss(model):
             "negative scores": neg.reshape(-1)}
 
 
-@contextlib.contextmanager
-def _plain_pykeen_loop():
-    """Run the direct implementation's PyKEEN training loop on the parameters it is given.
+class _PyKEENStart:
+    """What the direct implementation's PyKEEN loop starts from, observed, not changed.
 
-    PyKEEN's loop starts by drawing every parameter again (``reset_parameters_``, unless it
-    continues a run), so the parameters a model starts with never decide the result and the
-    two sides could not start from the same numbers; and it tries its batch once before it
-    trains (``automatic memory optimization``, on by default, also on a CPU), which draws the
-    parameters, batches and corrupted triples once more for nothing. The direct code is run as
-    it is, with these two switched off: no draw of fresh parameters and no probe. Everything
-    else (batches, corrupted triples, loss, optimiser, constraints) is PyKEEN's."""
-    from pykeen.models.base import Model
-    from pykeen.training import SLCWATrainingLoop
+    PyKEEN's loop starts every ``train()`` by probing the memory (forward and backward passes
+    over batches, which draw random numbers) and drawing every parameter again
+    (``reset_parameters_``, twice: in the probe and before the first epoch). The direct code
+    runs unchanged; this wrapper of the model's ``reset_parameters_`` calls PyKEEN's and then
+    records the parameters it drew and the state of the random generators at that moment
+    (the last call is the start of the training proper).
 
-    from mowl.baselines.nn.graph.reshuffle import Reshuffle as ReshuffleKGE
-    original_init = SLCWATrainingLoop.__init__
-    original_reset = [(cls, cls.__dict__["reset_parameters_"]) for cls in (Model, ReshuffleKGE)]
+    The named classes ``BoxE``, ``ExpressivE`` and ``Reshuffle`` did not exist in mOWL 2.1.0;
+    they draw their parameters once, from their ``seed``, when they are built, and continue
+    from the current parameters at every ``train()`` (as the published methods train once
+    from one initialisation; ``reinitialise=True`` draws them again with mOWL's initialiser,
+    not PyKEEN's). So the combination is started from the parameters and the random state
+    PyKEEN's start left, and the training proper is compared step by step."""
 
-    def init(self, *args, **kwargs):
-        kwargs.setdefault("automatic_memory_optimization", False)
-        original_init(self, *args, **kwargs)
+    def __init__(self):
+        self.model, self.state, self.rng = None, None, None
 
-    SLCWATrainingLoop.__init__ = init
-    for cls, _ in original_reset:       # (RESHUFFLE draws its loop matrix in its own override)
-        cls.reset_parameters_ = lambda self: self
-    try:
-        yield
-    finally:
-        SLCWATrainingLoop.__init__ = original_init
-        for cls, function in original_reset:
-            cls.reset_parameters_ = function
+    @contextlib.contextmanager
+    def observe(self, model):
+        """While the direct code trains: record each draw of its PyKEEN model's parameters
+        (the wrapper is on the class, for the time of the training only, so that the model
+        can still be saved by ``th.save``)."""
+        kge = model.kge_method
+        cls = type(kge)
+        own = cls.__dict__.get("reset_parameters_")
+        reset = cls.reset_parameters_
+
+        def observed(this):
+            out = reset(this)
+            if this is kge:
+                self.model = model
+                self.state = copy.deepcopy(kge.state_dict())
+                self.rng = (th.get_rng_state(), np.random.get_state(), random.getstate())
+            return out
+        cls.reset_parameters_ = observed
+        try:
+            yield
+        finally:
+            if own is None:
+                del cls.reset_parameters_
+            else:
+                cls.reset_parameters_ = own
+
+    def start(self, new, copy_parameters):
+        """Give ``new`` the parameters and the random state of the observed start."""
+        assert self.model is not None, "the direct implementation is trained first"
+        kge = self.model.kge_method
+        now = copy.deepcopy(kge.state_dict())
+        kge.load_state_dict(self.state)
+        copy_parameters(self.model, new)
+        kge.load_state_dict(now)
+        th.set_rng_state(self.rng[0])
+        np.random.set_state(self.rng[1])
+        random.setstate(self.rng[2])
 
 
-def train(model, epochs):
-    from mowl.models.graph_kge.triple_model import TripleGraphModel
+def _train(model, epochs):
     model.lr, model.batch_size = LR, BATCH
-    if isinstance(model, TripleGraphModel):
-        model.train(epochs=epochs)
-    else:
-        with _plain_pykeen_loop():
-            model.train(epochs=epochs)
+    model.train(epochs=epochs)
+
+
+def train_graph_plus(model, epochs):
+    """GraphPlusPyKEENModel: the released run on both sides (the class users get probes and
+    draws the parameters again in PyKEEN's order by default, ``reinitialise=True``)."""
+    _train(model, epochs)
+
+
+def train_from_pykeen_start(copy_parameters):
+    """Train the direct code as it is; start the combination where PyKEEN's start left the
+    direct code (see :class:`_PyKEENStart`)."""
+    start = _PyKEENStart()
+
+    def train(model, epochs):
+        if type(model).__module__.startswith("mowl.baselines"):
+            with start.observe(model):
+                _train(model, epochs)
+        else:
+            start.start(model, copy_parameters)
+            _train(model, epochs)
+    return train
 
 
 # -- BoxE ------------------------------------------------------------------------------------
@@ -233,6 +278,14 @@ def _reshuffle_copy(old, new):
                     new.module.class_model.centres.weight.detach())
 
 
+def _reshuffle_start(old, new):
+    """The start PyKEEN's loop gives the direct code: its reset also draws the fixed random
+    binary features of the entities again, which are part of the start that is copied."""
+    features = _rep(old.kge_method.entity_representations[0])
+    _assign(new.module.class_model.centres, features.reshape(features.shape[0], -1))
+    _reshuffle_copy(old, new)
+
+
 def _flat(parameters):
     return lambda model: {k: v.reshape(v.shape[0], -1) if v.dim() > 1 else v
                           for k, v in parameters(model).items()}
@@ -286,22 +339,26 @@ def _graph_parameters(model):
 def _graph_pair(key, projector, kge_name):
     return Pair(key=key, new=_graph_plus(NEW, projector, kge_name),
                 old=_graph_plus(OLD, projector, kge_name), copy=_graph_copy,
-                scores=axiom_scores, losses=triple_loss, train=train,
+                scores=axiom_scores, losses=triple_loss, train=train_graph_plus,
                 parameters=_graph_parameters, dataset=dataset)
 
 
 PAIRS = [
     Pair(key="boxe", new=_boxe_new, old=_boxe_old, copy=_boxe_copy, scores=axiom_scores,
-         losses=triple_loss, train=train, parameters=_boxe_parameters, dataset=dataset),
+         losses=triple_loss, train=train_from_pykeen_start(_boxe_copy),
+         parameters=_boxe_parameters, dataset=dataset),
     Pair(key="expressive", new=_expressive_new, old=_expressive_old, copy=_expressive_copy,
-         scores=axiom_scores, losses=triple_loss, train=train,
+         scores=axiom_scores, losses=triple_loss,
+         train=train_from_pykeen_start(_expressive_copy),
          parameters=_expressive_parameters, dataset=dataset),
     Pair(key="reshuffle", new=_reshuffle_new(), old=_reshuffle_old(), copy=_reshuffle_copy,
-         scores=axiom_scores, losses=triple_loss, train=train,
+         scores=axiom_scores, losses=triple_loss,
+         train=train_from_pykeen_start(_reshuffle_start),
          parameters=_flat(_reshuffle_parameters), dataset=dataset),
     Pair(key="reshuffle/forward-triples", new=_reshuffle_new(inverse_triples=False),
          old=_reshuffle_old(inverse_triples=False), copy=_reshuffle_copy,
-         scores=axiom_scores, losses=triple_loss, train=train,
+         scores=axiom_scores, losses=triple_loss,
+         train=train_from_pykeen_start(_reshuffle_start),
          parameters=_flat(_reshuffle_parameters), dataset=dataset),
     _graph_pair("graph_kge", _dl2vec, "TransE"),
     _graph_pair("graph_kge/distmult", _owl2vec, "DistMult"),

@@ -15,6 +15,8 @@ class BoxEL(EmbeddingELModel):
         :func:`mowl.baselines.nn.el.boxel.losses.role_chain_loss`.
     :param load_role_axioms: Also train on the role inclusions and role chains of the \
         ontology (the module implements their losses). Default ``False``.
+    :param gci3_preimage: ``"corners"`` (default) or ``"as_released"`` (the box of
+        :math:`\\exists r.C` of mOWL 2.1.0, a defect), see :class:`~mowl.nn.BoxELModule`.
     """
 
     def __init__(self,
@@ -32,7 +34,8 @@ class BoxEL(EmbeddingELModel):
                  neg_sampling_gcis=None,
                  positive_scale=True,
                  role_chain_composition="in_order",
-                 load_role_axioms=False
+                 load_role_axioms=False,
+                 gci3_preimage="corners",
                  ):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
@@ -47,6 +50,7 @@ class BoxEL(EmbeddingELModel):
         self.temperature = temperature
         self.positive_scale = positive_scale
         self.role_chain_composition = role_chain_composition
+        self.gci3_preimage = gci3_preimage
         self.init_module()
 
     def init_module(self):
@@ -62,4 +66,5 @@ class BoxEL(EmbeddingELModel):
             temperature=self.temperature,
             positive_scale=self.positive_scale,
             role_chain_composition=self.role_chain_composition,
+            gci3_preimage=self.gci3_preimage,
         ).to(self.device)

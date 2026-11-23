@@ -1,5 +1,6 @@
 from mowl.models.composed.alc import ComposedALC
 from mowl.nn.alc.falcon.module import FALCONModule
+from mowl.base_models.alcmodel import EmbeddingALCModel  # noqa: F401  (a name of 2.1.0)
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"
 _NOTHING = "http://www.w3.org/2002/07/owl#Nothing"
@@ -54,8 +55,8 @@ class FALCONModel(ComposedALC):
 
     def __init__(self, dataset, embed_dim=50, anon_e=4, alpha=0.3, beta=0.3,
                  t_norm='product', max_measure='max', num_negs=4,
-                 role_pairs='all', thing='learned', nothing='empty',
-                 learning_rate=0.001, batch_size=256, model_filepath=None, device='cpu'):
+                 learning_rate=0.001, batch_size=256, model_filepath=None, device='cpu',
+                 role_pairs='all', thing='learned', nothing='empty'):
         self.t_norm = t_norm
         self.max_measure = max_measure
         self.num_negs = num_negs

@@ -11,6 +11,7 @@ import mowl.error.messages as msg
 from mowl.models.graph_kge.triple_model import EvaluationModel, TripleGraphModel  # noqa: F401
 from mowl.projection import Edge
 from mowl.training.triples import extend_embeddings
+from mowl.base_models import KGEModel  # noqa: F401  (importable from here in 2.1.0)
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,33 @@ class GraphPlusPyKEENModel(TripleGraphModel):
     the sampler is :class:`~mowl.representation.library.other_graph.UniformCorruption` with
     ``num_negs_per_pos`` corrupted triples. Use ``projector=mowl.projection.GDAProjector()``
     for the GDA projection.
+
+    Training (:meth:`train`) is by default the run of the released class (mOWL 2.1.0): that
+    of PyKEEN's sLCWA training loop, which, at every call, probes the memory and draws every
+    parameter again before the first epoch, then trains on PyKEEN's shuffled batches with the
+    negatives of its basic negative sampler (regime
+    :class:`~mowl.training.triples.SLCWABatches` in mOWL's shared loop). Two attributes change
+    that:
+
+    * :attr:`reinitialise` (default ``True``): ``False`` continues from the current
+      parameters, so a second :meth:`train` goes on where the first stopped and pretrained
+      or loaded parameters are kept;
+    * :attr:`batching` (default ``"pykeen"``): ``"mowl"`` uses mOWL's triple batches and its
+      sampler (:class:`~mowl.training.triples.TripleBatches`,
+      :class:`~mowl.representation.library.other_graph.UniformCorruption`), which a
+      :attr:`training_regime` needs to replace the negatives, the loss or the
+      regularisation.
     """
+
+    #: Draw every parameter again at the start of each :meth:`train`, as PyKEEN's loop and
+    #: the released class do (``False``: continue from the current parameters).
+    reinitialise = True
+    #: ``"pykeen"``: the batches, negatives and loss of PyKEEN's sLCWA loop (the released
+    #: run); ``"mowl"``: mOWL's triple batches and uniform corruption.
+    batching = "pykeen"
+    #: The hooks a regime may override with ``batching="pykeen"`` (PyKEEN's loop makes the
+    #: negatives, the loss and the regularisation itself).
+    _DATA_HOOKS = frozenset(("negatives", "filter_negatives", "loss", "regularization"))
 
     def _ready(self):
         return self._kge_method is not None
@@ -73,7 +100,9 @@ class GraphPlusPyKEENModel(TripleGraphModel):
 
     def train(self, epochs=0):
         """
-        Train the model on the triples of the projection.
+        Train the model on the triples of the projection (see the class description for
+        :attr:`reinitialise` and :attr:`batching`; the defaults give the run of the released
+        class).
 
         :param epochs: Number of epochs to train the model.
         :type epochs: int
@@ -81,8 +110,31 @@ class GraphPlusPyKEENModel(TripleGraphModel):
         if self._kge_method is None:
             raise AttributeError(msg.PYKEEN_MODEL_NOT_SET)
         self._check_training_setup()
+        if self.batching not in ("pykeen", "mowl"):
+            raise ValueError("batching must be 'pykeen' or 'mowl'.")
         self._kge_method.train()
-        return super().train(epochs=epochs)
+        if self.batching == "mowl":
+            return super().train(epochs=epochs)
+        from mowl.training.triples import SLCWABatches, train_on_triples
+        regime = self.training_regime
+        changed = (regime.overridden_hooks() & self._DATA_HOOKS) if regime is not None \
+            else frozenset()
+        if changed:
+            raise TypeError(
+                f"{type(regime).__name__} changes {sorted(changed)}, which PyKEEN's sLCWA "
+                f"loop (batching='pykeen') makes itself; set model.batching = 'mowl' to "
+                f"train with mOWL's batches and sampler, which consult these hooks.")
+        factory = self.triples_factory
+        sampler_options = None if self.num_negs_per_pos is None else \
+            {"num_negs_per_pos": int(self.num_negs_per_pos)}
+        batches = SLCWABatches(self._kge_method, factory, self.batch_size,
+                               negative_sampler_kwargs=sampler_options,
+                               drop_last=True if self.drop_last else None,
+                               reinitialise=self.reinitialise)
+        train_on_triples(self.module, self.training_triples(), factory.num_entities,
+                         factory.num_relations, self.optimizer, self.lr, self.batch_size,
+                         epochs, regime, self.device, batches=batches)
+        self._save()
 
     def _save(self):
         th.save(self._kge_method, self.model_filepath)

@@ -1,5 +1,6 @@
 
 from mowl.nn.el.part_built import _PartBuiltModule
+from mowl.nn.el.elmodule import ELModule  # noqa: F401  (importable from here in 2.1.0)
 
 
 class BoxELModule(_PartBuiltModule):
@@ -23,6 +24,12 @@ class BoxELModule(_PartBuiltModule):
         that no role inverts a box; ``False`` is the signed scale of the original code.
     :param role_chain_composition: ``"in_order"`` (default) or ``"as_released"``, see
         :class:`~mowl.representation.library.boxrel_relations.Affine`.
+    :param gci3_preimage: The box of :math:`\\exists r.C` in the loss of
+        :math:`\\exists r.C \\sqsubseteq D`. ``"corners"`` (default): both corners of the box
+        of :math:`C` are mapped back by the role. ``"as_released"``: the box of mOWL 2.1.0,
+        whose mapped upper corner was taken as a log-width (a defect; the original BoxEL
+        code maps both corners). ``preimage_reading`` of
+        :class:`~mowl.representation.library.boxrel_relations.Affine`.
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
@@ -35,6 +42,8 @@ class BoxELModule(_PartBuiltModule):
     flat_forms = frozenset({"gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
                             "class_assertion", "object_property_assertion"})
 
+    released_state_dict_names = True
+
     state_dict_aliases = {"min_embedding.weight": "class_model.mins.weight",
                           "delta_embedding.weight": "class_model.deltas.weight",
                           "relation_embedding.weight": "relation_model.vectors.weight",
@@ -45,7 +54,8 @@ class BoxELModule(_PartBuiltModule):
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50,
                  min_bounds=(1e-4, 0.2), delta_bounds=(-0.1, 0), relation_bounds=(-0.1, 0.1),
                  scaling_bounds=(0.9, 1.1), temperature=1.0, positive_scale=True,
-                 role_chain_composition="in_order", *, _builder=None, **options):
+                 role_chain_composition="in_order", gci3_preimage="corners", *,
+                 _builder=None, **options):
         if _builder is None:
             from mowl.representation.library.boxrel_methods import boxel as _builder
         built = _builder(nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim,
@@ -56,6 +66,7 @@ class BoxELModule(_PartBuiltModule):
                          relation_bounds=tuple(relation_bounds),
                          scaling_bounds=tuple(scaling_bounds), **options)
         super().__init__(built)
+        self.gci3_preimage = gci3_preimage
         self.margin_semantics = None
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
@@ -63,6 +74,19 @@ class BoxELModule(_PartBuiltModule):
         self.embed_dim = embed_dim
 
     # -- the names of the earlier module -----------------------------------------------------
+    def init_entity_embedding(self, num_entities, embed_dim, bounds):
+        """A new table ``(num_entities, embed_dim)`` drawn uniformly from ``bounds``.
+
+        .. deprecated:: 2.2.0
+           The tables are made by the class and relation models
+           (:class:`~mowl.representation.library.boxrel_boxes.MinDeltaBoxes`,
+           :class:`~mowl.representation.library.boxrel_relations.Affine`)."""
+        import warnings
+        from mowl.representation.library.boxrel_boxes import _uniform
+        warnings.warn("BoxELModule.init_entity_embedding is deprecated: the tables are made "
+                      "by the parts (MinDeltaBoxes, Affine).", DeprecationWarning, stacklevel=2)
+        return _uniform(num_entities, embed_dim, bounds[0], bounds[1])
+
     @property
     def margin(self):
         raise AttributeError("BoxELModule has no margin: the volume ratio of BoxEL cannot "
@@ -110,6 +134,19 @@ class BoxELModule(_PartBuiltModule):
     @positive_scale.setter
     def positive_scale(self, value):
         self.relation_model.scale = "positive" if value else "signed"
+
+    @property
+    def gci3_preimage(self):
+        """``"corners"`` or ``"as_released"``: the box of :math:`\\exists r.C` (the
+        ``preimage_reading`` of the relation model)."""
+        return self.relation_model.preimage_reading
+
+    @gci3_preimage.setter
+    def gci3_preimage(self, value):
+        if value not in self.relation_model.PREIMAGE_READINGS:
+            raise ValueError(f"gci3_preimage must be one of "
+                             f"{self.relation_model.PREIMAGE_READINGS}.")
+        self.relation_model.preimage_reading = value
 
     @property
     def role_chain_composition(self):

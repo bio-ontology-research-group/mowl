@@ -1,9 +1,12 @@
+import warnings
 from types import SimpleNamespace
 
 import torch.nn as nn
 
 from mowl.representation.library.logic_alc import ExpressionGeometry
-from mowl.representation.library.logic_fuzzy import falcon_parts
+from mowl.representation.library.logic_fuzzy import ConflictMeasure, falcon_parts
+from mowl.nn.alc.module import ALCModule  # noqa: F401  (importable from here in 2.1.0)
+from mowl.owlapi import OWLAPIAdapter
 
 __all__ = ["FALCONModule"]
 
@@ -91,6 +94,15 @@ class FALCONModule(ExpressionGeometry):
         self.nentities, self.anon_e, self.num_negs = nentities, anon_e, num_negs
         self.t_norm, self.max_measure, self.loss_type = t_norm, max_measure, loss_type
         self.heads_dict, self.tails_dict = heads_dict, tails_dict
+        self.residuum = residuum
+        self._adapter = None
+
+    @property
+    def adapter(self):
+        """An :class:`~mowl.owlapi.OWLAPIAdapter` (an attribute of the released module)."""
+        if self._adapter is None:
+            self._adapter = OWLAPIAdapter()
+        return self._adapter
 
     @property
     def fc_0(self):
@@ -112,10 +124,38 @@ class FALCONModule(ExpressionGeometry):
         c_emb = c_emb.unsqueeze(dim=1).expand_as(e_emb)
         return self.network(c_emb, e_emb)
 
+    # -- methods of the released module (deprecated) -----------------------------------------
+    def sample_negatives(self, e, r, used_dict):
+        """For every row, ``num_negs`` named entities ``e'`` with ``(e', r)`` not in
+        ``used_dict[(e, r)]``, ``(B, num_negs)``.
+
+        .. deprecated:: 2.2.0
+           The corruption of role assertions is part of the objective
+           (:class:`~mowl.representation.library.logic_fuzzy.FuzzyObjective`)."""
+        warnings.warn("FALCONModule.sample_negatives is deprecated: the corrupted role "
+                      "assertions are drawn by the objective (FuzzyObjective).",
+                      DeprecationWarning, stacklevel=2)
+        return self.objective._sample_negatives(e, r, used_dict)
+
+    def get_cc_loss(self, fs):
+        """The loss :math:`-\\log(1 - \\max_x fs(x) + 10^{-10})` of a fuzzy set ``fs``
+        ``(B, N)`` that is to be empty (``max_measure="pmean<p>"``: the :math:`p`-mean
+        instead of the maximum), ``(B,)``.
+
+        .. deprecated:: 2.2.0
+           The conflict of a class expression is the measure
+           :class:`~mowl.representation.library.logic_fuzzy.ConflictMeasure`."""
+        warnings.warn("FALCONModule.get_cc_loss is deprecated: use the measure "
+                      "ConflictMeasure (module.measure).", DeprecationWarning, stacklevel=2)
+        return ConflictMeasure(self.max_measure, stabiliser="add")._conflict(fs).squeeze(-1)
+
     def forward(self, *args, stage='train', **kwargs):
         """The loss of a batch of an axiom pattern (:meth:`ExpressionGeometry.forward`).
         ``stage='test'`` for role assertions gives the degrees of the assertions and of
-        their corrupted assertions instead."""
+        their corrupted assertions instead. As in the released module, ``stage`` may also be
+        given by position: ``forward(axiom, x, e_emb, 'test')``."""
+        if len(args) == 4 and isinstance(args[3], str) and not isinstance(args[1], str):
+            stage, args = args[3], args[:3]
         if stage == 'test' and len(args) > 1 and not isinstance(args[1], str):
             from mowl.owlapi import OWLObjectPropertyAssertionAxiom
             if isinstance(args[0], OWLObjectPropertyAssertionAxiom):

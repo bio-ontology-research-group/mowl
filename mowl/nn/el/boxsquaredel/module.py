@@ -3,6 +3,7 @@ from mowl.representation.library.multibox_methods import box2el
 from mowl.representation.library.multibox_modules import ReleasedTables, released_names
 from mowl.representation.objectives import FORMS
 from mowl.training.regularization import NormPenalty
+from mowl.nn.el.elmodule import ELModule  # noqa: F401  (importable from here in 2.1.0)
 
 
 @released_names(
@@ -129,6 +130,22 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         self.objective.neg_forms = forms
         self.objective.negatives = "forms"
         self.neg_capable_gcis = forms
+
+    def init_embeddings(self, num_entities, embed_dim, min=-1, max=1):
+        """A new table ``(num_entities, embed_dim)`` drawn uniformly from ``[min, max]``,
+        every row scaled to length one.
+
+        .. deprecated:: 2.2.0
+           The tables are made by the class and relation models
+           (:class:`~mowl.representation.library.multibox_parts.BumpedBoxClasses`,
+           :class:`~mowl.representation.library.multibox_parts.HeadTailRelations`)."""
+        import warnings
+        import torch.nn as nn
+        from mowl.representation.library.multibox_parts import _unit_rows
+        warnings.warn("BoxSquaredELModule.init_embeddings is deprecated: the tables are made "
+                      "by the parts (BumpedBoxClasses, HeadTailRelations).",
+                      DeprecationWarning, stacklevel=2)
+        return _unit_rows(nn.Embedding(num_entities, embed_dim), low=min, high=max)
 
     def _dele_neg(self, neg):
         return neg and self.all_negative_losses

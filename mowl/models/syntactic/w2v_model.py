@@ -8,6 +8,7 @@ from deprecated.sphinx import versionadded
 import mowl.error.messages as msg
 from mowl.base_models import SyntacticModel
 from mowl.models.composed.sequence import ComposedSequenceModel
+from mowl.models.composed.sequence import EvaluationModel  # noqa: F401  (a name of 2.1.0)
 from mowl.utils.device import default_device
 
 logger = logging.getLogger(__name__)

@@ -285,6 +285,11 @@ obtained with that code.
         self.objective.unit_norm = tuple(f for f in _PER_AXIOM_FORMS
                                          if f not in read_by_regd) if self._per_axiom else ()
 
+    def gci2_loss(self, data, neg=False, idxs_for_negs=None):
+        """Loss of the ``gci2`` axioms ``data`` (see the objective). ``idxs_for_negs`` is
+        accepted and not used, as by the released module."""
+        return super().gci2_loss(data, neg)
+
     def gci2_score(self, data):
         """The positive loss of :math:`C \\sqsubseteq \\exists R.D` (the score of the pair)."""
         return self.gci2_loss(data)

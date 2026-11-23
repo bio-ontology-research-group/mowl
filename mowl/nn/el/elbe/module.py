@@ -1,6 +1,7 @@
 from mowl.nn.el.part_built import _PartBuiltModule
 from mowl.representation.class_models import BoxClasses
 from mowl.representation.objectives import FORMS, Objective
+from mowl.nn.el.elmodule import ELModule  # noqa: F401  (importable from here in 2.1.0)
 
 
 class ELBEModule(_PartBuiltModule):
@@ -41,6 +42,8 @@ centre and offset of a class form one row of :math:`U(-1, 1)^{2n}` scaled to uni
 
     #: With ``per_axiom_column = False`` these two return ``(B,)`` as the hand-written module did.
     flat_forms = frozenset({"gci0_bot", "gci3_bot"})
+
+    released_state_dict_names = True
 
     state_dict_aliases = {"class_embed.weight": "class_model.centres.weight",
                           "class_offset.weight": "class_model.offsets.weight",

@@ -204,6 +204,11 @@ class Affine(Relations):
         (:math:`f_1 t_1 + t_2`).
     :param shift_bounds, scale_bounds: Ranges of the uniform initialisation of the shifts and
         of the factors (new tables only).
+    :param preimage_reading: ``"corners"`` (default): :meth:`preimage` maps both corners of
+        the box. ``"as_released"``: the box of mOWL 2.1.0's BoxEL, whose upper corner was
+        handed to the box as a log-width, so that the box is
+        :math:`[l, l + e^{u}]` with :math:`l, u` the mapped corners (a defect: the width did
+        not follow the box).
 
     Role axioms (the measure and margin are not used): a role is a function, so
     :math:`r \\sqsubseteq s` holds iff the two maps are equal, and
@@ -224,6 +229,7 @@ class Affine(Relations):
     part = "affine map"
     SCALES = ("positive", "mirror", "signed")
     COMPOSITIONS = ("in_order", "as_released")
+    PREIMAGE_READINGS = ("corners", "as_released")
 
     functional = True
     #: A non-zero factor and a shift per coordinate map the space onto itself.
@@ -232,8 +238,12 @@ class Affine(Relations):
 
     def __init__(self, size=None, embed_dim=None, vectors=None, scales=None, eps=1e-8,
                  scale="positive", role_chain_composition="in_order", role_scale="equal",
-                 shift_bounds=(-0.1, 0.1), scale_bounds=(0.9, 1.1)):
+                 shift_bounds=(-0.1, 0.1), scale_bounds=(0.9, 1.1),
+                 preimage_reading="corners"):
         super().__init__()
+        if preimage_reading not in self.PREIMAGE_READINGS:
+            raise ValueError(f"preimage_reading must be one of {self.PREIMAGE_READINGS}.")
+        self.preimage_reading = preimage_reading
         if role_scale not in ("equal", "at_most"):
             raise ValueError("role_scale must be 'equal' or 'at_most'.")
         self.role_scale = role_scale
@@ -275,6 +285,10 @@ class Affine(Relations):
     def preimage(self, ids, region):
         f = self.factor(ids)
         _boxes(region, self)
+        if self.preimage_reading == "as_released":
+            lower = (region.lower - self.vectors(ids)) / f
+            upper = lower + th.exp((region.upper - self.vectors(ids)) / f)
+            return Box((lower + upper) / 2, (upper - lower) / 2)
         return Box((region.centre - self.vectors(ids)) / f,
                    self._spread(region.offset, 1 / f))
 
