@@ -546,3 +546,36 @@ def test_slcwa_batches_split_a_batch_as_pykeen_does():
         assert th.allclose(x, y, atol=1e-7, rtol=0)
     # every batch of 5 was split into sub-batches of at most 2, in every epoch
     assert len(parts) >= 9 and all(stop - start <= 2 for start, stop in parts)
+
+
+# -- 6. walk and sentence models: the defaults differ only where documented ------------------
+
+def test_word2vec_models_differ_from_2_1_0_only_on_a_second_train(family_dataset, tmp_path):
+    """With Python's hash (``hashfxn=hash``, as released), the first ``train`` of a new model
+    is the released one with and without ``restart``; only a second ``train`` differs: the
+    released code (the direct implementation, and ``restart=True``) draws the vectors again,
+    the default continues from them."""
+    from mowl.baselines.models.syntactic.w2v_model import SyntacticPlusW2VModel as Direct
+    from mowl.models import SyntacticPlusW2VModel
+
+    def model(cls, name, **options):
+        m = cls(family_dataset, corpus_filepath=str(tmp_path / name))
+        m.set_w2v_model(vector_size=4, min_count=1, workers=1, seed=0, hashfxn=hash,
+                        **options)
+        m.generate_corpus(save=True, with_annotations=False)
+        return m
+
+    def same(a, b):
+        a, b = a.class_embeddings, b.class_embeddings
+        return sorted(a) == sorted(b) and all((a[k] == b[k]).all() for k in a)
+
+    direct = model(Direct, "direct")
+    released = model(SyntacticPlusW2VModel, "released", restart=True)
+    default = model(SyntacticPlusW2VModel, "default")
+    for m in (direct, released, default):
+        m.train(epochs=1)
+    assert same(direct, released) and same(direct, default)
+    for m in (direct, released, default):
+        m.train(epochs=1)
+    assert same(direct, released)
+    assert not same(direct, default)

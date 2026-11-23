@@ -121,7 +121,8 @@ earlier behaviour and are not listed. The changelog has every change.
   box (``positive_scale=False``); the role chain loss composes the maps in order
   (``role_chain_composition="as_released"``); the role inclusion and role chain losses can be
   trained (``load_role_axioms=True``); the loss of :math:`\exists r.C \sqsubseteq D` was fixed
-  (a defect, no option).
+  (a defect: the upper corner of the box was read as a log-width;
+  ``gci3_preimage="as_released"`` restores it).
 * **Box2EL** (``BoxSquaredEL``): losses have shape ``(B, 1)``; the role inclusion and role
   chain losses of the paper can be trained (``load_role_axioms=True``). Nothing else changed.
 * **TransBox**: a negative loss of a form without one raises (``strict_negatives=False``); with
@@ -157,9 +158,12 @@ earlier behaviour and are not listed. The changelog has every change.
 * **Graph and syntactic methods** (``GraphPlusPyKEENModel``, ``RandomWalkPlusW2VModel``,
   ``SyntacticPlusW2VModel``): ``RandomWalkPlusW2VModel`` and ``SyntacticPlusW2VModel`` are
   combinations of parts (:doc:`sequences`). A second walk replaces the first instead of being
-  appended, training goes on from the vectors there are (``restart=True`` starts anew),
-  start vectors are seeded the same way in every process (``hashfxn=hash`` as before), and
-  annotation sentences name a class by its IRI. ``GraphPlusPyKEENModel.axiom_costs`` now
+  appended (``DeepWalk(append=True)``), training goes on from the vectors there are
+  (``set_w2v_model(..., restart=True)`` starts anew), start vectors are seeded the same way in
+  every process (``set_w2v_model(..., hashfxn=hash)`` as before), and annotation sentences
+  name a class by its IRI (``generate_corpus(..., annotation_entity_form="bracketed iri")``).
+  ``GraphPlusPyKEENModel`` trains as released (PyKEEN's batches; every ``train`` draws the
+  parameters again; ``reinitialise = False`` continues instead), and its ``axiom_costs`` now
   scores class and role assertions too, not only :math:`C \sqsubseteq D` and
   :math:`C \sqsubseteq \exists r.D`. Datasets are cached under ``$XDG_CACHE_HOME/mowl``
   (override with ``MOWL_DATA_ROOT``).

@@ -9,8 +9,6 @@ constructor, the attribute names and the hooks that the released class had.
 """
 
 
-import torch as th
-
 from mowl.nn.el.elmodule import ELModule
 from mowl.representation.geometry import ComposedGeometry
 
@@ -78,7 +76,9 @@ class _PartBuiltModule(ComposedGeometry):
             except AttributeError:
                 continue                    # (no individuals)
             if name not in self._modules:
-                th.nn.Module.__setattr__(self, name, table)
+                # (as Module.__setattr__ registers a child; the class may have a property of
+                # that name, which still answers)
+                self._modules[name] = table
 
     def get_loss_function(self, gci_name):
         return ELModule.get_loss_function(self, gci_name)

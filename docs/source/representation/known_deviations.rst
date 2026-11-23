@@ -185,6 +185,40 @@ This is the same in the original and is negligible. The part's default,
 ``owl:Thing`` is a learned class, as in the original (``thing="all"`` makes it the constant
 true).
 
+Behaviour of the released mOWL 2.1.0
+------------------------------------
+
+These are not published behaviours but defects or choices of mOWL 2.1.0 that a user of that
+version may rely on. Each was changed on purpose; the option on the right gives the released
+behaviour back. :doc:`defaults` lists every change of default behaviour, and the changelog
+("Upgrading from 2.1.0") says how to restore each one.
+
+* **Walk and sentence models** (``RandomWalkPlusW2VModel``, ``SyntacticPlusW2VModel``, and the
+  methods ``dl2vec``, ``owl2vec_star``, ``taxonomy_walks``, ``onto2vec``, ``opa2vec``):
+
+  - ``train`` rebuilt the vocabulary of Word2Vec without ``update``, which draws the vectors
+    again: a second ``train``, and ``train`` after ``from_pretrained``, threw the trained or
+    loaded vectors away. Training now continues; ``set_w2v_model(..., restart=True)``
+    (``restart=True`` of the general model) starts anew at every ``train``, as released.
+  - Word2Vec seeds its start vectors with ``hashfxn(token + str(seed))``; the default,
+    Python's ``hash``, differs from process to process (unless ``PYTHONHASHSEED`` is set),
+    so a fixed ``seed`` did not give the same vectors in two runs. The default is now a hash
+    that is the same in every process (``stable_hash``); ``set_w2v_model(..., hashfxn=hash)``
+    (``word2vec_options={"hashfxn": hash}``) restores the released seeding.
+  - OPA2Vec's annotation sentences wrote a class as ``<IRI>``, a token that no axiom
+    sentence contains, so the annotations never reached the class vectors. They write the
+    IRI now; ``generate_corpus(..., annotation_entity_form="bracketed iri")`` restores the
+    released corpus.
+
+* **GraphPlusPyKEENModel** keeps the released run by default (PyKEEN's loop draws every
+  parameter again at each ``train``, after its memory probe); ``reinitialise = False``
+  continues from the current parameters. ``BoxE``, ``ExpressivE`` and ``Reshuffle`` are new:
+  they draw their parameters once from their ``seed`` and continue at every ``train``
+  (``reinitialise=True`` draws them again).
+* **BoxEL**: the box of :math:`\exists r.C` in the loss of :math:`\exists r.C \sqsubseteq D`
+  took the mapped upper corner of the box of :math:`C` as a log-width; both corners are
+  mapped now (``BoxEL(gci3_preimage="as_released")`` restores the released loss).
+
 Open points
 -----------
 

@@ -76,9 +76,16 @@ those of the library. An axiom :math:`C \sqsubseteq D` is scored by the score of
   triples is a training regime (``early_stopping=...``,
   :class:`~mowl.training.triples.HitsEarlyStopping`).
 
-A model trains from the parameters it has: calling ``train`` again goes on, and the ``seed``
-decides the initial values (PyKEEN's own loop draws every parameter again at each call; pass
-``reinitialise=True`` for that). The projection methods ``graph_kge`` and ``gda_projection``
+``BoxE``, ``ExpressivE`` and ``Reshuffle`` (new in this version) train from the parameters
+they have: the ``seed`` decides the initial values, drawn once when the model is built, and
+calling ``train`` again goes on, as the published methods train once from one
+initialisation. PyKEEN's own loop, which the direct implementations use, draws every parameter
+again at each call (``reinitialise=True`` draws them again with mOWL's initialiser, not
+PyKEEN's); the comparison in ``tests/baselines`` starts the combination from the parameters
+PyKEEN's start drew and compares the training from there.
+:class:`~mowl.models.GraphPlusPyKEENModel`, which mOWL 2.1.0 had, keeps the released run by
+default: every ``train`` draws the parameters again as PyKEEN's loop does
+(``reinitialise = False`` continues instead, see :doc:`/graphs/kge`). The projection methods ``graph_kge`` and ``gda_projection``
 are the same combination with another relation model (TransE by default) and the margin
 ranking loss, ``gda_projection`` with :class:`~mowl.projection.GDAProjector`;
 :class:`~mowl.models.GraphPlusPyKEENModel` reads the parts from any PyKEEN model. The direct
