@@ -17,6 +17,10 @@ Two conversions are needed besides the adapters:
 """
 import dataclasses
 import importlib
+import os
+import re
+
+import mowl
 
 from mowl.representation import methods
 from mowl.representation.adapters import ADAPTERS, register_adapter
@@ -103,13 +107,85 @@ def _lib(name):
     return importlib.import_module(f"mowl.representation.library.{name}")
 
 
+_BASELINES = os.path.join(os.path.dirname(mowl.__file__), "baselines")
+_CLASS_PATHS = {}
+
+
+def baseline_classes(name):
+    """The qualified names of the classes called ``name`` that the baselines define (found by
+    reading their sources, so that nothing is imported here)."""
+    if not _CLASS_PATHS:
+        pattern = re.compile(r"^class (\w+)", re.M)
+        for directory, _, files in os.walk(_BASELINES):
+            for file in files:
+                if file.endswith(".py"):
+                    path = os.path.join(directory, file)
+                    module = os.path.relpath(path[:-3], os.path.dirname(_BASELINES)).replace(
+                        os.sep, ".")
+                    module = "mowl." + module if not module.startswith("mowl.") else module
+                    if module.endswith(".__init__"):
+                        module = module[:-9]
+                    for cls in pattern.findall(open(path).read()):
+                        _CLASS_PATHS.setdefault(cls, []).append(f"{module}.{cls}")
+    return _CLASS_PATHS.get(name, [])
+
+
 def _adapter(*names):
-    """Register only for names that are not adapters of library classes already."""
+    """Register an adapter for the baseline classes called ``names`` (the library's classes of
+    the same name have their own adapters, or are geometries themselves)."""
     def decorate(function):
-        for name in names:
-            assert name not in ADAPTERS or ADAPTERS[name] is function, name
-        return register_adapter(*names)(function)
+        paths = [path for name in names for path in baseline_classes(name)]
+        assert paths, names
+        return register_adapter(*paths)(function)
     return decorate
+
+
+def mirror_library_adapters():
+    """The baseline class of the same name as a library class with an adapter is read by that
+    adapter (the direct implementation of the model of FaithEL, of the word2vec and graph
+    models, of the constructed models): the pairs are two implementations of one method."""
+    for qualified in list(ADAPTERS):
+        function = ADAPTERS[qualified]
+        if qualified.startswith("mowl.baselines."):
+            continue
+        for path in baseline_classes(qualified.rsplit(".", 1)[-1]):
+            ADAPTERS.setdefault(path, function)
+
+
+def declare_options_of_baseline_modules():
+    """The options that the library's modules declare for the training regimes that switch the
+    reference code's variants (``joint_init``, ``dele_code_form``, ...), on the baseline
+    modules that the regimes are applied to in the pairs."""
+    for name, attributes in (
+            ("ELEmModule", dict(joint_init="ball", joint_init_roles="rel_embed",
+                                dele_code_form="ball")),
+            ("ELBEModule", dict(joint_init="box", joint_init_roles="rel_embed",
+                                dele_code_form="box")),
+            ("RegDELBEModule", dict(joint_init="box", joint_init_roles="rel_embed")),
+            ("BoxSquaredELModule", dict(dele_code_form="box-with-bumps")),
+            ("CanonicalMixtureModule", dict(not_a_region_model=(
+                "classes are columns of a 0/1 membership matrix over the finite canonical "
+                "domain (a set-based model, faithful by construction), not regions of R^d")))):
+        for path in baseline_classes(name):
+            cls = _import(path)
+            for attribute, value in attributes.items():
+                if attribute not in vars(cls):
+                    setattr(cls, attribute, value)
+
+
+def register_baseline_scorers():
+    """The centre-distance scorers of the library's evaluation for the baseline modules."""
+    from mowl.evaluation import el_scoring
+    for library_path, scorer in list(el_scoring.CENTRE_DISTANCE_SCORERS.items()):
+        if library_path.startswith("mowl.baselines."):
+            continue
+        for path in baseline_classes(library_path.rsplit(".", 1)[-1]):
+            el_scoring.CENTRE_DISTANCE_SCORERS.setdefault(path, scorer)
+
+
+def _import(path):
+    module, _, name = path.rpartition(".")
+    return getattr(importlib.import_module(module), name)
 
 
 @_adapter("ELEmModule")
@@ -368,3 +444,18 @@ for _name, _builder in (("Query2BoxGeometry", "query2box"), ("BetaEGeometry", "b
 _adapter("GroundedELModule")(_lib("other_regions").GroundedGeometry)
 _adapter("CanonicalMixtureModule")(_lib("other_regions").CanonicalMixtureGeometry)
 _adapter("RegionKGEModel")(_lib("other_graph").PyKEENGeometry)
+
+
+mirror_library_adapters()
+register_baseline_scorers()
+
+_DECLARED = []
+
+
+def ensure_baseline_options():
+    """:func:`declare_options_of_baseline_modules`, once, as soon as the JVM is up (the
+    baseline modules cannot be imported before)."""
+    import jpype
+    if not _DECLARED and jpype.isJVMStarted():
+        _DECLARED.append(True)
+        declare_options_of_baseline_modules()

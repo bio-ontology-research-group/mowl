@@ -33,29 +33,18 @@ def _box_groups(module):
     return groups
 
 
-# Reference code by definition: the initialisation of the ELEm / ELBE reference code, which
-# is about the two specific modules; other methods register their groups here.
-#: Module class name -> function returning the ``(centre, size)`` embedding pairs that are
-#: normalised together. Base classes count (EmEL++ is an ELEm module).
-JOINT_GROUPS = {
-    "ELEmModule": _ball_groups,
-    "ELBEModule": _box_groups,
-    "RegDELBEModule": _box_groups,   # a combination of parts, not a subclass of ELBEModule
-}
-
-#: Module class name -> role embeddings, normalised on their own.
-ROLE_EMBEDDINGS = {
-    "ELEmModule": "rel_embed",
-    "ELBEModule": "rel_embed",
-    "RegDELBEModule": "rel_embed",
-}
+#: The ``(centre, size)`` embedding pairs of a module that are normalised together, by the
+#: kind the module declares in ``joint_init`` (``"ball"``: ``class_embed`` and ``class_rad``,
+#: ``"box"``: ``class_embed`` and ``class_offset``, and the same for individuals). A module of
+#: another kind declares its own kind here, or the regime takes ``strict=False``. The role
+#: embeddings that are drawn and normalised on their own are the attribute the module names in
+#: ``joint_init_roles``.
+JOINT_GROUPS = {"ball": _ball_groups, "box": _box_groups}
 
 
-def _lookup(table, module):
-    for cls in type(module).__mro__:
-        if cls.__name__ in table:
-            return table[cls.__name__]
-    return None
+def _groups(module):
+    """The pairs the module's declared ``joint_init`` names, or ``None``."""
+    return JOINT_GROUPS.get(getattr(module, "joint_init", None))
 
 
 class JointNormalisedInitialisation(TrainingRegime):
@@ -88,13 +77,14 @@ class JointNormalisedInitialisation(TrainingRegime):
     def attach(self, model):
         super().attach(model)
         module = getattr(model, "module", None)
-        groups = _lookup(JOINT_GROUPS, module)
+        groups = _groups(module)
         if groups is None:
             if not self.strict:
                 return
             raise TypeError(
-                f"{type(module).__name__} has no registered (centre, size) embeddings; "
-                f"register them in mowl.training.initialisation.JOINT_GROUPS.")
+                f"{type(module).__name__} does not declare (centre, size) embeddings to "
+                f"normalise together (its attribute joint_init: one of "
+                f"{sorted(JOINT_GROUPS)}).")
         gen = None
         if self.seed is not None:
             gen = th.Generator(device="cpu").manual_seed(int(self.seed))
@@ -109,7 +99,7 @@ class JointNormalisedInitialisation(TrainingRegime):
                 joint = joint / th.linalg.norm(joint, dim=1, keepdim=True)
                 w_c.copy_(joint[:, :w_c.shape[1]].to(w_c))
                 w_s.copy_(joint[:, w_c.shape[1]:].to(w_s))
-            rel = getattr(module, _lookup(ROLE_EMBEDDINGS, module) or "", None)
+            rel = getattr(module, getattr(module, "joint_init_roles", None) or "", None)
             if rel is not None:
                 w = th.rand(*rel.weight.shape, generator=gen) * 2 - 1
                 rel.weight.copy_((w / th.linalg.norm(w, dim=1, keepdim=True)).to(rel.weight))

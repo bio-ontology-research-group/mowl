@@ -104,4 +104,5 @@ class SimilarityGeometry(Geometry):
                 "measure": "similarity", "conjunction": "none"}
 
 
-register_adapter("RandomWalkPlusW2VModel", "SyntacticPlusW2VModel")(SimilarityGeometry)
+register_adapter("mowl.models.graph_random_walk.random_walk_w2v_model.RandomWalkPlusW2VModel",
+                 "mowl.models.syntactic.w2v_model.SyntacticPlusW2VModel")(SimilarityGeometry)

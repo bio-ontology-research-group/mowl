@@ -374,7 +374,7 @@ class _FaithBackend(NormalFormBackend):
         return super().subsumed(a, b)
 
 
-@register_adapter("FaithEL")
+@register_adapter("mowl.models.faithel.model.FaithEL")
 def _faithel(model):
     """The geometry of a FaithEL: its own module where the model is built from parts, the
     adapter geometry (reading the tables of the direct implementation) otherwise."""
@@ -506,4 +506,5 @@ def _boxlite(model):
     return BoxLitEGeometry(embedding)
 
 
-register_adapter("BoxLitE", "BoxLitEEmbedding")(_boxlite)
+register_adapter("mowl.models.boxlite.model.BoxLitE",
+                 "mowl.representation.library.solved_boxlite.BoxLitEEmbedding")(_boxlite)

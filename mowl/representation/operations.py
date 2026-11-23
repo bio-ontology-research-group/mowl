@@ -19,7 +19,7 @@ faster overrides it. :meth:`Operations.provides` says which of the two a part ha
 
 from mowl.representation.regions import ConstructorNotImplemented, ConstructorUnavailable
 
-__all__ = ["Operations", "generic", "unavailable", "operation_table"]
+__all__ = ["Operations", "generic", "unavailable"]
 
 
 def generic(method):
@@ -84,11 +84,3 @@ class Operations:
         if self.provides(name) is None:
             raise ConstructorNotImplemented(self._missing(name, purpose))
         return getattr(self, name)
-
-
-def operation_table(parts):
-    """``{part class name: {operation: "own" | "generic" | None}}`` of the part classes
-    ``parts``, for the documentation."""
-    return {cls.__name__: {name: cls.provides(name) for name in cls.declared_operations()}
-            for cls in parts}
-

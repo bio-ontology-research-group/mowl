@@ -23,10 +23,12 @@ All scorers take rows in mOWL's column layout (``gci0``: ``[C, D]``; ``gci1``:
 ``[a, C]``) and return one score per row, lower is better. Centre-distance scorers are
 registered per module class in :data:`CENTRE_DISTANCE_SCORERS`; to add one for a new
 module, register a function ``f(module, gci_name, rows) -> tensor`` under the module's
-class name.
+qualified class name (``"package.module.Class"``).
 """
 
 import torch as th
+
+from mowl.representation.adapters import qualified_name
 
 
 def loss_scores(model, gci_name, rows):
@@ -191,12 +193,13 @@ def boxel_overlap_scores(module, gci_name, rows):
 #: name. Box2EL uses its bump-vector formulas, ELBE and ELEm the translational ones.
 # Reference formulas by definition: each entry is the published score of one module class.
 CENTRE_DISTANCE_SCORERS = {
-    "BoxSquaredELModule": _box2el_scores,
-    "ELBEModule": _elbe_scores,
-    "RegDELBEModule": _elbe_scores,   # (a combination of parts, not a subclass of ELBEModule)
-    "ELEmModule": _elem_scores,
-    "TransBoxModule": _transbox_scores,
-    "BoxELModule": boxel_overlap_scores,
+    "mowl.nn.el.boxsquaredel.module.BoxSquaredELModule": _box2el_scores,
+    "mowl.nn.el.elbe.module.ELBEModule": _elbe_scores,
+    # (a combination of parts, not a subclass of ELBEModule)
+    "mowl.nn.el.regd.module.RegDELBEModule": _elbe_scores,
+    "mowl.nn.el.elem.module.ELEmModule": _elem_scores,
+    "mowl.nn.el.transbox.module.TransBoxModule": _transbox_scores,
+    "mowl.nn.el.boxel.module.BoxELModule": boxel_overlap_scores,
 }
 
 
@@ -208,8 +211,9 @@ def _scorer_of(model):
     """The scorer registered for the module's class or the nearest base class (EmEL++
     is scored like ELEm, as in the Box2EL code)."""
     for cls in type(getattr(model, "module", None)).__mro__:
-        if cls.__name__ in CENTRE_DISTANCE_SCORERS:
-            return CENTRE_DISTANCE_SCORERS[cls.__name__]
+        scorer = CENTRE_DISTANCE_SCORERS.get(qualified_name(cls))
+        if scorer is not None:
+            return scorer
     return None
 
 

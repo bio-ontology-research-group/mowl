@@ -90,28 +90,33 @@ def cone_geometry(interpretation):
     return construct(interpretation, "al-cone interpretation", "half-axes")
 
 
-@register_adapter("IntervalUnionModel", "ConvexPolyhedralModel", "ConvexRegionModel",
-                  "ALConeInterpretation", "TemporalALConeInterpretation",
-                  "AttributedConvexModel")
+@register_adapter("mowl.geometric.intervals.IntervalUnionModel",
+                  "mowl.geometric.polyhedral.ConvexPolyhedralModel",
+                  "mowl.geometric.convex_regions.ConvexRegionModel",
+                  "mowl.geometric.cones.ALConeInterpretation",
+                  "mowl.geometric.temporal_cones.TemporalALConeInterpretation",
+                  "mowl.geometric.attributed.AttributedConvexModel")
 def _module(model):
     return model.module
 
 
-@register_adapter("CanonicalModel")
+@register_adapter("mowl.geometric.completion.CanonicalModel")
 def _canonical(cm):
     return RECIPES["canonical_model"].build(cm)
 
 
-@register_adapter("LeastModel")
+@register_adapter("mowl.geometric.least_model.LeastModel")
 def _least(lm):
     return RECIPES["least_model"].build(lm)
 
 
-@register_adapter("FiniteInterpretation", "FiniteModel")
+@register_adapter("mowl.geometric.convex_regions.FiniteInterpretation",
+                  "mowl.geometric.cones.FiniteInterpretation",
+                  "mowl.representation.construction.FiniteModel")
 def _finite(model):
     return RECIPES["canonical_model"].build(model, source="finite model")
 
 
-@register_adapter("BoxModel")
+@register_adapter("mowl.geometric.boxes.BoxModel")
 def _boxes(model):
     return RECIPES["box_milp"].build(model)

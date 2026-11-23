@@ -10,24 +10,43 @@ import inspect
 
 from mowl.representation.geometry import Geometry
 
-__all__ = ["geometry_of", "register_adapter", "ADAPTERS"]
+__all__ = ["geometry_of", "register_adapter", "adapter_for", "ADAPTERS"]
 
-#: Class name -> function from a module (or model) to its :class:`Geometry`.
+#: Qualified class name (``"package.module.Class"``) -> function from a module (or model) to
+#: its :class:`Geometry`. The classes are identified by where they are defined, so that a
+#: class of another module with the same name (a direct implementation of the same method) is
+#: not matched by accident; the adapter of such a class is registered for it explicitly.
 ADAPTERS = {}
 
 
-def register_adapter(*class_names):
-    """Decorator: use the function as the adapter of the classes with these names: module
-    classes, or, for models that have no usable ``.module`` (the models of FaithEL, of the
-    knowledge-graph and word2vec families, BoxLitE), model classes. The function takes the
-    module (the model itself where the adapter is registered under a model class); if it has
-    a parameter ``model``, it also gets the model the module belongs to (``None`` when only
-    a module was given)."""
+def qualified_name(cls):
+    """``"module.Class"`` of a class (the key of :data:`ADAPTERS`)."""
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def register_adapter(*classes):
+    """Decorator: use the function as the adapter of these classes: module classes, or, for
+    models that have no usable ``.module`` (the models of FaithEL, of the knowledge-graph and
+    word2vec families, BoxLitE), model classes. Each is the class or its qualified name
+    (``"mowl.models.faithel.model.FaithEL"``; a name is for a class that cannot be imported
+    where the adapter is registered). The function takes the module (the model itself where
+    the adapter is registered under a model class); if it has a parameter ``model``, it also
+    gets the model the module belongs to (``None`` when only a module was given)."""
     def decorate(function):
-        for name in class_names:
-            ADAPTERS[name] = function
+        for cls in classes:
+            ADAPTERS[cls if isinstance(cls, str) else qualified_name(cls)] = function
         return function
     return decorate
+
+
+def adapter_for(cls):
+    """The adapter of the class ``cls`` or of its nearest base class that has one, or
+    ``None``."""
+    for base in cls.__mro__:
+        adapter = ADAPTERS.get(qualified_name(base))
+        if adapter is not None:
+            return adapter
+    return None
 
 
 def _mirror_strict_negatives(geometry, module):
@@ -76,20 +95,18 @@ def _link(geometry, module):
 def _geometry_of(model):
     # The model's own class first (also its base classes): a model without a usable
     # ``.module`` is described by its class. Only then the module.
-    for cls in type(model).__mro__:
-        adapter = ADAPTERS.get(cls.__name__)
-        if adapter is not None:
-            return _call(adapter, model, model)
+    adapter = adapter_for(type(model))
+    if adapter is not None:
+        return _call(adapter, model, model)
     module = getattr(model, "module", model)
     if isinstance(module, Geometry):
         return module
-    for cls in type(module).__mro__:
-        adapter = ADAPTERS.get(cls.__name__)
-        if adapter is not None:
-            return _call(adapter, module, model)
+    adapter = adapter_for(type(module))
+    if adapter is not None:
+        return _call(adapter, module, model)
     raise NotImplementedError(
         f"{type(model).__name__} does not expose a geometry yet. Classes that do: "
-        f"{sorted(ADAPTERS)}.")
+        f"{sorted(name.rsplit('.', 1)[-1] for name in ADAPTERS)}.")
 
 
 def _call(adapter, obj, model):

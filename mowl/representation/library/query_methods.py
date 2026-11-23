@@ -625,11 +625,16 @@ def query_geometry(model, extension=None):
     from parts has such a geometry as its module (``extension`` is then its own unless
     given); the module of another implementation is described by an adapter (``extension``
     default ``True``)."""
-    from mowl.representation.adapters import ADAPTERS
+    from mowl.representation.adapters import adapter_for
     if isinstance(model.module, Geometry):
         geometry = model.module
     else:
-        geometry = ADAPTERS[type(model.module).__name__](model.module)
+        adapter = adapter_for(type(model.module))
+        if adapter is None:
+            raise NotImplementedError(
+                f"{type(model.module).__name__} has no adapter (a geometry of parts that "
+                f"shares its tables).")
+        geometry = adapter(model.module)
     geometry._num_classes = model.num_classes
     if extension is not None:
         geometry.extension = extension

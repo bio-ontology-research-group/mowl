@@ -83,13 +83,15 @@ PROJECTIONS = {
 #: Other names that are accepted.
 _ALIASES = {"taxonomy_rels": Projection.TAXONOMY_WITH_RELATIONS.value,
             "owl2vecstar": Projection.OWL2VEC_STAR.value}
-#: Projector class name -> vocabulary value.
-_PROJECTOR_PARTS = {"TaxonomyProjector": Projection.TAXONOMY,
-                    "TaxonomyWithRelationsProjector": Projection.TAXONOMY_WITH_RELATIONS,
-                    "DL2VecProjector": Projection.DL2VEC,
-                    "OWL2VecStarProjector": Projection.OWL2VEC_STAR,
-                    "CategoricalProjector": Projection.CATEGORICAL,
-                    "GDAProjector": Projection.GDA}
+def _projector_parts():
+    """Projector class -> vocabulary value (the classes of :mod:`mowl.projection`)."""
+    from mowl.projection import (CategoricalProjector, DL2VecProjector, GDAProjector,
+                                 OWL2VecStarProjector, TaxonomyProjector,
+                                 TaxonomyWithRelationsProjector)
+    return ((TaxonomyWithRelationsProjector, Projection.TAXONOMY_WITH_RELATIONS),
+            (TaxonomyProjector, Projection.TAXONOMY), (DL2VecProjector, Projection.DL2VEC),
+            (OWL2VecStarProjector, Projection.OWL2VEC_STAR),
+            (CategoricalProjector, Projection.CATEGORICAL), (GDAProjector, Projection.GDA))
 
 
 def register_projection(name):
@@ -143,8 +145,10 @@ class ProjectionView(OntologyView):
 
     @property
     def part(self):
-        part = _PROJECTOR_PARTS.get(type(self.projector).__name__)
-        return part.value if part is not None else type(self.projector).__name__
+        for cls, part in _projector_parts():
+            if isinstance(self.projector, cls):
+                return part.value
+        return type(self.projector).__name__
 
     def read(self, dataset):
         """The edges (:class:`mowl.projection.Edge`) of the projected ontology."""
