@@ -322,7 +322,8 @@ class RegDObjective(Objective):
         return 0.0
 
     def _delegate(self, name, g, rows, neg):
-        overrides = {"measure": g.measure.host_for(g.class_model.region)}
+        overrides = {"measure": g.measure.operation("host_for", "RegDObjective")(
+            g.class_model.region)}
         mixed = self.MIXED_FORMS.get(name)
         if not self.consistent_radius and (mixed is True or (mixed and neg)) \
                 and getattr(g.class_model, "radius_form", "abs") != "abs":
@@ -336,7 +337,9 @@ class RegDObjective(Objective):
         if "gci0" not in self.regd_forms:
             return self._delegate("gci0", g, rows, neg)
         c, d = g.classes(rows[:, 0]), g.classes(rows[:, 1])
-        return g.measure.outside(c, d) if neg else g.measure.inside(c, d)
+        if neg:
+            return g.measure.operation("outside", "the RegD negative of gci0")(c, d)
+        return g.measure.inside(c, d)
 
     def gci1(self, g, rows, neg=False):
         if "gci1" not in self.regd_forms:
@@ -352,7 +355,9 @@ class RegDObjective(Objective):
             sub, target = d, g.exists(r, c)
         else:
             sub, target = c, g.exists(r, d)
-        return g.measure.outside(sub, target) if neg else g.measure.inside(sub, target)
+        if neg:
+            return g.measure.operation("outside", "the RegD negative of gci2")(sub, target)
+        return g.measure.inside(sub, target)
 
     def gci3(self, g, rows, neg=False):
         if "gci3" not in self.regd_forms:

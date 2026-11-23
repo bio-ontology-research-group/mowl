@@ -78,6 +78,7 @@ class TranslationBoxes(Relations):
 
     part = "box of translations"
     accepts = (Box, Ball)
+    surjective = True
 
     def __init__(self, size=None, embed_dim=None, vectors=None, offsets=None,
                  activation="abs", convention="y-x", inverse_of=None, init_range=None,
@@ -225,6 +226,8 @@ class Affine(Relations):
     COMPOSITIONS = ("in_order", "as_released")
 
     functional = True
+    #: A non-zero factor and a shift per coordinate map the space onto itself.
+    surjective = True
     accepts = (Box,)
 
     def __init__(self, size=None, embed_dim=None, vectors=None, scales=None, eps=1e-8,
@@ -361,6 +364,16 @@ class AffineBoxes(Relations):
         return Box(region.centre * self.slope(ids) + self.vectors(ids),
                    region.offset * self.slope(ids) + self.error(ids))
 
+    def image(self, ids, region):
+        """The successors of the points of ``region``: :math:`R_r \\cap T_r^{-1}(A \\oplus
+        E_r)`, the :math:`y \\in R_r` with :math:`T_r(y)` within the error of a point of
+        :math:`A` (exact for boxes; an empty intersection is the empty box)."""
+        _boxes(region, self)
+        slope, shift, error = self.slope(ids), self.vectors(ids), self.error(ids)
+        mapped = Box((region.centre - shift) / slope, (region.offset + error) / slope)
+        out, _ = mapped.intersect(self.range(ids), signed=True)
+        return out
+
     def preimage(self, ids, region):
         box = self.range(ids)
         _boxes(region, self)
@@ -401,7 +414,3 @@ class AffineBoxes(Relations):
         range_2, e_2, m_2, c_2 = self._tuple(second)
         composed = (range_2, m_1 * e_2 + e_1, m_1 * m_2, m_1 * c_2 + c_1)
         return self._tuple_inclusion(composed, self._tuple(sup), measure, margin)
-
-    def image(self, ids, region):
-        raise ConstructorUnavailable("AffineBoxes has no image: the region of "
-                                     "exists r.C is the preimage.")

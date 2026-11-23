@@ -200,7 +200,9 @@ class ProbabilityMass(RegionMeasure):
     @staticmethod
     def _margin(margin):
         if margin:
-            raise ValueError("The probability-mass measure has no margin.")
+            from mowl.representation.regions import MarginUnavailable
+            raise MarginUnavailable("The probability-mass measure has no margin (a "
+                                    "membership of a finite model holds or does not).")
 
     def mass(self, a, b):
         """``(B,)``: :math:`P(a \\in b)` for an individual ``a`` (:class:`ElementMixture`)."""

@@ -82,10 +82,13 @@ class Objective:
         role assertions). ``"apart"`` (default), ``"overlap"`` (the negative loss of ELBE:
         zero as soon as the two regions overlap by less than the margin), ``"linear"``
         (``apart`` without its hinge, the ELEm baseline of the Box2EL code), ``"delta"``
-        (:math:`(\\delta - \\mu)^2` per argument, Box2EL and DELE; the relation model needs
-        ``subsumed_negative``), ``"outside"`` (the region sticks out of the other,
-        ``measure.outside``), ``"shrunk"`` (``measure.meets_shrunk``, the published loss of
-        the prism module) or ``"negative"`` (``measure.negative``).
+        (:math:`(\\delta - \\mu)^2` per argument, Box2EL and DELE: the operation
+        ``subsumed_negative`` of the relation model), ``"outside"`` (the region sticks out
+        of the other: the operation ``outside`` of the measure), ``"shrunk"`` (the operation
+        ``meets_shrunk``, the published loss of the prism module) or ``"negative"``
+        (``measure.negative``). The operations are asked for by name
+        (:mod:`mowl.representation.operations`); those with a generic definition exist
+        for every part, the others are refused with the name of the missing operation.
     :param negatives: Which forms have a negative loss of their own: ``"all"`` (default),
         ``"gci2"`` (:math:`C \\sqsubseteq \\exists r.D` and role assertions: for the others
         ``neg=True`` returns the positive loss, as the original modules do), ``"gci0"``
@@ -149,7 +152,9 @@ class Objective:
         the EmEL++ Keras code).
     :param freeze_size_negatives: Compute the negative cost of :math:`C \\sqsubseteq D` with the
         sizes of the regions detached (box lattice model: :math:`\\Delta` is not updated
-        through negative pairs); the class model must support ``detach_size``.
+        through negative pairs): :meth:`Classes.regions
+        <mowl.representation.Classes.regions>` with ``detach_size``, which every class model
+        whose regions can detach their size has.
     :param inside_margin: The margin of ``inside`` when it is not the margin of the negative
         readings (hierarchy methods: no margin on stated pairs); ``None``: as ``margin``
         and ``slack`` say.
@@ -436,11 +441,20 @@ class Objective:
         if form not in self.unit_norm:
             return 0.0
         if form in _ROLE_COLUMNS:
-            vectors = g.relation_model.vectors
+            vectors = getattr(self._relations_of(g, "unit_norm"), "vectors", None)
+            if vectors is None:
+                raise ConstructorUnavailable(
+                    f"unit_norm pulls the shift vectors of the relations to norm one; "
+                    f"{type(g.relation_model).__name__} has none.")
             return sum(th.abs(th.linalg.norm(vectors(rows[:, c]), dim=1, keepdim=True) - 1)
                        for c in _ROLE_COLUMNS[form])  # (role vectors: always unit)
         regions = [(g.classes if kind == "c" else g.individuals)(rows[:, c])
                    for kind, c in _NORM_COLUMNS[form]]
+        for region in regions:
+            if getattr(region, "centre", None) is None:
+                raise ConstructorUnavailable(
+                    f"unit_norm pulls the centres of the regions to norm one; "
+                    f"{type(region).__name__} regions have no centre.")
         return sum(th.abs(th.linalg.norm(r.centre, dim=1, keepdim=True)
                           - self.unit_norm_target) for r in regions)
 
@@ -455,7 +469,8 @@ class Objective:
         if reading == "negative":
             return g.measure.negative(c, d, self._sm("gci0"))
         if reading == "outside":
-            return g.measure.outside(c, d, self._sm("gci0"))
+            return g.measure.operation("outside", "gci0_negative='outside'")(
+                c, d, self._sm("gci0"))
         return g.measure.apart(c, d, margin)
 
     def gci0(self, g, rows, neg=False):
@@ -482,7 +497,7 @@ class Objective:
         that of :math:`\\exists r.D`, or (``gci2_reading="image"``) the image of the
         subclass and the filler."""
         if self.gci2_reading == "image":
-            return g.relation_model.image(relation, sub), filler
+            return self._relations_of(g, "gci2_reading='image'").image(relation, sub), filler
         rel = g.relation_model
         if sharp and rel is not None:
             return sub, rel.sharp_preimage(relation, filler)
@@ -509,8 +524,12 @@ class Objective:
             return cost + self.gci2_offset + self._tolerance(g, relation)
         reading = self.gci2_negative
         if reading == "delta":
-            return rel.subsumed_negative(g.measure, sub, relation, filler, self.margin,
-                                         self.delta)
+            if rel is None:
+                raise ConstructorUnavailable("gci2_negative='delta' compares the regions "
+                                             "of a relation: the geometry has no relation "
+                                             "model.")
+            return rel.operation("subsumed_negative", "gci2_negative='delta'")(
+                g.measure, sub, relation, filler, self.margin, self.delta)
         left, right = self._sides(g, sub, relation, filler, True)
         measure = g.measure
         if reading == "overlap":
@@ -518,9 +537,11 @@ class Objective:
         if reading == "linear":
             return _unhinged_apart(left, right, self._nm(form))
         if reading == "outside":
-            return measure.outside(left, right, self._sm(form))
+            return measure.operation("outside", "gci2_negative='outside'")(
+                left, right, self._sm(form))
         if reading == "shrunk":
-            return measure.meets_shrunk(left, right, -self._sm(form))
+            return measure.operation("meets_shrunk", "gci2_negative='shrunk'")(
+                left, right, -self._sm(form))
         if reading == "negative":
             return measure.negative(left, right, self._sm(form))
         return measure.apart(left, right, self._nm(form))
@@ -552,7 +573,9 @@ class Objective:
             return g.measure.nonempty(c, self.epsilon)
         if self.empty == "raw":
             if getattr(c, "raw", None) is None:
-                raise TypeError("empty='raw' needs a class model that keeps a signed size.")
+                raise ConstructorUnavailable(
+                    f"empty='raw' reads the signed size a class model keeps; "
+                    f"{type(c).__name__} regions have none.")
             return c.raw
         if self.empty_margin:
             return g.measure.empty(c, self.margin)
@@ -582,7 +605,7 @@ class Objective:
             margin = -self.margin if self.slack else self.margin
             cost = g.measure.intersection_nonempty(c, d, margin, self.epsilon)
         elif self.gci1_bot_reading == "product":
-            cost = g.measure.product_overlap(c, d)
+            cost = g.measure.operation("product_overlap", "gci1_bot='product'")(c, d)
         else:
             margin = self.disjoint_margin if self.disjoint_margin is not None else self.nm
             cost = g.measure.apart(c, d, margin)
@@ -602,6 +625,15 @@ class Objective:
                                  self._neg(neg, "object_property_assertion"),
                                  "object_property_assertion")
         return cost
+
+    @staticmethod
+    def _relations_of(g, purpose):
+        """The relation model of ``g``; a geometry without one cannot read ``purpose``."""
+        relations = getattr(g, "relation_model", None)
+        if relations is None:
+            raise ConstructorUnavailable(f"{purpose} reads the relation model, and the "
+                                         f"geometry has none.")
+        return relations
 
     # -- role axioms ------------------------------------------------------------------------
     def _relations_with(self, g):
@@ -670,6 +702,11 @@ def _base_subsumed():
 
 def _unhinged_apart(a, b, margin):
     """``apart`` without the hinge, for ball regions (the only published use)."""
+    from mowl.representation.regions import Ball
+    if not (isinstance(a, Ball) and isinstance(b, Ball)):
+        raise ConstructorUnavailable(
+            f"gci2_negative='linear' is the unhinged overlap of two balls (the ELEm baseline "
+            f"of the Box2EL code); it has no reading for {type(a).__name__} regions.")
     distance = th.linalg.norm(a.centre - b.centre, dim=1, keepdim=True)
     return a.radius + b.radius - distance + margin
 

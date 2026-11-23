@@ -635,9 +635,15 @@ def test_wrong_regions_are_an_error_that_says_so():
     from mowl.representation.library.shapes_measures import OctagonBounds, PointDistance
     from mowl.representation.library.shapes_regions import Point
     box = Box(th.zeros(1, 2), th.ones(1, 2))
-    for measure in (OctagonBounds(), PointDistance(), CentreDistance()):
+    ball = Ball(th.zeros(1, 2), th.ones(1, 1))
+    for measure in (PointDistance(), CentreDistance()):
         with pytest.raises(ConstructorUnavailable):
             measure.inside(box, box)
+    with pytest.raises(ConstructorUnavailable):
+        OctagonBounds().inside(ball, ball)
+    # a box *is* an octagon product (its diagonal bounds at the values it gives them): it is
+    # compared as one, not refused
+    assert float(OctagonBounds().inside(box, box)) == 0
     with pytest.raises(ConstructorUnavailable):
         PointDistance().empty(Point(th.zeros(1, 2)))     # a point is never empty
 

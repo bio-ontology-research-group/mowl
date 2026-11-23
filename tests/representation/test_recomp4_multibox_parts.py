@@ -147,8 +147,11 @@ class TestSampledVolume(TestCase):
         measure = SampledVolume(num_points=64)
         a = UnionOfBoxes(th.zeros(1, 1, 2), th.ones(1, 1, 2))
         self.assertAlmostEqual(float(measure.inside(a, a)), 0.0, places=5)
+        # a strict margin is read as the enlarged region (no room inside itself); a slack
+        # is refused
+        self.assertGreater(float(measure.inside(a, a, margin=0.1)), 0.0)
         with self.assertRaises(ValueError):
-            measure.inside(a, a, margin=0.1)
+            measure.inside(a, a, margin=-0.1)
         with self.assertRaises(ValueError):
             mcmultibox(3, 1, embed_dim=2, num_boxes=1, num_points=16, margin=0.1)
 

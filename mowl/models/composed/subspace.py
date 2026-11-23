@@ -507,12 +507,10 @@ class ComposedSubspace(RegimeTrained, SubspaceAxiomModel):
         if reset is not None:
             try:
                 reset()
-            except (AttributeError, TypeError, RuntimeError) as error:
-                if not chosen:
-                    raise
+            except ConstructorUnavailable as error:
                 raise ConstructorUnavailable(
                     f"{self.method!r} cannot take {sorted(chosen)}: its parameters cannot be "
-                    f"drawn as E2R draws them ({type(error).__name__}: {error}).") from error
+                    f"drawn as E2R draws them: {error}") from error
         self._attach_regularizers(geometry)
 
     def _attach_regularizers(self, geometry):
@@ -543,14 +541,10 @@ class ComposedSubspace(RegimeTrained, SubspaceAxiomModel):
                         self.module(self._kind(form), th.as_tensor(rows)[:2])
                 self.module.regularization_loss()
         except ConstructorUnavailable as error:
+            # only the library's own refusal, raised with its reason by the part that cannot
+            # do what the combination asks; any other error is a defect and surfaces
             raise ConstructorUnavailable(
                 f"{self.method!r} cannot take {chosen}: {error}") from error
-        except (TypeError, AttributeError, RuntimeError, ValueError, IndexError,
-                KeyError) as error:
-            raise ConstructorUnavailable(
-                f"{self.method!r} cannot take {chosen}: the combination "
-                f"{self.module.parts} does not evaluate ({type(error).__name__}: "
-                f"{error}).") from error
 
     # -- training -----------------------------------------------------------------------
     @property

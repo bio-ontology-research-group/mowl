@@ -67,6 +67,40 @@ The example is a relation model that is a shift, but twice as long as its vector
 
    ...
 
+Operations a part declares
+--------------------------
+
+Some readings of axioms need a quantity that not every part has: the volume product of the
+BoxEL code, the negative loss of Box2EL, the enhanced existential of TransBox, the
+non-inclusion of RegD. An objective does not call a method that one part class happens to
+have; it asks for the operation by name, and the part computes it or refuses with
+:class:`~mowl.representation.ConstructorUnavailable` naming the operation
+(:mod:`mowl.representation.operations`). Measures and relation models declare their
+optional operations in ``OPERATIONS``. Where an operation can be written with the common
+interface (the regions' ``intersect``, ``volume``, ``contract``, the measure's ``meets``, the
+relation model's ``preimage`` and ``image``), the base class has that *generic* definition,
+so every part has it; a part overrides it where its own formula is exact or is the published
+one. ``provides`` says which:
+
+.. testcode::
+
+   from mowl.representation import Bounds, Translation
+   from mowl.representation.library.boxrel_measures import VolumeShare
+
+   print(VolumeShare.provides("product_overlap"), Bounds.provides("product_overlap"))
+   print(Translation.provides("subsumed_negative"), Bounds.provides("outside"))
+
+.. testoutput::
+
+   own generic
+   generic own
+
+A new part with an exact formula for one of them defines the method of that name; a new
+operation is declared in ``OPERATIONS`` of the kind of part, with a generic definition
+(marked ``@generic``) where one exists. A region family that is exactly a special case of
+another (a point is a box of no width, a box is an octagon product) says so with ``views``
+or ``represents``, and the measures of the other family compare it.
+
 Register a method
 -----------------
 

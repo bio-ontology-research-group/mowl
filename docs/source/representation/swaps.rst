@@ -209,7 +209,7 @@ Axiom methods (ComposedEL, ComposedALC)
      - 
      - 
    * - ``concept2box``
-     - unavailable
+     - works
      - works
      - 
      - works
@@ -725,13 +725,12 @@ Reasons
 * ``query2box``, negation, unavailable: the library has no negation of boxes (Query2Box has none); the negations of BetaE and ConE act on other region families and are refused with both sides named
 * ``boxe``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``boxe``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
-* ``boxlite``, classes, unavailable: the measure reads the lower and upper corner tables of its own BoundsBoxes, which are constrained by the solver programme; no other class model has corner tables (box models are refused when the probe finds no 'lower')
+* ``boxlite``, classes, unavailable: the variables of the BoxLitE programme are the lower and upper corner tables of its own BoundsBoxes; no other class model has corner tables, and the geometry refuses one without them
 * ``boxsel``, objective_options, unavailable: the only option it has is the margin, and its volume measure ignores a margin (BoxEL and BoxSEL have none)
 * ``canonical_mixture``, classes, unavailable: the measure reads parts of its own region kind (SparseElementSets), which no other entry of the registry provides; every other class model is refused with the two sides named
 * ``canonical_mixture``, relations, unavailable: its relations are canonical roles over element sets; geometric relation models map geometric regions and refuse sparse sets
 * ``canonical_mixture``, individuals, unavailable: the measure reads parts of its own region kind (SparseElementSets), which no other entry of the registry provides; every other class model is refused with the two sides named
 * ``canonical_mixture``, measure, unavailable: ProbabilityMass is the only measure of sparse element sets (the regions are sets of finite-model elements, not geometric regions)
-* ``concept2box``, classes, unavailable: the soft-box measure reads the context table of its own ContextualSoftBox class model (in_context); no other class model has contexts
 * ``eike``, classes, unavailable: the measure reads parts of its own region kind (an ellipsoid and a vector, Linked), which no other entry of the registry provides; every other class model is refused with the two sides named
 * ``eike``, individuals, unavailable: the measure reads parts of its own region kind (Linked), which no other entry of the registry provides; every other class model is refused with the two sides named
 * ``eike``, measure, unavailable: LinkedMeasure is the only measure that compares Linked regions; every other measure compares one region kind
@@ -760,3 +759,115 @@ Reasons
 * ``e2r``, relations, unavailable: E2R's relations map pairs of vectors (a relation is a vector of the pair space, dimension 2d); the registered 'subspace' relation model is the method's own, and every other registered relation model works in the dimension of one class region and does not evaluate against the pair equations (refused 
 * ``e2r``, measure, unavailable: the measure of E2R is the residual of a point against a subspace; every other measure compares another region kind or has no residual (refused when the model is built)
 * ``e2r``, objective, unavailable: the losses of E2R are the equations of its axiom kinds (SubspaceObjective.kind_cost): a general Objective has none, and a SubspaceObjective is the method's own
+
+Cross-method swaps among the region-based EL methods
+----------------------------------------------------
+
+The table above says whether *some* replacement of a part works. This one counts every
+cross-method swap among the region-based EL methods (balls, boxes, octagons, prisms,
+ellipsoids, unions of boxes, cones and orders: ``REGION_METHODS`` of
+``tests/representation/cross_method_swaps.py``): method A built through ``ComposedEL`` with
+the class model, relation model, measure or objective of method B, once per distinct
+replacement. ``works``: accepted, the losses change, two epochs train to finite numbers;
+``refused``: :class:`~mowl.representation.ConstructorUnavailable` at build time with the
+reason of the part that cannot do it; ``same losses``: an objective or measure that is read
+and gives the costs of the method's own on these forms; ``no effect`` and ``bug`` (an
+accepted part that changes nothing, any other error) must stay at zero. Before the parts
+declared their operations (:mod:`mowl.representation.operations`), 361 of the 1628 cases
+worked, and 289 of the refusals were errors of parts that the general model wrapped as
+refusals. The counts are written by the generator of this page:
+
+.. list-table::
+   :header-rows: 1
+
+   * - part replaced
+     - works
+     - refused
+     - same losses
+     - no effect
+     - bug
+     - cases
+   * - classes
+     - 110
+     - 349
+     - 0
+     - 0
+     - 0
+     - 459
+   * - relations
+     - 55
+     - 169
+     - 0
+     - 0
+     - 0
+     - 224
+   * - measure
+     - 109
+     - 347
+     - 3
+     - 0
+     - 0
+     - 459
+   * - objective
+     - 359
+     - 99
+     - 28
+     - 0
+     - 0
+     - 486
+   * - all
+     - 633
+     - 964
+     - 31
+     - 0
+     - 0
+     - 1628
+
+Most refusals are of a class model or measure of another region family: a measure of
+boxes cannot compare balls, and no exact view of one family as the other exists (exact views
+are used: a point is a box of no width, a box is an octagon product). The hierarchy methods
+train only ``C ⊑ D``, so no relation model they are given would be read. By category:
+
+.. list-table::
+   :header-rows: 1
+
+   * - why refused
+     - classes
+     - relations
+     - measure
+     - objective
+   * - the measure compares another region family
+     - 336
+     - 9
+     - 322
+     - 0
+   * - no trained form reads a relation model
+     - 0
+     - 96
+     - 0
+     - 0
+   * - the relation model does not map these regions
+     - 1
+     - 58
+     - 6
+     - 12
+   * - an operation the part does not provide
+     - 0
+     - 5
+     - 8
+     - 47
+   * - a margin the measure cannot read
+     - 0
+     - 0
+     - 7
+     - 35
+   * - the method's training regime or solver needs its own part
+     - 7
+     - 0
+     - 0
+     - 4
+   * - other
+     - 5
+     - 1
+     - 4
+     - 1

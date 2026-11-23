@@ -444,17 +444,4 @@ class HalfSpacePoints(PointClasses):
                          else UpperHalfSpace(), **options)
 
 
-@register_class_model("euclidean manifold point")
-class EuclideanManifoldPoints(PointClasses):
-    """Points of Euclidean space with the manifold structure of the hierarchy family
-    (:class:`ManifoldPoint`), which the order and cone measures compare; the plain
-    ``"point"`` is :class:`~mowl.representation.library.shapes_regions.Point`, a point with an
-    optional bump.
-
-    Part (vocabulary value): ``point``. Used by: ``shadow_cones`` (as a swap).
-    """
-
-    def __init__(self, size=None, embed_dim=None, manifold=None, **options):
-        super().__init__(size, embed_dim, manifold if manifold is not None
-                         else Euclidean(), **options)
 register_class_model("disk")(DiskClasses)
