@@ -359,3 +359,28 @@ def test_the_baseline_trains_with_the_direct_regime_where_the_library_one_needs_
     assert type(regime).__module__ == "mowl.baselines.training.dele"
     assert type(resolve_training_regime("dele-code-training", seed=0)).__module__ \
         == "mowl.training.dele"
+
+
+def test_the_baseline_modules_are_ranked_by_the_same_published_scores():
+    """The evaluation looks a module's published score up by class path; the direct
+    modules must be registered, or they are silently ranked by their loss."""
+    from mowl.baselines.benchmarks import register_scorers
+    from mowl.evaluation import el_scoring
+    register_scorers()   # what the baseline implementation does when it builds a model
+    from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
+    from mowl.baselines.nn.el.elem.module import ELEmModule
+    from mowl.baselines.nn.el.emelpp.module import EmELPPModule
+
+    class Model:
+        def __init__(self, module):
+            self.module = module
+
+    table = el_scoring.CENTRE_DISTANCE_SCORERS
+    for library_path, scorer in list(table.items()):
+        if library_path.startswith("mowl.nn.") and "regd" not in library_path:
+            assert table.get("mowl.baselines." + library_path[5:]) is scorer, library_path
+    for cls, key in ((BoxSquaredELModule, "boxsquaredel.module.BoxSquaredELModule"),
+                     (ELEmModule, "elem.module.ELEmModule"),
+                     (EmELPPModule, "elem.module.ELEmModule")):
+        module = cls.__new__(cls)
+        assert el_scoring._scorer_of(Model(module)) is table["mowl.nn.el." + key], cls

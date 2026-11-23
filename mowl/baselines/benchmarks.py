@@ -249,6 +249,7 @@ class BaselineImplementation(Implementation):
         reason = self.unsupported_reason(card.key)
         if reason:
             raise UnsupportedModelError(reason)
+        register_scorers()   # here, not at import: the evaluation needs the JVM
         if card.key in FACTORIES:
             import os
             factory_path, class_path = FACTORIES[card.key]
@@ -307,6 +308,22 @@ class BaselineImplementation(Implementation):
                                            f"{type(regime).__qualname__}"
         return out
 
+
+def register_scorers():
+    """Register the published scores of the library's evaluation
+    (:data:`mowl.evaluation.el_scoring.CENTRE_DISTANCE_SCORERS`, keyed by class path) for
+    the direct modules of the same names, so that both implementations are ranked by the
+    same score. Without it a direct module would be ranked by its loss instead."""
+    from mowl.evaluation import el_scoring
+    for library_path, scorer in list(el_scoring.CENTRE_DISTANCE_SCORERS.items()):
+        if not library_path.startswith("mowl.nn."):
+            continue
+        path = "mowl.baselines." + library_path[len("mowl."):]
+        try:
+            _load(path)
+        except (ImportError, AttributeError):
+            continue
+        el_scoring.CENTRE_DISTANCE_SCORERS.setdefault(path, scorer)
 
 IMPLEMENTATION = register_implementation(BaselineImplementation())
 

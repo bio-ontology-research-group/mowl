@@ -67,6 +67,9 @@ LIBRARY_COMPUTING = ("mowl.representation", "mowl.training", "mowl.evaluation", 
 #: Names a baseline may import from those packages because they do not compute: base classes
 #: that only dispatch, exception classes, a reader of the axioms into index rows.
 ALLOWED_NAMES = {
+    ("mowl.evaluation", "el_scoring"): "the evaluation's table of published scores, in "
+                                       "which the benchmark plugin registers the direct "
+                                       "modules (both implementations are ranked alike)",
     ("mowl.evaluation.axiom_ranking", "rank_queries"):
         "the validation measure a regime selects the model by (the evaluation both implementations are measured with)",
     ("mowl.evaluation.el_scoring", "resolve_scorer"):
