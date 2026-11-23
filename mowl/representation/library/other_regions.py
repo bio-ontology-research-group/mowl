@@ -64,6 +64,8 @@ class MaskedUnionOfBoxes(Region):
     half-width), ``active`` ``(B, K)``. ``ids`` are the class ids the region was made from
     (for named classes), else ``None``."""
 
+    space = "euclidean"
+
     def __init__(self, cen, w, active, ids=None):
         self.cen, self.w, self.active, self.ids = cen, w, active, ids
 

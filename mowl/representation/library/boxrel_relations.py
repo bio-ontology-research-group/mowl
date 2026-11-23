@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from mowl.representation.class_models import _unit_rows
 from mowl.representation.library.boxrel_boxes import _uniform
 from mowl.representation.methods import register_relation_model
-from mowl.representation.regions import Ball, Box, ConstructorUnavailable
+from mowl.representation.regions import Ball, Box, ConstructorUnavailable, family_refusal
 from mowl.representation.relation_models import Relations
 
 __all__ = ["TranslationBoxes", "Affine", "AffineBoxes"]
@@ -26,8 +26,7 @@ __all__ = ["TranslationBoxes", "Affine", "AffineBoxes"]
 
 def _boxes(region, relation):
     if not isinstance(region, Box):
-        raise ConstructorUnavailable(
-            f"{type(relation).__name__} maps boxes, not {type(region).__name__} regions.")
+        raise family_refusal(type(relation).__name__, (Box,), region)
     return region
 
 
@@ -128,8 +127,7 @@ class TranslationBoxes(Relations):
             return Box(grown.centre, th.relu(grown.offset)) if self.clamp_extent else grown
         if isinstance(region, Ball):
             return region.grow(th.linalg.norm(width, dim=-1, keepdim=True))
-        raise ConstructorUnavailable(
-            f"A box of translations maps boxes and balls, not {type(region).__name__}.")
+        raise family_refusal("A box of translations", (Box, Ball), region)
 
     def image(self, ids, region):
         box = self.box(ids)
@@ -149,7 +147,7 @@ class TranslationBoxes(Relations):
         inverted box where :math:`o_C > o_r`."""
         box = self.box(ids)
         if not isinstance(region, Box):
-            raise ConstructorUnavailable("preimage_all needs boxes.")
+            raise family_refusal("preimage_all", (Box,), region)
         offset = box.offset - region.offset
         return Box(region.centre - self.sign * box.centre, th.relu(offset) if clamp else offset)
 

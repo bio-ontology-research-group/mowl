@@ -179,8 +179,7 @@ def build_method(key, nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
         try:
             check_relations_are_read(geometry, key, rows)
         except ConstructorUnavailable as error:
-            raise ConstructorUnavailable(f"{key!r} cannot take ['relations']: {error}") \
-                from error
+            raise error.reworded(f"{key!r} cannot take ['relations']: ") from error
     return geometry
 
 
@@ -277,9 +276,9 @@ def swap(geometry, key, sizes, embed_dim, classes=None, relations=None, individu
     try:
         geometry.replace_parts(**parts)
     except ConstructorUnavailable as error:
-        raise ConstructorUnavailable(
-            f"{key!r} cannot take {sorted(k for k in parts if k != 'regularizers')}: "
-            f"{error} (the method's other parts: {geometry.parts}).") from error
+        raise error.reworded(
+            f"{key!r} cannot take {sorted(k for k in parts if k != 'regularizers')}: ",
+            f" (the method's other parts: {geometry.parts}).") from error
     new = parts.get("objective")
     if objective is not None and getattr(new, "strict_negatives", False):
         # an objective that refuses the negative loss of a form it has none for: the forms

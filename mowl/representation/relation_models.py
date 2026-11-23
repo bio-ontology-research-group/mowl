@@ -16,7 +16,8 @@ import torch as th
 import torch.nn as nn
 
 from mowl.representation.operations import Operations, generic
-from mowl.representation.regions import ConstructorUnavailable
+from mowl.representation.regions import (ConstructorNotImplemented, ConstructorUnavailable,
+                                         family_refusal)
 
 __all__ = ["Relations", "Translation"]
 
@@ -83,10 +84,9 @@ class Relations(Operations, nn.Module):
         """Raise :class:`ConstructorUnavailable` if the regions of ``region_class`` are not
         mapped by this relation model."""
         if not self.maps(region_class):
-            raise ConstructorUnavailable(
-                f"{type(self).__name__} maps {[c.__name__ for c in self.accepts]} regions, "
-                f"not {region_class.__name__}: this combination of parts cannot read "
-                f"exists r.C.")
+            refusal = family_refusal(f"{type(self).__name__} (as a relation model)",
+                                     self.accepts, region_class)
+            raise refusal.reworded(after=" This combination of parts cannot read exists r.C.")
 
     def related(self, ids, x, y):
         """``(B, P)`` boolean: whether the points ``x[p]`` and ``y[p]`` (``(P, d)`` each) are
@@ -101,12 +101,13 @@ class Relations(Operations, nn.Module):
     def image(self, ids, region):
         """:math:`\\{y : (x, y) \\in r, x \\in \\text{region}\\}` for the relations
         ``ids``."""
-        raise ConstructorUnavailable(f"{type(self).__name__} has no image.")
+        raise ConstructorNotImplemented(f"the image of {type(self).__name__} (no formula is written).")
 
     def preimage(self, ids, region):
         """:math:`\\{x : (x, y) \\in r, y \\in \\text{region}\\}`: the region of
         :math:`\\exists r.C`."""
-        raise ConstructorUnavailable(f"{type(self).__name__} has no preimage.")
+        raise ConstructorNotImplemented(
+            f"the preimage of {type(self).__name__} (no formula is written).")
 
     def tables(self):
         """The raw parameter tables by attribute name (``{"vectors": ...}`` for a
@@ -147,7 +148,7 @@ class Relations(Operations, nn.Module):
         For a functional relation (one successor per point) this is the preimage; other
         relation models define it or refuse."""
         if not self.functional:
-            raise ConstructorUnavailable(self._missing("preimage_all") + " It has a "
+            raise ConstructorNotImplemented(self._missing("preimage_all") + " It has a "
                                          "generic definition only for functional relations.")
         return self.preimage(ids, region)
 
@@ -156,7 +157,7 @@ class Relations(Operations, nn.Module):
         """The region of the successors of the relations ``ids``; ``None`` for a relation
         onto the whole space (no constraint), which is all a generic definition can say."""
         if not self.surjective:
-            raise ConstructorUnavailable(self._missing("range") + " It has a generic "
+            raise ConstructorNotImplemented(self._missing("range") + " It has a generic "
                                          "definition only for relations onto the space.")
         return None
 
@@ -169,14 +170,14 @@ class Relations(Operations, nn.Module):
     def role_inclusion(self, sub, sup, measure, margin=0.0):
         """Cost ``(B, 1)`` of :math:`r \\sqsubseteq s` for the relation ids ``sub``,
         ``sup``; ``measure`` and ``margin`` are those of the objective."""
-        raise ConstructorUnavailable(
+        raise ConstructorNotImplemented(
             f"{type(self).__name__} does not define role_inclusion(...), so role "
             f"inclusions cannot be read.")
 
     def role_chain(self, first, second, sup, measure, margin=0.0):
         """Cost ``(B, 1)`` of :math:`r_1 \\circ r_2 \\sqsubseteq s` (first :math:`r_1`, then
         :math:`r_2`)."""
-        raise ConstructorUnavailable(
+        raise ConstructorNotImplemented(
             f"{type(self).__name__} does not define role_chain(...), so role chains "
             f"cannot be read.")
 

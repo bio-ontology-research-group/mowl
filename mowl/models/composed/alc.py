@@ -313,9 +313,9 @@ class ComposedALC(EmbeddingALCModel):
         try:
             reached = self._probe()
         except ConstructorUnavailable as error:
-            raise ConstructorUnavailable(
-                f"{name} cannot take {sorted(given)}: {error} (the parts: "
-                f"{self.module.parts}).") from error
+            raise error.reworded(
+                f"{name} cannot take {sorted(given)}: ",
+                f" (the parts: {self.module.parts}).") from error
         parts = current_parts(self.module)
         for kind in ("classes", "relations", "individuals"):
             part = parts[kind]

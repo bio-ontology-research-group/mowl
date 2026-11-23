@@ -149,8 +149,8 @@ earlier behaviour and are not listed. The changelog has every change.
   source: both need a rebuild of the jar to be fixed there, so they are handled in Python
   (``walker.seeded`` is ``False`` for node2vec).
 * **FaithEL**: the part ``AnchoredObjective`` has a bounded negative term by default
-  (``negative_term="margin"``); the class ``FaithEL`` keeps the unbounded term of the authors'
-  code (``negative_term="unbounded"`` is its default).
+  (``negative_term="margin"``); the class ``FaithEL`` has the same default; the authors' unbounded
+  term of the code is the explicit option ``negative_term="unbounded"``.
 * **FALCON**: the part ``FuzzyObjective`` reads a role assertion in the direction of
   :math:`\exists r.C` by default (``abox_head="subject"``); the named method keeps the
   direction of the code (``"object"``), see :doc:`known_deviations`.

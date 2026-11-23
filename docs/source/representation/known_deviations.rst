@@ -160,9 +160,9 @@ individuals drift apart. The paper text was not available, so the corrected form
 choice. The objective part ``AnchoredObjective`` defaults to the hinge
 :math:`\psi\,\max(0, m - \mathrm{mse}(x_a, x_{neg}))` (``negative_term="margin"``, margin
 ``neg_margin=1.0``), which is bounded below by zero; ``negative_term="unbounded"`` gives the
-code's term. The class :class:`~mowl.models.FaithEL` selects ``"unbounded"`` (its default), so
-its numbers are those of the code; the registered method ``faithel`` of the parts is the
-bounded form.
+code's term. The class :class:`~mowl.models.FaithEL` and the general model
+``ComposedEL(method="faithel")`` have the same default (the bounded form); the numbers of the
+code are ``negative_term="unbounded"`` on either.
 
 FALCON
 ------

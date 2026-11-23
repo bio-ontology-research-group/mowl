@@ -27,7 +27,7 @@ from mowl.representation.library import shapes_gumbel_math as C2B
 from mowl.representation.library import octagon_geometry as G
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import register_measure
-from mowl.representation.regions import Box, ConstructorUnavailable
+from mowl.representation.regions import Box, ConstructorNotImplemented, ConstructorUnavailable
 from mowl.representation.library.shapes_regions import (
     Point, OctagonProduct, Prism, Ellipsoid, Vector, Linked, SoftBox)
 
@@ -316,7 +316,8 @@ class EllipsoidMeasure(RegionMeasure):
         return th.relu(d + a.radius * stretch - b.radius + margin)
 
     def meets(self, a, b, margin=0.0):
-        raise ConstructorUnavailable("EllipsoidMeasure has no overlap test.")
+        raise ConstructorNotImplemented("EllipsoidMeasure has no formula for the overlap of "
+                                        "two ellipsoids.")
 
     def apart(self, a, b, margin=0.0):
         if isinstance(a, Point):
@@ -635,8 +636,8 @@ class ByRegion(RegionMeasure):
         for ca, cb, measure in self.rules:
             if isinstance(a, ca) and isinstance(b, cb):
                 return measure
-        raise ConstructorUnavailable(
-            f"No rule for {type(a).__name__} against {type(b).__name__}.")
+        raise ConstructorNotImplemented(
+            f"ByRegion has no rule for {type(a).__name__} against {type(b).__name__}.")
 
     def inside(self, a, b, margin=0.0):
         return self._measure(a, b).inside(a, b, margin)

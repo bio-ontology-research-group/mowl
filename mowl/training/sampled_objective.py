@@ -37,7 +37,21 @@ from mowl.training.loop import TrainingLoop
 from mowl.training.regime import ComposedRegime, TrainingRegime
 from mowl.training.schedules import TemperatureAnnealing, validation_loss
 
-__all__ = ["SampledObjectiveTraining", "find_regime"]
+__all__ = ["SampledObjectiveTraining", "find_regime", "seeded_generator", "element_offset"]
+
+
+def seeded_generator(seed, offset=0):
+    """A CPU generator seeded with ``seed + offset``: the draws of a step, of a report or of a
+    check are a function of the seed of the model and of what they are for (``offset``)."""
+    gen = th.Generator(device="cpu")
+    gen.manual_seed(int(seed) + int(offset))
+    return gen
+
+
+def element_offset(nb_before, index):
+    """The position of the ``index``-th entry of a block that starts after ``nb_before``
+    entries (the individuals of a domain come after its classes)."""
+    return int(nb_before) + int(index)
 
 
 def find_regime(regime, kind):
@@ -177,8 +191,7 @@ class SampledObjectiveTraining(TrainingRegime):
         self._epochs, self._log_every = int(epochs), int(log_every)
         self._validate_every = int(validate_every)
         self._best, self._saved_best = float("inf"), False
-        gen = th.Generator(device="cpu")
-        gen.manual_seed(model.seed + self.seed_offset)
+        gen = seeded_generator(model.seed, self.seed_offset)
         self._generator = gen
         composed = ComposedRegime(regime, self)
         composed.model = model

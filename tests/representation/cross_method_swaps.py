@@ -223,62 +223,105 @@ def counts(results):
     return total
 
 
-#: Why a case is refused, by the words of the refusal (first match).
-CATEGORIES = (
-    ("the measure compares another region family", ("compares [", "not a box",
-                                                    "point-membership function")),
+NOT_IMPLEMENTED = "not implemented: "
+
+
+def not_implemented(detail):
+    """Whether a refusal says that the combination is defined and its formula is not
+    written (:class:`~mowl.representation.ConstructorNotImplemented`), as against undefined."""
+    return detail.startswith(NOT_IMPLEMENTED)
+
+
+#: Why a combination is undefined, by the words of the refusal (first match).
+UNDEFINED = (
+    ("the measure compares another space or family", ("compares [", "another space",
+                                                      "point-membership function")),
     ("no trained form reads a relation model", ("none of the forms",)),
-    ("the relation model does not map these regions", ("maps [", "No relation model for",
-                                                       "DL-Lite", "has no image",
-                                                       "cannot be enlarged")),
-    ("an operation the part does not provide", ("does not provide the operation",
-                                                "has no volume", "cannot detach",
-                                                "has no disjointness", "is not a Ball",
-                                                "has no non-inclusion")),
+    ("the relation model does not map these regions", ("maps [", "DL-Lite", "cannot be enlarged")),
     ("a margin the measure cannot read", ("margin",)),
     ("the method's training regime or solver needs its own part", ("PerColumnCorruption",
                                                                    "programme",
                                                                    "regularise")),
 )
 
+#: What is not written, by the words of the refusal (first match).
+UNWRITTEN = (
+    ("the comparison of two families of R^d", ("same space (R^d)",)),
+    ("an operation of the part (volume, image, preimage, non-inclusion, ...)",
+     ("the volume of", "does not provide the operation", "the image of", "the preimage of",
+      "no formula")),
+    ("a reading of a margin", ("margin", "slack")),
+    ("a rule of the relation model or of a role axiom", ("no rule", "role_inclusion",
+                                                         "role_chain")),
+)
+
+#: Both, for code that counts categories.
+CATEGORIES = UNDEFINED + UNWRITTEN
+
 
 def category(detail):
-    """The category of a refusal (:data:`CATEGORIES`), or ``"other"``."""
-    for name, words in CATEGORIES:
+    """The category of a refusal, or ``"other"`` (the words of :data:`UNDEFINED` for an
+    undefined combination, those of :data:`UNWRITTEN` for a not implemented one)."""
+    table = UNWRITTEN if not_implemented(detail) else UNDEFINED
+    for name, words in table:
         if any(word in detail for word in words):
             return name
     return "other"
 
 
+def split_refusals(results):
+    """``({kind: n undefined}, {kind: n not implemented})`` of the refused cases."""
+    undefined, unwritten = {}, {}
+    for receiver, kind, label, donors_, outcome, detail in results:
+        if outcome == REFUSED:
+            table = unwritten if not_implemented(detail) else undefined
+            table[kind] = table.get(kind, 0) + 1
+    return undefined, unwritten
+
+
 def summary_rst(results):
-    """The counts per part kind as a reStructuredText table."""
+    """The counts per part kind as a reStructuredText table: the refused cases in two
+    columns, undefined and not implemented."""
     by = counts(results)
-    outcomes = (WORKS, REFUSED, SAME, NO_EFFECT, BUG)
+    undefined, unwritten = split_refusals(results)
+    heads = ("works", "refused: undefined", "refused: not implemented", SAME, NO_EFFECT, BUG)
     lines = [".. list-table::", "   :header-rows: 1", "", "   * - part replaced"]
-    lines += [f"     - {o}" for o in outcomes] + ["     - cases"]
+    lines += [f"     - {h}" for h in heads] + ["     - cases"]
+    total = [0] * len(heads)
     for kind in KINDS + ("all",):
-        row = by.get(kind, {}) if kind != "all" else {
-            o: sum(by.get(k, {}).get(o, 0) for k in KINDS) for o in outcomes}
+        if kind != "all":
+            row = by.get(kind, {})
+            cells = [row.get(WORKS, 0), undefined.get(kind, 0), unwritten.get(kind, 0),
+                     row.get(SAME, 0), row.get(NO_EFFECT, 0), row.get(BUG, 0)]
+            total = [t + c for t, c in zip(total, cells)]
+        else:
+            cells = total
         lines.append(f"   * - {kind}")
-        lines += [f"     - {row.get(o, 0)}" for o in outcomes]
-        lines.append(f"     - {sum(row.values())}")
+        lines += [f"     - {c}" for c in cells]
+        lines.append(f"     - {sum(cells)}")
     return "\n".join(lines) + "\n"
 
 
 def refusals_rst(results):
-    """The refusals by category and part kind, as a reStructuredText table."""
-    table = {}
-    for receiver, kind, label, donors_, outcome, detail in results:
-        if outcome == REFUSED:
-            row = table.setdefault(category(detail), {})
-            row[kind] = row.get(kind, 0) + 1
-    lines = [".. list-table::", "   :header-rows: 1", "", "   * - why refused"]
-    lines += [f"     - {k}" for k in KINDS]
-    for name in [c for c, _ in CATEGORIES] + ["other"]:
-        if name in table:
-            lines.append(f"   * - {name}")
-            lines += [f"     - {table[name].get(k, 0)}" for k in KINDS]
-    return "\n".join(lines) + "\n"
+    """The refusals by kind (undefined, not implemented), category and part kind, as two
+    reStructuredText tables."""
+    out = []
+    for title, unwritten in (("Undefined", False), ("Not implemented", True)):
+        table = {}
+        for receiver, kind, label, donors_, outcome, detail in results:
+            if outcome == REFUSED and not_implemented(detail) == unwritten:
+                row = table.setdefault(category(detail), {})
+                row[kind] = row.get(kind, 0) + 1
+        names = [c for c, _ in (UNWRITTEN if unwritten else UNDEFINED)] + ["other"]
+        out += [f"**{title}**", "", ".. list-table::", "   :header-rows: 1", "",
+                "   * - why refused"]
+        out += [f"     - {k}" for k in KINDS]
+        for name in names:
+            if name in table:
+                out.append(f"   * - {name}")
+                out += [f"     - {table[name].get(k, 0)}" for k in KINDS]
+        out.append("")
+    return "\n".join(out)
 
 
 if __name__ == "__main__":

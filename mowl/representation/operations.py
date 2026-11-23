@@ -17,7 +17,7 @@ faster overrides it. :meth:`Operations.provides` says which of the two a part ha
 (``"own"``, ``"generic"``) or ``None``.
 """
 
-from mowl.representation.regions import ConstructorUnavailable
+from mowl.representation.regions import ConstructorNotImplemented, ConstructorUnavailable
 
 __all__ = ["Operations", "generic", "unavailable", "operation_table"]
 
@@ -33,7 +33,7 @@ def unavailable(name):
     """A placeholder for an operation that has no generic definition: calling it raises
     :class:`ConstructorUnavailable`; :meth:`Operations.provides` returns ``None``."""
     def method(self, *args, **kwargs):
-        raise ConstructorUnavailable(self._missing(name))
+        raise ConstructorNotImplemented(self._missing(name))
     method.__name__ = name
     method.unavailable = True
     return method
@@ -82,7 +82,7 @@ class Operations:
         :class:`ConstructorUnavailable` naming the operation and ``purpose`` (what needs it)
         if the part has none."""
         if self.provides(name) is None:
-            raise ConstructorUnavailable(self._missing(name, purpose))
+            raise ConstructorNotImplemented(self._missing(name, purpose))
         return getattr(self, name)
 
 
