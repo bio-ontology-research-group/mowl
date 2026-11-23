@@ -10,6 +10,11 @@ class BoxSquaredELModule(ELModule):
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
+    entity_embedding_names = (
+        ("class_center", "class_offset", "bump_classes"),
+        ("head_center", "head_offset", "tail_center", "tail_offset"),
+        ("ind_center", "ind_offset", "bump_individuals"),
+    )
     
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, gamma=0, delta = 2, reg_factor = 0.05):
         super().__init__()

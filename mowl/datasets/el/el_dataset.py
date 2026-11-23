@@ -33,7 +33,7 @@ class ELDataset():
     normalization process will be skipped. Defaults to ``False``.
     :type load_normalized: bool, optional
     :param ontology_path: Path to the original ontology file. If provided, the normalized \
-    ontology will be cached to ``<ontology_path>_mowl_el_normalized.owl`` and loaded from cache \
+    ontology will be cached to ``<ontology_path>_mowl_el_normalized_v2.owl`` and loaded from cache \
     on subsequent calls. This significantly speeds up repeated normalization of the same \
     ontology. Defaults to ``None``.
     :type ontology_path: str, optional
@@ -47,6 +47,15 @@ class ELDataset():
     :class:`ELModule <mowl.nn.ELModule>` subclasses that implement the corresponding losses \
     can consume them, so they are left out unless asked for. Defaults to ``False``.
     :type load_role_axioms: bool, optional
+    :param normalized_gcis: Output of :meth:`ELNormalizer.normalize \
+    <mowl.ontology.normalize.ELNormalizer.normalize>` for ``ontology``. If provided, the \
+    normalization is not run again. Defaults to ``None``.
+    :type normalized_gcis: dict, optional
+
+    When index dictionaries are provided, axioms mentioning a class or object property that \
+    is not in them (e.g. an auxiliary class the normalizer introduced for a validation or \
+    testing ontology) cannot be represented and are skipped; the number of skipped axioms is \
+    logged as a warning and available as :attr:`num_skipped_axioms`.
     """
 
     def __init__(self,
@@ -59,7 +68,8 @@ class ELDataset():
                  device="cpu",
                  ontology_path=None,
                  use_cache=True,
-                 load_role_axioms=False
+                 load_role_axioms=False,
+                 normalized_gcis=None
                  ):
 
         if not isinstance(ontology, OWLOntology):
@@ -92,6 +102,9 @@ org.semanticweb.owlapi.model.OWLOntology.")
         if not isinstance(load_role_axioms, bool):
             raise TypeError("Optional parameter load_role_axioms must be of type bool")
 
+        if normalized_gcis is not None and not isinstance(normalized_gcis, dict):
+            raise TypeError("Optional parameter normalized_gcis must be of type dict")
+
         self._ontology = ontology
         self._loaded = False
         self._extended = extended
@@ -105,6 +118,8 @@ org.semanticweb.owlapi.model.OWLOntology.")
         self.load_role_axioms = load_role_axioms
         self._role_inclusions = []
         self._role_chains = []
+        self._normalized_gcis = normalized_gcis
+        self._num_skipped_axioms = 0
         
         self._gci0_dataset = None
         self._gci1_dataset = None
@@ -122,14 +137,16 @@ org.semanticweb.owlapi.model.OWLOntology.")
         if self._loaded:
             return
 
-        normalizer = ELNormalizer()
-
-        gcis = normalizer.normalize(
-            self._ontology,
-            load=self.load_normalized,
-            ontology_path=self.ontology_path,
-            use_cache=self.use_cache
-        )
+        if self._normalized_gcis is not None:
+            gcis = self._normalized_gcis
+        else:
+            normalizer = ELNormalizer()
+            gcis = normalizer.normalize(
+                self._ontology,
+                load=self.load_normalized,
+                ontology_path=self.ontology_path,
+                use_cache=self.use_cache
+            )
 
         classes = set()
         relations = set()
@@ -166,6 +183,8 @@ org.semanticweb.owlapi.model.OWLOntology.")
             self._object_property_index_dict = {v: k for k, v in enumerate(relations)}
         if self._individual_index_dict is None:
             self._individual_index_dict = {v: k for k, v in enumerate(individuals)}
+
+        gcis = self._drop_unindexed_axioms(gcis)
 
         if self._role_inclusions or self._role_chains:
             # An externally provided index dictionary may not cover all the properties
@@ -278,6 +297,38 @@ org.semanticweb.owlapi.model.OWLOntology.")
                 device=self.device)
 
         self._loaded = True
+
+    def _drop_unindexed_axioms(self, gcis):
+        """Removes the axioms that mention a class or object property missing from the index
+        dictionaries, logging one warning with their number."""
+        class_index = self._class_index_dict
+        property_index = self._object_property_index_dict
+        kept = {}
+        skipped = 0
+        for key, axioms in gcis.items():
+            kept[key] = []
+            for axiom in axioms:
+                classes, properties, _ = axiom.get_entities()
+                if all(c in class_index for c in classes) and \
+                   all(p in property_index for p in properties):
+                    kept[key].append(axiom)
+                else:
+                    skipped += 1
+        self._num_skipped_axioms = skipped
+        if skipped > 0:
+            logger.warning("%d normalized axioms mention classes or object properties that are "
+                           "not in the index dictionaries and were skipped.", skipped)
+        return kept
+
+    @property
+    def num_skipped_axioms(self):
+        """Number of normalized axioms skipped because they mention a class or object \
+        property that is not in the index dictionaries.
+
+        :rtype: int
+        """
+        self.load()
+        return self._num_skipped_axioms
 
     def get_gci_datasets(self):
         """Returns a dictionary containing the name of the normal forms as keys and the \

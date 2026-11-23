@@ -2,6 +2,7 @@ from de.tudresden.inf.lat.jcel.ontology.normalization import OntologyNormalizer
 from de.tudresden.inf.lat.jcel.ontology.axiom.extension import IntegerOntologyObjectFactoryImpl
 from de.tudresden.inf.lat.jcel.owlapi.translator import ReverseAxiomTranslator
 from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
+from de.tudresden.inf.lat.jcel.coreontology.datatype import IntegerEntityType
 from org.semanticweb.owlapi.model.parameters import Imports
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, \
     OWLObjectIntersectionOfImpl
@@ -13,14 +14,64 @@ from java.util import HashSet
 from jpype import java
 
 import os
+import hashlib
 import logging
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+AUXILIARY_IRI_BASE = "http://mowl.borg/aux/"
+"""Base of the IRIs of the fresh classes (and object properties) that the normaliser \
+introduces to flatten nested class expressions. An auxiliary entity has the IRI \
+``http://mowl.borg/aux/<tag>#<jcel name>``, e.g. \
+``http://mowl.borg/aux/3f2a9c01be#AuxiliaryEntity42``, where ``<tag>`` is the first 10 hex \
+characters of the SHA-1 of the sorted string forms of the TBox axioms that were normalised. \
+The same ontology therefore always yields the same names, and auxiliary entities of different \
+ontologies (e.g. training and testing sets) never coincide."""
+
+
+def is_auxiliary_iri(iri):
+    """Returns ``True`` if ``iri`` names an auxiliary entity introduced by \
+:class:`ELNormalizer`.
+
+    :param iri: Entity IRI
+    :type iri: str
+    :rtype: bool
+    """
+    return str(iri).startswith(AUXILIARY_IRI_BASE)
+
+
+def auxiliary_iri_prefix(axioms):
+    """Returns the auxiliary IRI prefix ``http://mowl.borg/aux/<tag>#`` for a collection of \
+OWL axioms.
+
+    :param axioms: Axioms that are normalised
+    :type axioms: iterable of :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    :rtype: str
+    """
+    digest = hashlib.sha1()
+    for axiom_str in sorted(str(ax.toString()) for ax in axioms):
+        digest.update(axiom_str.encode("utf-8"))
+        digest.update(b"\n")
+    return f"{AUXILIARY_IRI_BASE}{digest.hexdigest()[:10]}#"
+
 from mowl.owlapi import OWLAPIAdapter
 from deprecated.sphinx import versionchanged
+
+#: Substrings of the string form of a TBox axiom that mark constructs the normaliser does not
+#: support; such axioms are dropped by :meth:`ELNormalizer.preprocess_ontology`.
+#: ``ObjectInverseOf`` is among them because jcel would represent an inverse role by an
+#: auxiliary object property, which carries no link to the original role in the GCIs.
+UNSUPPORTED_CONSTRUCT_MARKERS = (
+    "UnionOf", "MinCardinality", "ComplementOf", "AllValuesFrom", "MaxCardinality",
+    "ExactCardinality", "Annotation", "ObjectHasSelf", "urn:swrl", "EquivalentObjectProperties",
+    "SymmetricObjectProperty", "AsymmetricObjectProperty", "ObjectOneOf", "ObjectHasValue",
+    "DataSomeValuesFrom", "DataAllValuesFrom", "DataHasValue", "DataPropertyRange",
+    "DataPropertyDomain", "FunctionalDataProperty", "DisjointUnion", "HasKey",
+    "ObjectInverseOf",
+)
+
 
 class ELNormalizer():
 
@@ -30,7 +81,9 @@ logic EL language.
     """
 
     def __init__(self):
-        return
+        #: Number of TBox axioms dropped by the last call to :meth:`preprocess_ontology`
+        #: because they use unsupported constructs.
+        self.num_dropped_axioms = 0
 
     def get_cache_path(self, ontology_path):
         """Generate the cache file path for a given ontology path.
@@ -40,9 +93,9 @@ logic EL language.
         :rtype: str
         """
         if ontology_path.endswith(".owl"):
-            return ontology_path[:-4] + "_mowl_el_normalized.owl"
+            return ontology_path[:-4] + "_mowl_el_normalized_v2.owl"
         else:
-            return ontology_path + "_mowl_el_normalized.owl"
+            return ontology_path + "_mowl_el_normalized_v2.owl"
 
     def _save_normalized_ontology(self, axioms_dict, cache_path):
         """Save normalized axioms to an OWL file.
@@ -83,7 +136,7 @@ logic EL language.
         :type load: bool, optional
         :param ontology_path: Path to the original ontology file. If provided and use_cache is \
             True, the normalized ontology will be cached to avoid re-normalization on subsequent \
-            calls. The cache file will be named ``<ontology_path>_mowl_el_normalized.owl``.
+            calls. The cache file will be named ``<ontology_path>_mowl_el_normalized_v2.owl``.
         :type ontology_path: str, optional
         :param use_cache: Whether to use caching. Default is True. If False, the ontology will \
             be re-normalized even if a cache file exists.
@@ -131,8 +184,8 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         else:
             ontology = self.preprocess_ontology(ontology)
             root_ont = ontology
-            translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(),
-                                    IntegerOntologyObjectFactoryImpl())
+            data_factory = ontology.getOWLOntologyManager().getOWLDataFactory()
+            translator = Translator(data_factory, IntegerOntologyObjectFactoryImpl())
             # translator = jreasoner.getTranslator()
             axioms = HashSet()
             axioms.addAll(root_ont.getAxioms())
@@ -146,8 +199,13 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
             normalizer = OntologyNormalizer()
 
-            factory = IntegerOntologyObjectFactoryImpl()
+            # The normaliser must use the translator's own object factory: its entity
+            # manager already holds the identifiers of all named entities, so the
+            # auxiliary entities it creates get fresh identifiers. A separate factory
+            # would restart the counter and hand out identifiers of named classes.
+            factory = translator.getOntologyObjectFactory()
             normalized_ontology = normalizer.normalize(intAxioms, factory)
+            self.__register_auxiliary_entities(translator, data_factory, root_ont)
             self.rTranslator = ReverseAxiomTranslator(translator, ontology)
 
             axioms_dict = self.__revert_translation(normalized_ontology)
@@ -175,19 +233,102 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         return axioms_dict
         
         
+    @staticmethod
+    def __put_private_map_entry(repository, field_name, key, value):
+        try:
+            field = repository.getClass().getDeclaredField(field_name)
+            field.setAccessible(True)
+        except Exception as e:
+            raise RuntimeError(
+                f"Cannot access the private field '{field_name}' of jcel's TranslationRepository. "
+                "Registering auxiliary entities relies on the internals of jcel 0.24.1; check "
+                "the jcel version on the classpath.") from e
+        field.get(repository).put(key, value)
+
+    def __register_auxiliary_entities(self, translator, data_factory, ontology):
+        """Map every auxiliary class and object property created by jcel during normalisation
+        to a fresh OWL entity in the translation repository, so that the reverse translation
+        can resolve them. The fresh entities have IRIs
+        ``auxiliary_iri_prefix(<TBox axioms>) + <jcel entity name>``.
+
+        :class:`TranslationRepository` offers no public method to bind an existing integer
+        identifier to an OWL entity (``addClass`` always creates a new identifier), so the
+        entries are added to its private maps directly.
+        """
+        repository = translator.getTranslationRepository()
+        entity_manager = translator.getOntologyObjectFactory().getEntityManager()
+        existing_iris = {str(e.toStringID()) for e in ontology.getSignature(Imports.INCLUDED)}
+        prefix = auxiliary_iri_prefix(ontology.getTBoxAxioms(Imports.INCLUDED))
+
+        # jcel creates an auxiliary inverse for every object property, so their existence is
+        # normal; a GCI that *uses* one would mean an inverse role reached the normaliser.
+        inverse_ids = set(entity_manager.getAuxiliaryInverseObjectProperties())
+        self._auxiliary_inverse_iris = set()
+
+        def fresh_iri(identifier):
+            name = str(entity_manager.getName(identifier))
+            iri = prefix + name
+            if iri in existing_iris:
+                raise ValueError(f"Auxiliary entity IRI {iri} clashes with an entity of the "
+                                 "input ontology")
+            return IRI.create(iri)
+
+        for identifier in entity_manager.getEntities(IntegerEntityType.CLASS, True):
+            if repository.getOptOWLClass(identifier).isPresent():
+                raise RuntimeError(f"Auxiliary class identifier {identifier} is already bound "
+                                   f"to {repository.getOWLClass(identifier)}")
+            owl_class = data_factory.getOWLClass(fresh_iri(identifier))
+            self.__put_private_map_entry(repository, "classMap", identifier, owl_class)
+            self.__put_private_map_entry(repository, "classInvMap", owl_class, identifier)
+
+        for identifier in entity_manager.getEntities(IntegerEntityType.OBJECT_PROPERTY, True):
+            if repository.getOptOWLObjectProperty(identifier).isPresent():
+                raise RuntimeError(f"Auxiliary object property identifier {identifier} is "
+                                   "already bound to "
+                                   f"{repository.getOWLObjectProperty(identifier)}")
+            owl_prop = data_factory.getOWLObjectProperty(fresh_iri(identifier))
+            if identifier in inverse_ids:
+                self._auxiliary_inverse_iris.add(str(owl_prop.toStringID()))
+            self.__put_private_map_entry(repository, "objectPropertyMap", identifier, owl_prop)
+            self.__put_private_map_entry(repository, "objectPropertyInvMap", owl_prop,
+                                         identifier)
+
     def __revert_translation(self, normalized_ontology):
         axioms_dict = {
             "gci0": [], "gci1": [], "gci2": [], "gci3": [], "gci0_bot": [], "gci1_bot": [],
             "gci3_bot": [], "class_assertion": [], "object_property_assertion": []}
 
+        skipped = {}
         for ax in normalized_ontology:
             try:
-                axiom = self.rTranslator.visit(ax)
-                key, value = process_axiom(axiom)
-                axioms_dict[key].append(value)
+                axiom = ax.accept(self.rTranslator)
             except Exception as e:
-                logging.info("Reverse translation. Ignoring axiom: %s", ax)
-                logging.info(e)
+                raise RuntimeError(f"Reverse translation of normalised axiom {ax} failed") from e
+
+            if axiom.getAxiomType() != AxiomType.SUBCLASS_OF:
+                # Role inclusions, functionality, range and nominal axioms have no slot in
+                # the GCI dictionary.
+                axiom_type = str(axiom.getAxiomType().getName())
+                skipped[axiom_type] = skipped.get(axiom_type, 0) + 1
+                continue
+
+            used_inverses = {str(p.toStringID()) for p in axiom.getObjectPropertiesInSignature()} \
+                & getattr(self, "_auxiliary_inverse_iris", set())
+            if used_inverses:
+                raise RuntimeError(
+                    f"Normalised axiom {axiom} uses the auxiliary inverse object property "
+                    f"{used_inverses.pop()}; inverse roles are not supported by the EL normal "
+                    "forms and should have been removed by preprocess_ontology.")
+
+            processed = process_axiom(axiom)
+            if processed is None:
+                raise ValueError(f"Normalised axiom {axiom} is not in any EL normal form")
+            key, value = processed
+            axioms_dict[key].append(value)
+
+        if skipped:
+            logger.warning("Normalised axioms that are not GCIs were not included: %s",
+                           ", ".join(f"{n} {t}" for t, n in sorted(skipped.items())))
 
         return axioms_dict
 
@@ -209,56 +350,18 @@ type org.semanticweb.owlapi.model.OWLOntology")
 
         tbox_axioms = ontology.getTBoxAxioms(Imports.fromBoolean(True))
         new_tbox_axioms = HashSet()
+        dropped = 0
         for axiom in tbox_axioms:
             axiom_as_str = axiom.toString()
-
-            if "UnionOf" in axiom_as_str:
-                continue
-            elif "MinCardinality" in axiom_as_str:
-                continue
-            elif "ComplementOf" in axiom_as_str:
-                continue
-            elif "AllValuesFrom" in axiom_as_str:
-                continue
-            elif "MaxCardinality" in axiom_as_str:
-                continue
-            elif "ExactCardinality" in axiom_as_str:
-                continue
-            elif "Annotation" in axiom_as_str:
-                continue
-            elif "ObjectHasSelf" in axiom_as_str:
-                continue
-            elif "urn:swrl" in axiom_as_str:
-                continue
-            elif "EquivalentObjectProperties" in axiom_as_str:
-                continue
-            elif "SymmetricObjectProperty" in axiom_as_str:
-                continue
-            elif "AsymmetricObjectProperty" in axiom_as_str:
-                continue
-            elif "ObjectOneOf" in axiom_as_str:
-                continue
-            elif "ObjectHasValue" in axiom_as_str:
-                continue
-            elif "DataSomeValuesFrom" in axiom_as_str:
-                continue
-            elif "DataAllValuesFrom" in axiom_as_str:
-                continue
-            elif "DataHasValue" in axiom_as_str:
-                continue
-            elif "DataPropertyRange" in axiom_as_str:
-                continue
-            elif "DataPropertyDomain" in axiom_as_str:
-                continue
-            elif "FunctionalDataProperty" in axiom_as_str:
-                continue
-            elif "DisjointUnion" in axiom_as_str:
-                continue
-            elif "HasKey" in axiom_as_str:
-                continue
-            
+            if any(marker in axiom_as_str for marker in UNSUPPORTED_CONSTRUCT_MARKERS):
+                dropped += 1
             else:
                 new_tbox_axioms.add(axiom)
+
+        self.num_dropped_axioms = dropped
+        if dropped > 0:
+            logger.warning("%d TBox axioms using constructs outside the supported EL fragment "
+                           "were dropped before normalisation.", dropped)
 
         owl_manager = OWLAPIAdapter().owl_manager
         new_ontology = owl_manager.createOntology(new_tbox_axioms)

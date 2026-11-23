@@ -1,6 +1,7 @@
-from mowl.ontology.normalize import ELNormalizer
+from mowl.ontology.normalize import ELNormalizer, GCI, is_auxiliary_iri
 from mowl.base_models.model import Model
 from mowl.datasets.el import ELDataset
+from mowl.owlapi import OWLAPIAdapter
 from mowl.projection import projector_factory
 import torch as th
 from torch.utils.data import DataLoader, default_collate
@@ -10,8 +11,8 @@ import warnings
 from deprecated.sphinx import versionadded, versionchanged
 
 from org.semanticweb.owlapi.model import OWLClassExpression, OWLClass, OWLObjectSomeValuesFrom, OWLObjectIntersectionOf
+from java.util import HashSet
 
-import copy
 import numbers
 import numpy as np
 import mowl.error.messages as msg
@@ -55,6 +56,20 @@ ontology (role inclusions and role chains) are loaded as the ``role_inclusion`` 
 :attr:`~mowl.nn.ELModule.role_axiom_capable`, otherwise a :class:`NotImplementedError` is \
 raised at the start of training. Defaults to False.
     :type load_role_axioms: bool, optional
+
+    .. note::
+        Normalizing nested class expressions introduces auxiliary classes (and possibly \
+auxiliary object properties) with IRIs under ``http://mowl.borg/aux/`` (see \
+:mod:`mowl.ontology.normalize`). The training ontology is therefore normalized once, when the \
+model is constructed. Additions made through :meth:`add_axioms` are normalized separately \
+with fresh auxiliary names. Every auxiliary class or object property occurring in the \
+normalized training axioms is appended to :attr:`class_index_dict` and \
+:attr:`object_property_index_dict` after the entities of the dataset, so that it gets an \
+embedding while the indices of the dataset entities are unchanged. ``dataset.classes`` and \
+``dataset.evaluation_classes`` are not modified, so auxiliary classes are never ranking \
+candidates, and the ``"classes"`` pool for negative sampling contains named classes only \
+(:attr:`named_class_index_dict`); auxiliary classes do appear in the embedding dictionaries. Axioms of the validation and testing ontologies that mention auxiliary \
+entities of their own cannot be indexed and are skipped (see :class:`~mowl.datasets.el.ELDataset`).
     """
 
     #: Default per-GCI negative sampling configuration used by :meth:`get_negative_sampling_config`.
@@ -118,6 +133,68 @@ raised at the start of training. Defaults to False.
         self._loaded_eval = False
         self._eval_gci_name = None
 
+        # Normalize the training ontology once: the auxiliary entities it introduces must be
+        # indexed before subclasses build their modules, and _load_datasets reuses the result.
+        self._training_normalized_gcis = ELNormalizer().normalize(
+            self.dataset.ontology, load=self.load_normalized,
+            ontology_path=getattr(self.dataset, 'ontology_path', None))
+        self._auxiliary_classes, self._auxiliary_object_properties = self._auxiliary_entities(
+            self._training_normalized_gcis)
+        self._class_index_dict_cache = None
+        self._object_property_index_dict_cache = None
+        logger.info("%d named classes, %d auxiliary classes from normalisation",
+                    len(self.named_class_index_dict), len(self._auxiliary_classes))
+
+    @staticmethod
+    def _auxiliary_entities(normalized_gcis):
+        aux_classes, aux_properties = set(), set()
+        for gcis in normalized_gcis.values():
+            classes, properties, _ = GCI.get_entities(gcis)
+            aux_classes |= {c for c in classes if is_auxiliary_iri(c)}
+            aux_properties |= {p for p in properties if is_auxiliary_iri(p)}
+        return sorted(aux_classes), sorted(aux_properties)
+
+    @staticmethod
+    def _append_entities(index_dict, entities):
+        offset = len(index_dict)
+        for i, entity in enumerate(e for e in entities if e not in index_dict):
+            index_dict[entity] = offset + i
+        return index_dict
+
+    @property
+    def named_class_index_dict(self):
+        """Dictionary with the classes of the dataset (no auxiliary classes) as keys and their \
+indexes as values. It is the prefix of :attr:`class_index_dict`.
+
+        :rtype: dict
+        """
+        return super().class_index_dict
+
+    @property
+    def class_index_dict(self):
+        """Dictionary with class names as keys and class indexes as values: the classes of the \
+dataset followed by the auxiliary classes of the normalized training ontology.
+
+        :rtype: dict
+        """
+        if self._class_index_dict_cache is None:
+            self._class_index_dict_cache = self._append_entities(
+                super().class_index_dict, self._auxiliary_classes)
+        return self._class_index_dict_cache
+
+    @property
+    def object_property_index_dict(self):
+        """Dictionary with object property names as keys and indexes as values: the object \
+properties of the dataset followed by the auxiliary object properties of the normalized \
+training ontology.
+
+        :rtype: dict
+        """
+        if self._object_property_index_dict_cache is None:
+            self._object_property_index_dict_cache = self._append_entities(
+                super().object_property_index_dict, self._auxiliary_object_properties)
+        return self._object_property_index_dict_cache
+
     @property
     def eval_gci_name(self):
         """The GCI type to use for evaluation (e.g., 'gci0', 'gci1', 'gci2', 'gci3').
@@ -158,7 +235,8 @@ raised at the start of training. Defaults to False.
                                         load_normalized=self.load_normalized,
                                         device=self.device,
                                         ontology_path=ontology_path,
-                                        load_role_axioms=self.load_role_axioms)
+                                        load_role_axioms=self.load_role_axioms,
+                                        normalized_gcis=self._training_normalized_gcis)
 
         self._training_datasets = training_el_dataset.get_gci_datasets()
 
@@ -315,8 +393,9 @@ of :class:`torch.utils.data.DataLoader`
                 if k in self.neg_sampling_gcis}
 
     #: Entity pools that ``index_pool`` may name, mapped to the model attribute holding the
-    #: corresponding entity-to-index dictionary.
-    _NEG_SAMPLING_POOLS = {"classes": "class_index_dict",
+    #: corresponding entity-to-index dictionary. The ``"classes"`` pool contains the named
+    #: classes of the dataset only, never the auxiliary classes of the normal forms.
+    _NEG_SAMPLING_POOLS = {"classes": "named_class_index_dict",
                            "individuals": "individual_index_dict"}
 
     @staticmethod
@@ -835,59 +914,67 @@ of :class:`torch.utils.data.DataLoader`
 
 
     def add_axioms(self, *axioms):
-        prev_class_embeds = None
-        prev_object_property_embeds = None
-        prev_individual_embeds = None
-        
-        if len(self.class_embeddings) > 0:
-            prev_class_embeds = copy.deepcopy(self.class_embeddings)
+        """Add axioms to the ontology and make them available for further training."""
+        ontology = self.dataset.ontology
+        additions = {axiom for axiom in axioms if not ontology.containsAxiom(axiom)}
+        if not additions:
+            return
 
-        if len(self.object_property_embeddings) > 0:
-            prev_object_property_embeds = copy.deepcopy(self.object_property_embeddings)
+        old_indices = (self.class_index_dict, self.object_property_index_dict, self.individual_index_dict)
+        named_additions = {str(entity.toStringID()) for axiom in additions for entity in axiom.getSignature()}
+        previous_signature = set(self.named_class_index_dict) | set(super().object_property_index_dict)
+        old_helpers = (set(self._auxiliary_classes) | set(self._auxiliary_object_properties)) - previous_signature
 
-        if len(self.individual_embeddings) > 0:
-            prev_individual_embeds = copy.deepcopy(self.individual_embeddings)
+        # Independent normalization of the added axioms keeps the existing auxiliary
+        # entities and their learned embeddings. Its fresh names must be disjoint from
+        # the existing vocabulary for the two sets of normal forms to compose.
+        manager = OWLAPIAdapter().owl_manager
+        added_ontology = manager.createOntology(HashSet(list(additions)))
+        normalized = ELNormalizer().normalize(added_ontology, load=self.load_normalized)
+        new_classes, new_properties = self._auxiliary_entities(normalized)
+        new_helpers = (set(new_classes) | set(new_properties)) - named_additions
+        if old_helpers & named_additions or new_helpers & (previous_signature | old_helpers):
+            raise ValueError("An added axiom uses an IRI reserved for an auxiliary entity")
 
-        self.dataset.add_axioms(*axioms)
+        self.dataset.add_axioms(*additions)
+        for form, rows in normalized.items():
+            training_rows = self._training_normalized_gcis.setdefault(form, [])
+            if rows:
+                known = {row.owl_axiom for row in training_rows}
+                training_rows.extend(row for row in rows if row.owl_axiom not in known)
 
-        if prev_class_embeds is not None:
-            new_class_embeds = []
-            for cls in self.dataset.classes:
-                cls = str(cls.toStringID())
-                if cls in prev_class_embeds:
-                    new_class_embeds.append(prev_class_embeds[cls])
-                else:
-                    new_class_embeds.append(np.random.normal(size=self.embed_dim))
-            
+        self._auxiliary_classes = sorted(set(self._auxiliary_classes) | set(new_classes))
+        self._auxiliary_object_properties = sorted(set(self._auxiliary_object_properties) | set(new_properties))
+        self._class_index_dict_cache = None
+        self._object_property_index_dict_cache = None
+        self._datasets_loaded = False
+        self._dataloaders_loaded = False
+        self._loaded_eval = False
+        new_indices = (self.class_index_dict, self.object_property_index_dict, self.individual_index_dict)
+        if old_indices != new_indices:
+            self._resize_module(old_indices, new_indices)
 
-            new_class_embeds = np.asarray(new_class_embeds)
-            self.module.class_embed.weight.data = th.from_numpy(new_class_embeds).float()
-
-        if prev_object_property_embeds is not None:
-            new_object_property_embeds = []
-            for rel in self.dataset.object_properties:
-                rel = str(rel.toStringID())
-                if rel in prev_object_property_embeds:
-                    new_object_property_embeds.append(prev_object_property_embeds[rel])
-                else:
-                    new_object_property_embeds.append(np.random.normal(size=self.embed_dim))
-            
-            new_object_property_embeds = np.asarray(new_object_property_embeds)
-            self.module.rel_embed.weight.data = th.from_numpy(new_object_property_embeds).float()
-
-        if prev_individual_embeds is not None:
-            new_individual_embeds = []
-            for ind in self.dataset.individuals:
-                ind = str(ind.toStringID())
-                if ind in prev_individual_embeds:
-                    new_individual_embeds.append(prev_individual_embeds[ind])
-                else:
-                    new_individual_embeds.append(np.random.normal(size=self.embed_dim))
-            
-            new_individual_embeds = np.asarray(new_individual_embeds)
-            self.module.ind_embed.weight.data = th.from_numpy(new_individual_embeds).float()
-
-            
+    @th.no_grad()
+    def _resize_module(self, old_indices, new_indices):
+        old_module = self.module
+        old_state = old_module.state_dict()
+        self.init_module()
+        new_state = self.module.state_dict()
+        for embedding_names, old_index, new_index in zip(
+                old_module.entity_embedding_names, old_indices, new_indices):
+            common = old_index.keys() & new_index.keys()
+            for name in embedding_names:
+                key = f"{name}.weight"
+                if key not in old_state:
+                    continue
+                source = old_state.pop(key)
+                target = new_state[key]
+                old_ids = th.tensor([old_index[iri] for iri in common], device=source.device, dtype=th.long)
+                new_ids = th.tensor([new_index[iri] for iri in common], device=target.device, dtype=th.long)
+                target.index_copy_(0, new_ids, source.index_select(0, old_ids).to(target))
+        new_state.update(old_state)
+        self.module.load_state_dict(new_state)
+        self.module.train(old_module.training)
 
     def from_pretrained(self, model):
         if not isinstance(model, str):

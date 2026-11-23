@@ -215,3 +215,165 @@ non-existing attributes"""
                 self.assertIsInstance(key, str)
                 self.assertIsInstance(value, np.ndarray)
                 self.assertEqual(value.shape, (embed_dim,))
+
+
+class TestEmbeddingElModelAuxiliaryEntities(TestCase):
+    """Auxiliary classes introduced by the normalizer are indexed by EL models."""
+
+    @classmethod
+    def setUpClass(cls):
+        from mowl.owlapi import OWLAPIAdapter
+        ad = OWLAPIAdapter()
+        ns = "http://test.org/elmodel_aux#"
+        cls.ont = ad.create_ontology("http://test.org/elmodel_aux")
+        A, B, C, D = [ad.create_class(ns + x) for x in "ABCD"]
+        r = ad.create_object_property(ns + "r")
+        ad.owl_manager.addAxiom(cls.ont, ad.create_subclass_of(
+            ad.create_object_intersection_of(B, ad.create_object_some_values_from(r, C)), A))
+        ad.owl_manager.addAxiom(cls.ont, ad.create_subclass_of(
+            D, ad.create_object_some_values_from(r, ad.create_object_intersection_of(B, C))))
+        cls.dataset = Dataset(cls.ont)
+
+    def test_auxiliary_classes_are_appended_to_index(self):
+        from mowl.ontology.normalize import is_auxiliary_iri
+        model = EmbeddingELModel(self.dataset, 4, 4)
+        dataset_classes = list(self.dataset.classes.as_str)
+        index = model.class_index_dict
+        # dataset classes keep their indices, auxiliaries come after them
+        for i, name in enumerate(dataset_classes):
+            self.assertEqual(index[name], i)
+        aux = [name for name in index if is_auxiliary_iri(name)]
+        self.assertGreater(len(aux), 0)
+        self.assertEqual(sorted(index[a] for a in aux),
+                         list(range(len(dataset_classes), len(index))))
+        # the dataset itself is untouched
+        self.assertFalse(any(is_auxiliary_iri(c) for c in self.dataset.classes.as_str))
+
+    def test_training_axioms_are_all_indexed(self):
+        for dataset in (self.dataset, FamilyDataset()):
+            with self.subTest(dataset=type(dataset).__name__):
+                model = EmbeddingELModel(dataset, 4, 4)
+                el_dataset = ELDataset(dataset.ontology, model.class_index_dict,
+                                       model.object_property_index_dict,
+                                       normalized_gcis=model._training_normalized_gcis)
+                el_dataset.get_gci_datasets()
+                self.assertEqual(el_dataset.num_skipped_axioms, 0)
+
+    def test_training_ontology_normalized_once(self):
+        from unittest import mock
+        from mowl.ontology.normalize import ELNormalizer
+        original = ELNormalizer.normalize
+        with mock.patch.object(ELNormalizer, "normalize", autospec=True,
+                               side_effect=original) as patched:
+            model = EmbeddingELModel(self.dataset, 4, 4)
+            model.training_datasets
+        self.assertEqual(patched.call_count, 1)
+
+    def test_module_covers_auxiliary_classes(self):
+        model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=4)
+        self.assertEqual(model.module.class_embed.weight.shape[0], len(model.class_index_dict))
+        model.train(epochs=1)
+
+
+class TestEmbeddingElModelAuxiliaryNegatives(TestCase):
+    """The "classes" negative sampling pool contains named classes only."""
+
+    @classmethod
+    def setUpClass(cls):
+        from mowl.owlapi import OWLAPIAdapter
+        ad = OWLAPIAdapter()
+        ns = "http://test.org/elmodel_neg#"
+        ont = ad.create_ontology("http://test.org/elmodel_neg")
+        classes = [ad.create_class(ns + f"C{i}") for i in range(6)]
+        r = ad.create_object_property(ns + "r")
+        for i in range(5):
+            ad.owl_manager.addAxiom(ont, ad.create_subclass_of(
+                ad.create_object_intersection_of(
+                    classes[i], ad.create_object_some_values_from(r, classes[i + 1])),
+                classes[(i + 2) % 6]))
+            ad.owl_manager.addAxiom(ont, ad.create_subclass_of(classes[i], classes[i + 1]))
+            ad.owl_manager.addAxiom(ont, ad.create_subclass_of(
+                classes[i], ad.create_object_some_values_from(
+                    r, ad.create_object_intersection_of(classes[i + 1], classes[(i + 3) % 6]))))
+        cls.dataset = Dataset(ont)
+
+    def test_info_line_at_construction(self):
+        with self.assertLogs("mowl.base_models.elmodel", level="INFO") as log:
+            model = EmbeddingELModel(self.dataset, 4, 4)
+        n_aux = len(model.class_index_dict) - len(model.named_class_index_dict)
+        self.assertGreater(n_aux, 0)
+        n_named = len(model.named_class_index_dict)
+        self.assertEqual(n_named, len(self.dataset.classes))
+        self.assertIn(f"{n_named} named classes, {n_aux} auxiliary classes from normalisation",
+                      [r.getMessage() for r in log.records])
+
+    def test_negatives_never_auxiliary(self):
+        model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=4,
+                             neg_sampling_gcis=["gci0", "gci1", "gci2", "gci3"])
+        named_ids = set(model.named_class_index_dict.values())
+        aux_ids = set(model.class_index_dict.values()) - named_ids
+        self.assertGreater(len(aux_ids), 0)
+        config = model.get_negative_sampling_config()
+        tested = 0
+        for gci_name in ("gci0", "gci1", "gci2", "gci3"):
+            if gci_name not in config or gci_name not in model.training_datasets:
+                continue
+            gci_dataset = model.training_datasets[gci_name]
+            if len(gci_dataset) == 0:
+                continue
+            tested += 1
+            column = config[gci_name]["corrupt_column"]
+            for _ in range(20):
+                neg = model.generate_negatives(gci_name, gci_dataset)
+                self.assertTrue(set(neg[:, column].tolist()) <= named_ids)
+        self.assertGreater(tested, 0)
+
+    def test_add_axioms_keeps_auxiliary_embeddings(self):
+        from mowl.owlapi import OWLAPIAdapter
+        ad = OWLAPIAdapter()
+        dataset = Dataset(ad.create_ontology("http://test.org/elmodel_add"))
+        ad.owl_manager.addAxioms(dataset.ontology, self.dataset.ontology.getAxioms())
+        model = ELEmbeddings(dataset, embed_dim=4, batch_size=4)
+        before = model.class_embeddings
+        new = ad.create_class("http://test.org/elmodel_neg#New")
+        model.add_axioms(ad.create_subclass_of(new, ad.create_class("http://test.org/elmodel_neg#C0")))
+        after = model.class_embeddings
+        self.assertEqual(model.module.class_embed.weight.shape[0], len(model.class_index_dict))
+        self.assertIn("http://test.org/elmodel_neg#New", model.class_index_dict)
+        for key in before:
+            np.testing.assert_allclose(before[key], after[key], rtol=1e-6)
+
+    def test_add_axioms_refreshes_training_data(self):
+        from mowl.models import BoxEL, BoxSquaredEL, ELBE, TransBox
+        from mowl.owlapi import OWLAPIAdapter
+
+        ns = "http://test.org/update#"
+        for model_class in (ELEmbeddings, ELBE, BoxEL, BoxSquaredEL, TransBox):
+            for load_before_update in (False, True):
+                with self.subTest(model=model_class.__name__, loaded=load_before_update):
+                    adapter = OWLAPIAdapter()
+                    dataset = Dataset(adapter.create_ontology(ns))
+                    a, b, c, d = [adapter.create_class(ns + name) for name in "ABCD"]
+                    dataset.add_axioms(adapter.create_subclass_of(a, b))
+                    model = model_class(dataset, embed_dim=4, batch_size=4)
+                    if load_before_update:
+                        self.assertEqual(len(model.training_dataloaders["gci0"].dataset), 1)
+
+                    role = adapter.create_object_property(ns + "r")
+                    filler = adapter.create_object_intersection_of(c, d)
+                    atomic = adapter.create_subclass_of(b, c)
+                    nested = adapter.create_subclass_of(b, adapter.create_object_some_values_from(role, filler))
+                    model.add_axioms(atomic, nested)
+                    model.add_axioms(atomic, nested)
+
+                    classes = model.class_index_dict
+                    gci0 = model.training_dataloaders["gci0"].dataset
+                    gci2 = model.training_dataloaders["gci2"].dataset
+                    self.assertIn([classes[ns + "B"], classes[ns + "C"]], gci0.data.tolist())
+                    self.assertEqual(len(gci0), 4)
+                    self.assertEqual(len(gci2), 1)
+                    auxiliary = next(iter(classes.keys() - model.named_class_index_dict.keys()))
+                    self.assertEqual(gci2.data.tolist(), [[classes[ns + "B"],
+                                                         model.object_property_index_dict[ns + "r"],
+                                                         classes[auxiliary]]])
+                    model.module(gci2.data, "gci2").sum().backward()

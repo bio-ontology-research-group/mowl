@@ -14,6 +14,12 @@ class BoxELModule(ELModule):
     """
 
     neg_capable_gcis = frozenset({"gci2"})
+    entity_embedding_names = (
+        ("min_embedding", "delta_embedding"),
+        ("relation_embedding", "scaling_embedding"),
+        ("ind_embedding", "ind_delta_embedding"),
+    )
+
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50,
                  min_bounds=[1e-4, 0.2], delta_bounds=[-0.1, 0],
                  relation_bounds=[-0.1, 0.1],
