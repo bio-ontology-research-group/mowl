@@ -60,4 +60,5 @@ for _label, _locator, _table, _settings in _VARIANTS:
         RESULTS.append(PublishedResult(
             benchmark=f"kg-inductive-{_data}-{_version}", method="reshuffle",
             metrics={"hits@10": _value}, source=PAVLOVIC2025, locator=_locator,
-            settings=dict(_settings), note=_note))
+            settings=dict(_settings), note=_note,
+            recipe=_settings["variant"].replace("_", "-")))

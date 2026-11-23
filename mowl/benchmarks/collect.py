@@ -129,6 +129,77 @@ def _recipe_label(recipe):
     return str(recipe)
 
 
+def _plain(key):
+    return str(key).lower().replace("_", "").replace("-", "")
+
+
+def _run_settings(results):
+    """What is known of the settings of a group of runs, by normalised name: the settings
+    the runner recorded, the arguments of the recipe and of the evaluation."""
+    out = {}
+    for r in results:
+        recipe = r.get("recipe") if isinstance(r.get("recipe"), dict) else {}
+        for part in (r.get("protocol_kwargs"), recipe.get("regime_kwargs"),
+                     recipe.get("model_kwargs"), r.get("settings")):
+            for k, v in (part or {}).items():
+                out.setdefault(_plain(k), v)
+        for k in ("training_regime", "epochs"):
+            if recipe.get(k) is not None:
+                out.setdefault(_plain(k), recipe[k])
+        if recipe.get("name"):
+            out.setdefault("variant", recipe["name"])
+    return out
+
+
+def _same(a, b):
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)) \
+            and not isinstance(a, bool) and not isinstance(b, bool):
+        return abs(a - b) <= 1e-9 * max(1.0, abs(a), abs(b))
+    if isinstance(a, (list, tuple)) and len(a) == 1:
+        a = a[0]
+    if isinstance(b, (list, tuple)) and len(b) == 1:
+        b = b[0]
+    if isinstance(a, str) and isinstance(b, str):
+        return _plain(a) == _plain(b)
+    return a == b
+
+
+def published_for(pubs, recipe_name, settings):
+    """The published result a run is compared with, among the results ``pubs`` of one
+    source for one benchmark, method, subset and metric.
+
+    A source often reports several variants of a method on one benchmark (two losses, two
+    dimensions, an ablation). A result that names a recipe
+    (:attr:`~mowl.benchmarks.spec.PublishedResult.recipe`) belongs to the runs of that
+    recipe only. Among the others, the one whose stated settings contradict the settings
+    of the run least is taken, then the one that agrees on the most settings (the first
+    one on a tie).
+
+    :param pubs: The candidates, in the order they are registered.
+    :param recipe_name: Name of the recipe of the run (``""`` if it has none).
+    :param settings: Settings of the run by normalised name (see ``_run_settings``).
+    :return: A :class:`~mowl.benchmarks.spec.PublishedResult`, or ``None`` when every
+        candidate belongs to another recipe.
+    """
+    named = [p for p in pubs if getattr(p, "recipe", None) is not None]
+    mine = [p for p in named if _plain(p.recipe) == _plain(recipe_name)] if recipe_name \
+        else []
+    pool = mine or [p for p in pubs if getattr(p, "recipe", None) is None]
+    if not pool:
+        return None
+    scored = []
+    for p in pool:
+        agree = conflict = 0
+        for k, v in (p.settings or {}).items():
+            if _plain(k) in settings:
+                if _same(settings[_plain(k)], v):
+                    agree += 1
+                else:
+                    conflict += 1
+        scored.append((conflict, -agree, len(scored), p))
+    return min(scored, key=lambda s: s[:3])[3]
+
+
 def _implementation(result):
     impl = result.get("implementation") or {}
     if isinstance(impl, dict):
@@ -210,10 +281,17 @@ def collect(results, manifest_runs=None, status=None, rel_tolerance=0.02,
         source = recipe.split(":")[0] if recipe not in ("-", "recipe") else None
         published = {}
         if bench is not None and method:
+            name = recipe.split(":", 1)[1] if source is not None and ":" in recipe else ""
+            settings = _run_settings([r for rs in by_impl.values() for r in rs])
+            candidates = collections.defaultdict(list)
             for pub in published_results(benchmark=bench_key, method=method):
                 if source is None or pub.source.key == source:
-                    for m, v in pub.metrics.items():
-                        published.setdefault((pub.subset, m), v)
+                    for m in pub.metrics:
+                        candidates[(pub.subset, m)].append(pub)
+            for (subset, m), pubs in candidates.items():
+                pub = published_for(pubs, name, settings)
+                if pub is not None:
+                    published[(subset, m)] = pub.metrics[m]
         group_flags = []
         for impl in sorted(expected.get((bench_key, method, recipe), ())):
             states = run_state[(bench_key, method, recipe)][impl]

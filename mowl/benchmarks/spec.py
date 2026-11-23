@@ -10,6 +10,7 @@ Like the method catalogue, these are plain data and do not need the JVM.
 from dataclasses import dataclass, field
 from enum import Enum
 import importlib
+from typing import Optional
 
 from mowl.catalog.card import Reference
 from mowl.logic.tasks import COMPLETION_TASKS, TASKS, Target
@@ -210,6 +211,11 @@ class PublishedResult:
     :param subset: Result subset (see :attr:`Benchmark.subsets`).
     :param settings: Hyperparameters stated by the source (``{"embed_dim": 200}``, ...).
     :param note: Anything a reader must know to interpret the comparison.
+    :param recipe: Name of the :class:`~mowl.benchmarks.recipes.Recipe` (of the same source,
+        benchmark and method) whose settings these numbers were obtained with. Needed when
+        a source reports several variants of one method on one benchmark: a run is then
+        compared with the numbers of its own variant. ``None``: not tied to a named recipe
+        (the comparison falls back on the ``settings``).
     """
 
     benchmark: str
@@ -220,6 +226,7 @@ class PublishedResult:
     subset: str = "all"
     settings: dict = field(default_factory=dict)
     note: str = ""
+    recipe: Optional[str] = None
 
     def __post_init__(self):
         if not isinstance(self.source, Reference):

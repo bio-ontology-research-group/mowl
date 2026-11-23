@@ -130,5 +130,6 @@ for _bench, _data, _loc, _names, _text in _TABLES:
         RESULTS.append(PublishedResult(
             benchmark=_bench, method=_KEYS[_base], metrics=_metrics, source=MASHKOVA2024,
             locator=f"{_loc} ({_label})", settings=_settings,
+            recipe=_variant or "base",
             note=(f"DELE variant '{_label}'." if _variant else
                   "Original negative sampling (GCI2 only).")))

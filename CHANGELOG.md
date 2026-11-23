@@ -217,6 +217,11 @@ Behaviour that changed, and how to get the 2.1.0 behaviour back:
 
 ### Fixed
 
+- The three-way benchmark table compares a run with the published numbers of its own
+  variant: `PublishedResult` has a `recipe` field, and without one the stated settings
+  decide. Before, every variant of a method was compared with the first numbers registered
+  for the benchmark (the rule-based loss of DF-ALC with the hierarchical one, dimension 10
+  with dimension 5, an ablation with the main model).
 - The verbaliser of the language-model methods (`mowl.text.verbalise`) failed on a nominal
   (`{a, b}`), calling a method the bundled OWL API does not have; it reads the individuals
   in a fixed order now.

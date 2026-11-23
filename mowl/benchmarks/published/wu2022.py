@@ -73,7 +73,7 @@ for _name, _rates in _TABLE.items():
                 metrics={"success_rate": round(_value / 100, 4)}, source=WU2022,
                 locator="tab:result1, " + ("D w/HL" if _loss == "hierarchical"
                                            else "D w/RL"),
-                settings={"loss_type": _loss, "alpha": 0.8},
+                settings={"loss_type": _loss, "alpha": 0.8}, recipe=_loss,
                 note=f"Success rate of the masked grounding M: {_m}%; Logical Tensor "
                      f"Networks: {_l}%. The paper's axiom counts differ from mOWL's (see "
                      "the benchmark notes)."))

@@ -70,6 +70,12 @@ def _settings(key):
             "instance_map": _MAP[instance_map], "negative_sampling": _NEG[negatives]}
 
 
+def _recipe(key):
+    """The recipe of mOWL that follows this row: the recipes use uniform negatives."""
+    intensional, instance_map, negatives = key
+    return f"{intensional.lower()}-{instance_map.lower()}" if negatives == "unif" else None
+
+
 def _name(key):
     return f"EIKE-{key[0]}-{key[1]} ({key[2]})"
 
@@ -85,21 +91,21 @@ for _key, (_yago, _myago) in _INSTANCEOF.items():
         RESULTS.append(PublishedResult(
             benchmark=f"{_variant}-instanceof-classification", method="eike",
             metrics=_percent(_values, _TC_NAMES), source=WANG2024EIKE, locator="Table 2",
-            settings=_settings(_key), note=_name(_key)))
+            settings=_settings(_key), recipe=_recipe(_key), note=_name(_key)))
 for _key, (_yago, _myago) in _SUBCLASSOF.items():
     for _variant, _values in (("yago39k", _yago), ("m-yago39k", _myago)):
         RESULTS.append(PublishedResult(
             benchmark=f"{_variant}-subclassof-classification", method="eike",
             metrics=_percent(_values, _TC_NAMES), source=WANG2024EIKE, locator="Table 3",
-            settings=_settings(_key), note=_name(_key)))
+            settings=_settings(_key), recipe=_recipe(_key), note=_name(_key)))
 for _key, (_lp, _tc) in _RELATIONAL.items():
     RESULTS.append(PublishedResult(
         benchmark="yago39k-relational-classification", method="eike",
         metrics=_percent(_tc, _TC_NAMES), source=WANG2024EIKE, locator="Table 4",
-        settings=_settings(_key), note=_name(_key)))
+        settings=_settings(_key), recipe=_recipe(_key), note=_name(_key)))
     RESULTS.append(PublishedResult(
         benchmark="yago39k-link-prediction", method="eike",
         metrics=_percent(_lp, _LP_NAMES), source=WANG2024EIKE, locator="Table 4",
-        settings=_settings(_key),
+        settings=_settings(_key), recipe=_recipe(_key),
         note=_name(_key) + ". Hits@N is the filtered setting (the table caption); the "
         "paper's MRR is given raw and filtered."))
