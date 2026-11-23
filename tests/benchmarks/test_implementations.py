@@ -282,8 +282,8 @@ def test_collector_three_way_rows_and_flags():
                  "recipe": "jackermeier2024", "implementation": "baseline"},
                 {"tag": "t-elbe", "benchmark": "box2el-galen-prediction", "method": "elbe",
                  "recipe": "jackermeier2024", "implementation": "baseline"}]
-    rows = collect(results, manifest, {"t-parts": "done", "t-base": "done",
-                                        "t-elbe": "failed"})
+    status = {"t-parts": "done", "t-base": "done", "t-elbe": "failed"}
+    rows = collect(results, manifest, status)
     row = [r for r in rows if r["method"] == "box2el" and r["metric"] == "hits@100"
            and r["subset"] == sub][0]
     assert row["published"] == value and row["parts"] == value

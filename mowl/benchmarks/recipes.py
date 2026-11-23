@@ -81,6 +81,7 @@ def _recipes():
         _RECIPES = tuple(found)
     return _RECIPES
 
+
 def register_recipe(recipe):
     """Add a :class:`Recipe` at run time (for recipes defined outside
     :mod:`mowl.benchmarks.recipe_sets`, e.g. by a plugin of the command line). Adding an

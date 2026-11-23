@@ -479,6 +479,102 @@ apply a recipe; arguments given explicitly take precedence.
 
 Whether mOWL reproduces each publication is recorded in :doc:`reproduction`.
 
+.. _baseline-benchmarks:
+
+The combination of parts against the direct implementation
+-----------------------------------------------------------
+
+Every method of mOWL is a combination of general parts; the earlier, direct
+implementation of each method (one loss module and model class per paper) is kept in
+:mod:`mowl.baselines` and compared with it in ``tests/baselines`` on small data. On the
+benchmarks, the comparison is three-way: *published* (the number in the paper),
+*mOWL (parts)* (the method users get) and *mOWL (direct)* (the direct implementation),
+each run with the same benchmark, recipe, evaluation regime and seed.
+
+The runner builds a method through an *implementation*
+(:mod:`mowl.benchmarks.implementations`). The default, ``"parts"``, is the class of the
+method's catalogue card. :mod:`mowl.baselines.benchmarks` registers ``"baseline"`` when it
+is imported; the library itself never imports it. It maps each catalogue method to the
+direct class of the same name (and the walk, corpus and graph KGE methods to the same
+factory, configured with the direct class), builds it with the same model arguments,
+trains it with the same model family and attaches the *same* training regime object: the
+regime of a recipe is part of the experiment, not of the method. An argument of a recipe
+that the direct class does not have stops the run with a message (none of the current
+recipes needs a mapping). Methods without a direct implementation (the general
+combinations ``composed*``, ``box_milp``, ``least_model``) are refused.
+
+.. testcode::
+
+   import mowl.baselines.benchmarks
+   from mowl.benchmarks.implementations import get_implementation, list_implementations
+
+   print({"parts", "baseline"} <= set(list_implementations()))
+   baseline = get_implementation("baseline")
+   print(baseline.supports("elbe"), baseline.supports("composed"))
+
+.. testoutput::
+
+   True
+   True False
+
+From the command line, ``--plugin`` imports a module first and ``--implementation``
+chooses the implementation; ``python -m mowl.baselines.benchmarks run ...`` is the same as
+``python -m mowl.benchmarks run ... --plugin mowl.baselines.benchmarks --implementation
+baseline``:
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run box2el-galen-prediction --method elbe \
+       --recipe jackermeier2024 --seed 0 --device cuda --out elbe_parts.json
+   python -m mowl.benchmarks run box2el-galen-prediction --method elbe \
+       --recipe jackermeier2024 --seed 0 --device cuda --out elbe_direct.json \
+       --plugin mowl.baselines.benchmarks --implementation baseline
+
+The result records which implementation ran (``implementation``: name and model class),
+the recipe, every option of the run (``options``), the metrics, the wall time and the
+git commit. The runner seeds Python, NumPy and PyTorch, and hands the run's seed to
+every model argument and training-regime argument called ``seed`` that the run does not
+set (several samplers draw from fresh operating-system entropy when their ``seed`` is
+``None``).
+
+For the full-scale runs, ``scripts/benchmark_manifests.py`` writes one line per run
+(benchmark, method, recipe, implementation, seed) for every recipe of a publication whose
+numbers are recorded, in both implementations, and for the joint benchmarks; the lines
+are split by expected cost so that small runs can be packed on one GPU.
+``scripts/run_manifest.sh`` runs a manifest locally (or inside a batch job), and
+``scripts/collect_benchmarks.py`` reads the result files into the three-way table
+(Markdown, CSV and an RST ``list-table``), flagging parts and direct implementation that
+differ by more than 2% (or the seed standard deviation), results more than 5% from the
+published value, and missing or failed runs:
+
+.. code-block:: bash
+
+   python scripts/benchmark_manifests.py --out-dir manifests --seeds 0,1,2
+   MANIFEST=manifests/repro-fast.tsv RESULTS=results DEVICE=cuda PAR=4 \
+       scripts/run_manifest.sh
+   python scripts/collect_benchmarks.py results --manifest manifests/repro-fast.tsv \
+       --logs results/logs --out report --rst docs/source/benchmarks/_three_way.rst
+
+.. testcode::
+
+   from mowl.benchmarks.collect import collect, three_way_table
+
+   def result(implementation, value):
+       return {"benchmark": "common-galen-subsumption-prediction", "method": "elbe",
+               "seed": 0, "implementation": {"name": implementation},
+               "recipe": {"source": "mowl-common", "name": ""},
+               "metrics": {"all": {"f_mrr": value}}}
+
+   rows = collect([result("parts", 0.30), result("baseline", 0.25)])
+   row = [r for r in rows if r["metric"] == "f_mrr"][0]
+   print(row["parts"], row["baseline"], row["flags"])
+
+.. testoutput::
+
+   0.3 0.25 parts≠baseline
+
+The table of the full-scale runs is in :doc:`reproduction`.
+
 .. toctree::
    :maxdepth: 1
 

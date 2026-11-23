@@ -6,8 +6,8 @@
         --out report [--tolerance 0.02] [--published-tolerance 0.05]
 
 writes ``report.md`` (summary, flagged rows, all rows), ``report.csv`` (all rows,
-numbers unformatted) and ``report.rst`` (a ``list-table`` to include in the
-documentation, e.g. as ``docs/source/benchmarks/_three_way.rst``). See
+numbers unformatted) and ``report.rst`` (a ``list-table``; ``--rst
+docs/source/benchmarks/_three_way.rst`` puts it where the documentation includes it). See
 :mod:`mowl.benchmarks.collect` for the flags.
 """
 import argparse
@@ -27,6 +27,9 @@ def main(argv=None):
     p.add_argument("--logs", default=None,
                    help="directory of the run logs (a run with a log and no result failed)")
     p.add_argument("--out", required=True, help="output prefix")
+    p.add_argument("--rst", default=None,
+                   help="where to write the RST table (default: <out>.rst), e.g. "
+                        "docs/source/benchmarks/_three_way.rst")
     p.add_argument("--tolerance", type=float, default=0.02,
                    help="relative difference parts vs baseline that is flagged")
     p.add_argument("--abs-tolerance", type=float, default=0.0)
@@ -63,7 +66,8 @@ def main(argv=None):
         states = {}
         for s in status.values():
             states[s] = states.get(s, 0) + 1
-        lines += [f"Manifest runs: {len(runs)} ({', '.join(f'{k}: {v}' for k, v in sorted(states.items()))}).", ""]
+        listed = ", ".join(f"{k}: {v}" for k, v in sorted(states.items()))
+        lines += [f"Manifest runs: {len(runs)} ({listed}).", ""]
     if bad:
         lines += [f"Unreadable files: {len(bad)}", ""]
     lines += ["| flag | rows |", "|---|---|"]
@@ -73,10 +77,11 @@ def main(argv=None):
     with open(args.out + ".md", "w") as f:
         f.write("\n".join(lines))
     write_csv(rows, args.out + ".csv")
-    with open(args.out + ".rst", "w") as f:
+    rst = args.rst or args.out + ".rst"
+    with open(rst, "w") as f:
         f.write(three_way_table(rows, "rst", title=args.title))
     print("\n".join(lines[:8 + len(counts)]))
-    print(f"wrote {args.out}.md, {args.out}.csv, {args.out}.rst")
+    print(f"wrote {args.out}.md, {args.out}.csv, {rst}")
     return 0
 
 
