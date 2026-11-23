@@ -475,6 +475,36 @@ def triple_loss(spec, **options):
     return spec(**options)
 
 
+#: The names a knowledge graph embedding library's configuration gives the losses.
+_CONFIGURED_LOSSES = {"nssa": "self-adversarial", "marginranking": "margin ranking",
+                      "marginrankingloss": "margin ranking", "nssaloss": "self-adversarial"}
+_CONFIGURED_OPTIONS = {"adversarial_temperature": "temperature"}
+
+
+def configured_loss(name, options, default, parts=None):
+    """The loss of a configuration in the form of the published configuration files (the
+    form of PyKEEN): a name (``"nssa"``, ``"marginranking"``; ``None``: ``default``) and its
+    options (``margin``, ``adversarial_temperature``, ``reduction``; the reduction is
+    ``"mean"`` where the configuration does not give it, as there). ``None`` if the
+    configuration names neither.
+
+    :param parts: The parts given next to the configuration: a ``loss`` among them and a
+        configured loss together are refused.
+    """
+    if name is None and options is None:
+        return None
+    if parts is not None and parts.get("loss") is not None:
+        raise TypeError("Pass either loss=... or the loss of kge_kwargs ('loss', "
+                        "'loss_kwargs'), not both.")
+    key = "".join(ch for ch in str(name or default).lower() if ch.isalnum())
+    if key not in _CONFIGURED_LOSSES:
+        raise ValueError(f"Unknown loss {name!r}; a configuration names one of "
+                         f"{sorted(_CONFIGURED_LOSSES)}. Any other loss is passed as loss=...")
+    options = {_CONFIGURED_OPTIONS.get(k, k): v for k, v in dict(options or {}).items()}
+    options.setdefault("reduction", "mean")
+    return triple_loss(_CONFIGURED_LOSSES[key], **options)
+
+
 # -- negative sampler ------------------------------------------------------------------------
 class UniformCorruption:
     """Corrupt a positive triple by replacing its head or its tail (and the relation, if

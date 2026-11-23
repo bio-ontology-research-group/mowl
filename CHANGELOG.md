@@ -216,6 +216,11 @@ Behaviour that changed, and how to get the 2.1.0 behaviour back:
 - `EvaluationModel` of `mowl.models.graph_random_walk.random_walk_w2v_model` and `mowl.models.syntactic.w2v_model` (made of the parts of the sequence models; use `model.evaluation_model`), `FALCONModule.sample_negatives` and `FALCONModule.get_cc_loss` (the objective and the measure of FALCON), `BoxELModule.init_entity_embedding` and `BoxSquaredELModule.init_embeddings` (the tables of the class and relation models), `mowl.evaluation.predictions.evaluate_predictions` (the evaluation regimes of `mowl.evaluation`).
 
 ### Fixed
+
+- `load_best_model` of the EL models no longer fails after training with a regime that adds
+  a parameter to the module (the subclass translation of the EmEL++ code regime).
+- `Reshuffle`, `BoxE` and `ExpressivE` accept the loss of a published configuration in
+  `kge_kwargs` (`loss`, `loss_kwargs`); the part-built classes refused it.
 - Walk and sentence models (`RandomWalkPlusW2VModel`, `SyntacticPlusW2VModel`; DL2Vec, OWL2Vec*, taxonomy walks, Onto2Vec, OPA2Vec): `train` rebuilt the Word2Vec vocabulary without `update`, which draws the vectors again, so `train` after `from_pretrained` threw the loaded vectors away; it continues now (`restart=True` restores the fresh start). Word2Vec seeded its start vectors with Python's `hash`, which changes between processes, so a fixed `seed` did not repeat a run; the default is a hash that is the same in every process (`hashfxn=hash` restores the old seeding). OPA2Vec's annotation sentences wrote `<IRI>`, a token no axiom sentence contains, so annotations never reached the class vectors (`annotation_entity_form="bracketed iri"` restores it).
 - Benchmark runs with the same seed were not reproducible: training regimes built from a recipe (`box2el-code-training`, ...) drew their batches and negatives from fresh operating-system entropy (`seed=None`), and Word2Vec and the walks of the walk and corpus methods used 4 workers. The runner now hands the run's seed to every `seed` argument of model and regime that is not set, and the factories default to one worker.
 - A recipe's training regime replaced the regimes that belong to a method (RegD lost its contrastive loss under `box2el-code-training`); the runner keeps them where the recipe's regime does not change the same hooks.

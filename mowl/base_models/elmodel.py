@@ -878,9 +878,17 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
         return ent_embeds, rel_embeds, ind_embeds
 
     def load_best_model(self):
-        """Load the best model from the model filepath."""
-        self.init_module()
-        self.module.load_state_dict(th.load(self.model_filepath, weights_only=True))
+        """Load the best model from the model filepath.
+
+        The module is built anew, unless the current one has exactly the parameters of
+        the file: a training regime may have given the module a parameter of its own (the
+        subclass translation of the EmEL++ code), which a new module would not have.
+        """
+        state = th.load(self.model_filepath, weights_only=True)
+        current = getattr(self, "module", None)
+        if current is None or set(current.state_dict()) != set(state):
+            self.init_module()
+        self.module.load_state_dict(state)
         self.module.eval()
 
     @versionadded(version="0.2.0")

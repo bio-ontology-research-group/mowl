@@ -28,7 +28,9 @@ class BoxE(GraphKGEModel):
     :param embed_dim: Entity dimension ``d``; relation boxes have dimension ``d`` per
         position.
     :param projector: The projection (default: OWL2Vec* projector).
-    :param kge_kwargs: Options of the interaction: ``p``, ``power_norm``, ``tanh_map``.
+    :param kge_kwargs: Options of the interaction: ``p``, ``power_norm``, ``tanh_map``; and,
+        in the form of the published configurations, the loss: ``loss`` (``"nssa"``) and
+        ``loss_kwargs`` (``margin``, ``adversarial_temperature``, ``reduction``).
     """
 
     METHOD = "boxe"
@@ -37,6 +39,12 @@ class BoxE(GraphKGEModel):
                  batch_size=1024, num_negs_per_pos=None, seed=0, model_filepath=None,
                  device="cpu", kge_kwargs=None, **parts):
         options = dict(kge_kwargs or {})
+        from mowl.representation.library.other_graph import configured_loss
+        # the form of the published configurations: the loss by name and its options
+        loss = configured_loss(options.pop("loss", None), options.pop("loss_kwargs", None),
+                               "nssa", parts)
+        if loss is not None:
+            parts["loss"] = loss
         unknown = set(options) - {"p", "power_norm", "tanh_map"}
         if unknown:
             raise TypeError(f"Unknown BoxE options {sorted(unknown)}; the interaction takes "

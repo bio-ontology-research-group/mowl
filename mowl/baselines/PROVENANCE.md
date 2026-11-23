@@ -20,7 +20,7 @@ docstrings and imports) with the source at 2d0ed505.
 
 | baseline file | source @ commit | status |
 |---|---|---|
-| `base_models/elmodel.py` | `mowl/base_models/elmodel.py` @ 81f4910f | original (import paths inside functions point to the frozen copies) |
+| `base_models/elmodel.py` | `mowl/base_models/elmodel.py` @ 81f4910f | adapted: import paths inside functions point to the frozen copies; `load_best_model` keeps the current module when it has exactly the parameters of the saved file (the original built a new module and then failed to load a parameter a training regime had added, so a run with the EmEL++ code regime ended without a result) |
 | `evaluation/ranks.py` | `mowl/evaluation/ont_ranking.py` @ c7559d14 | unchanged since (only `ordinal_ranks_by_counting` of the source file) |
 | `geometric/attributed.py` | `mowl/geometric/attributed.py` @ 8f79c7bf | original; library code rewritten since |
 | `geometric/cones.py` | `mowl/geometric/cones.py` @ 53bff7d3 | adapted: the original `ALConeInterpretation` split in two: the class in `geometric/core/cones.py`, its two constructions here in a subclass (code unchanged) |

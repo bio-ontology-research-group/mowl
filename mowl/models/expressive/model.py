@@ -26,6 +26,9 @@ class ExpressivE(GraphKGEModel):
         with ``relations=`` another relation model only options that are given are passed on).
     :param p: Norm of the score.
     :param tanh_map: Map entities, centres and widths into ``[-1, 1]``.
+    :param kge_kwargs: The same options as a dict; and, in the form of the published
+        configurations, the loss: ``loss`` (``"nssa"``) and ``loss_kwargs`` (``margin``,
+        ``adversarial_temperature``, ``reduction``).
     """
 
     METHOD = "expressive"
@@ -34,6 +37,12 @@ class ExpressivE(GraphKGEModel):
                  kge_kwargs=None, projector=None, learning_rate=1e-3, batch_size=1024,
                  num_negs_per_pos=None, seed=0, model_filepath=None, device="cpu", **parts):
         options = dict(kge_kwargs or {})
+        from mowl.representation.library.other_graph import configured_loss
+        # the form of the published configurations: the loss by name and its options
+        loss = configured_loss(options.pop("loss", None), options.pop("loss_kwargs", None),
+                               "nssa", parts)
+        if loss is not None:
+            parts["loss"] = loss
         unknown = set(options) - {"min_denom", "p", "tanh_map"}
         if unknown:
             raise TypeError(f"Unknown ExpressivE options {sorted(unknown)}.")

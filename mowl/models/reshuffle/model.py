@@ -52,7 +52,8 @@ class Reshuffle(GraphKGEModel):
     :param kge_kwargs: Further options: ``aggregation`` (``"max_self_noLoop"`` is RESHUFFLE
         without loop), ``row_function`` (``"square"`` is RESHUFFLE2), ``density``,
         ``feature_seed``, and ``loss_kwargs`` (``margin`` and ``reduction`` of the margin
-        ranking loss, as in the authors' configuration files).
+        ranking loss, as in the authors' configuration files; the reduction is ``"mean"``
+        where they do not give it).
     """
 
     METHOD = "reshuffle"
@@ -68,17 +69,15 @@ class Reshuffle(GraphKGEModel):
         self.create_inverse_triples = bool(inverse_triples)
         self._inductive = None
         options = dict(kge_kwargs or {})
-        loss_kwargs = options.pop("loss_kwargs", None)
+        from mowl.representation.library.other_graph import configured_loss
+        # the form of the authors' configuration files: the options of the margin ranking loss
+        loss = configured_loss(options.pop("loss", None), options.pop("loss_kwargs", None),
+                               "marginranking", parts)
+        if loss is not None:
+            parts["loss"] = loss
         unknown = set(options) - {"aggregation", "row_function", "density", "feature_seed"}
         if unknown:
             raise TypeError(f"Unknown Reshuffle options {sorted(unknown)}.")
-        if loss_kwargs is not None:
-            # the form of the authors' configuration files: the options of the margin
-            # ranking loss
-            if parts.get("loss") is not None:
-                raise TypeError("Pass either loss=... or kge_kwargs['loss_kwargs'], not both.")
-            from mowl.representation.library.other_graph import MarginRanking
-            parts["loss"] = MarginRanking(**loss_kwargs)
         parts.pop("embed_dim", None)
         options.update(l=l, k=k, num_layers=num_layers, inverse_triples=bool(inverse_triples))
         options.update(parts)

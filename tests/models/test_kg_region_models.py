@@ -106,6 +106,26 @@ def test_reshuffle_takes_the_loss_options_of_the_published_configurations(datase
                   kge_kwargs={"loss_kwargs": {"margin": 1.0}})
 
 
+def test_boxe_and_expressive_take_the_loss_of_the_published_configurations(dataset):
+    """The link prediction recipes name the loss as a configuration file does."""
+    from mowl.benchmarks.recipe_sets.kg_link_prediction import RECIPES
+    classes = {"boxe": BoxE, "expressive": ExpressivE}
+    seen = set()
+    for recipe in RECIPES:
+        if recipe.method not in classes:
+            continue
+        seen.add(recipe.method)
+        configured = recipe.model_kwargs["kge_kwargs"]
+        model = classes[recipe.method](dataset, embed_dim=4, kge_kwargs=dict(configured))
+        loss = model.module.loss
+        wanted = configured["loss_kwargs"]
+        assert (loss.margin, loss.temperature, loss.reduction) == (
+            wanted["margin"], wanted["adversarial_temperature"], "mean")
+    assert seen == set(classes)
+    with pytest.raises(ValueError, match="Unknown loss"):
+        BoxE(dataset, embed_dim=4, kge_kwargs={"loss": "no such loss"})
+
+
 def test_expressive_options_reach_the_interaction(dataset):
     model = ExpressivE(dataset, embed_dim=4, min_denom=0.3, p=1, tanh_map=False)
     interaction = model.module.relation_model.interaction
