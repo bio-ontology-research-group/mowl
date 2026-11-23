@@ -125,7 +125,7 @@ class GroundedConstraints:
         joint = GroundedJointObjective(self.objective, self.element_sampler,
                                        self.region_sampler, weights=weights)
         self.module.joint_objective = joint
-        out = joint.step(self.module, self.training_datasets, self.grounding(),
+        out = joint.step_terms(self.module, self.training_datasets, self.grounding(),
                          self.generator if generator is None else generator,
                          negatives=self._regime_corrupted_opa)
         out["n_region_skipped_top"] = _CountInt(out["n_region_skipped_top"])
