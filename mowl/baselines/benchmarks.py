@@ -48,7 +48,7 @@ from mowl.benchmarks.implementations import (Implementation, register_implementa
                                              with_run_seed)
 
 __all__ = ["BaselineImplementation", "MODELS", "FACTORIES", "UNSUPPORTED", "ARGUMENT_MAP",
-           "baseline_class", "main"]
+           "REFUSED_ARGUMENTS", "baseline_path", "baseline_class", "main"]
 
 #: Methods whose direct class is not found by the naming rule: method -> dotted path.
 MODELS = {
@@ -103,19 +103,44 @@ def _load(path):
     return getattr(importlib.import_module(module_name), attr)
 
 
-def baseline_class(card):
-    """The direct class of a catalogue card (``None`` if there is none)."""
+def baseline_path(card):
+    """Dotted path of the direct class of a catalogue card (``None`` if the naming rule
+    gives none)."""
     if card.key in MODELS:
-        return _load(MODELS[card.key])
-    path = card.implementation
+        return MODELS[card.key]
     for library, frozen in (("mowl.models.", "mowl.baselines.models."),
                             ("mowl.geometric.", "mowl.baselines.geometric.")):
-        if path.startswith(library):
-            try:
-                return _load(frozen + path[len(library):])
-            except (ImportError, AttributeError):
-                return None
+        if card.implementation.startswith(library):
+            return frozen + card.implementation[len(library):]
     return None
+
+
+def _defines(path):
+    """``True`` if the module of the dotted ``path`` defines the class, read from its
+    source (without importing it: the models need the JVM)."""
+    import ast
+    import os
+    module_name, _, attr = path.rpartition(".")
+    # mowl.baselines.<...> -> a file under this package's parent (the mowl folder),
+    # found without importing the parent packages (some start Java imports).
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    parts = module_name.split(".")[1:]
+    origin = os.path.join(root, *parts) + ".py"
+    if not os.path.exists(origin):
+        origin = os.path.join(root, *parts, "__init__.py")
+    if not os.path.exists(origin):
+        return False
+    with open(origin, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    return any(isinstance(n, ast.ClassDef) and n.name == attr for n in tree.body)
+
+
+def baseline_class(card):
+    """The direct class of a catalogue card (``None`` if there is none)."""
+    path = baseline_path(card)
+    if path is None or not _defines(path):
+        return None
+    return _load(path)
 
 
 def _explicit_parameters(callable_):
@@ -124,6 +149,10 @@ def _explicit_parameters(callable_):
     ``**kwargs`` is not resolved."""
     if isinstance(callable_, type):
         names = set()
+        # The query models pass their extra keyword arguments to their geometry.
+        geometry = getattr(callable_, "geometry_class", None)
+        if isinstance(geometry, type):
+            names |= _explicit_parameters(geometry) or set()
         for cls in callable_.__mro__:
             init = cls.__dict__.get("__init__")
             if init is None:
@@ -153,10 +182,14 @@ class BaselineImplementation(Implementation):
         if method in FACTORIES:
             return ""
         from mowl.catalog import get_method
-        card = get_method(method)
+        try:
+            card = get_method(method)
+        except KeyError:
+            return f"{method} is not a catalogue method"
         if not card.implemented:
             return f"{method} is not implemented in mOWL"
-        if baseline_class(card) is None:
+        path = baseline_path(card)
+        if path is None or not _defines(path):
             return f"{method}: no direct implementation of {card.implementation}"
         return ""
 

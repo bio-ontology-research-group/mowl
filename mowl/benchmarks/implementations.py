@@ -50,12 +50,14 @@ __all__ = ["Implementation", "PartsImplementation", "register_implementation",
 
 
 def with_run_seed(callable_, kwargs, seed):
-    """``kwargs`` with ``seed`` added if ``callable_`` (a class or a factory) has a
-    parameter ``seed`` whose default is a fixed integer and ``kwargs`` do not set it.
+    """``kwargs`` with ``seed`` added if ``callable_`` (a class or a factory) has an
+    explicit parameter ``seed`` and ``kwargs`` do not set it.
 
-    Such a parameter seeds a sampler or a walker of the model; with its fixed default,
-    runs with different seeds would share it. A parameter defaulting to ``None`` draws
-    from the global generators, which the runner seeds, and is left alone.
+    Such a parameter seeds a sampler, a walker or a solver of the model. With a fixed
+    default (``seed=0``) runs with different seeds would share it; with ``seed=None``
+    many parts draw from ``numpy.random.default_rng(None)``, i.e. from the operating
+    system's entropy, which no global seed reaches, so two runs with the same seed would
+    differ. The runner therefore always hands the run's seed on.
     """
     import inspect
     kwargs = dict(kwargs)
@@ -66,8 +68,9 @@ def with_run_seed(callable_, kwargs, seed):
         param = inspect.signature(target).parameters.get("seed")
     except (TypeError, ValueError):
         return kwargs
-    if param is not None and isinstance(param.default, int) \
-            and not isinstance(param.default, bool):
+    if param is not None and param.kind not in (param.VAR_KEYWORD, param.VAR_POSITIONAL) \
+            and (param.default is None or param.default is param.empty
+                 or (isinstance(param.default, int) and not isinstance(param.default, bool))):
         kwargs["seed"] = seed
     return kwargs
 

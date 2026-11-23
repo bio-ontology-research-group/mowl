@@ -375,9 +375,13 @@ def _ensure_jvm(memory):
         mowl.init_jvm(memory)
 
 
-def resolve_training_regime(regime):
+def resolve_training_regime(regime, seed=None):
     """An instance of :class:`mowl.training.TrainingRegime` from an instance, a class, a
     catalogue key, a ``(key, kwargs)`` pair, or a list of these.
+
+    With ``seed``, a regime built here whose constructor takes ``seed`` gets it unless
+    its arguments set one (its samplers would otherwise draw from fresh entropy, see
+    :func:`mowl.benchmarks.implementations.with_run_seed`); instances are left alone.
 
     A list is combined with :class:`mowl.training.ComposedRegime`, in the order given
     (for negatives, loss and optimizer the first regime that implements the hook
@@ -387,7 +391,7 @@ def resolve_training_regime(regime):
     if regime is None:
         return None
     if isinstance(regime, list):
-        parts = [resolve_training_regime(r) for r in regime]
+        parts = [resolve_training_regime(r, seed) for r in regime]
         parts = [r for r in parts if r is not None]
         if not parts:
             return None
@@ -411,6 +415,9 @@ def resolve_training_regime(regime):
                              f"training regime.")
         regime = card.load()
     if isinstance(regime, type):
+        if seed is not None:
+            from mowl.benchmarks.implementations import with_run_seed
+            kwargs = with_run_seed(regime, kwargs, seed)
         regime = regime(**kwargs)
     elif kwargs:
         raise ValueError("Constructor arguments were given for a regime instance.")
@@ -562,7 +569,7 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
         model, family = impl.build(card, dataset, model_kwargs, device, model_filepath,
                                    seed=seed)
 
-    regime = resolve_training_regime(training_regime)
+    regime = resolve_training_regime(training_regime, seed=seed)
     if regime is not None:
         impl.attach_regime(model, regime)
     elif getattr(model, "training_regime", None) is not None:
