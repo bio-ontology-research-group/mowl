@@ -75,7 +75,10 @@ class Grounding(NamedTuple):
 def domain_index_sets(nb_classes, nb_elements, top_id=None, bot_id=None, device="cpu"):
     """The index sets of a :class:`Grounding` read off the size of the domain:
     ``(live_classes, ordinary_classes, dead_probes)``, the classes other than bottom, the
-    classes other than top and bottom, and the elements other than the element of bottom."""
+    classes other than top and bottom, and the elements other than the element of bottom.
+
+    Method-specific part of the grounded objective (the domain of GroundedEL: one element per
+    class and per individual)."""
     def without(n, *drop):
         return th.tensor([i for i in range(n) if i not in drop], dtype=th.long, device=device)
     return (without(nb_classes, bot_id), without(nb_classes, top_id, bot_id),
@@ -86,7 +89,10 @@ def relation_fillers(axioms, nb_rels, nb_elements, nb_classes, device="cpu"):
     """The filler and left-hand elements of every relation, in order of first occurrence:
     from :math:`A \\sqsubseteq \\exists r.B` (``A`` and ``B``) and the role assertions
     (the elements of the individuals). Returns ``(fillers, lhs, mask)``: dicts of index
-    tensors per relation and the boolean ``(nb_rels, nb_elements)`` table of fillers."""
+    tensors per relation and the boolean ``(nb_rels, nb_elements)`` table of fillers.
+
+    Method-specific part of the grounded objective (the domain of GroundedEL: elements
+    ``0 .. nb_classes - 1`` are the classes, then the individuals)."""
     fillers = {r: {} for r in range(nb_rels)}
     lhs = {r: {} for r in range(nb_rels)}
     for form, offset in (("gci2", 0), ("object_property_assertion", nb_classes)):

@@ -33,9 +33,53 @@ its neutral default. Several regimes are combined with
 :class:`~mowl.training.ComposedRegime`. Models that override ``train`` with a loop of their
 own may ignore regimes.
 
-A model with a training loop of its own can still be driven by regimes:
-:class:`~mowl.models.GroundedEL` calls the same hooks from its loop, and its default
-training design is the composition :class:`~mowl.training.GroundedELTraining` of
+Every optimisation step of mOWL is taken by one loop,
+:meth:`mowl.training.loop.TrainingLoop.run_training`. A regime can compute the loss of a step
+itself (:meth:`~mowl.training.TrainingRegime.step_loss`): a tensor (the loop calls
+``backward``), a mapping of named terms with a ``"total"`` (the terms reach
+``on_epoch_end``), :class:`~mowl.training.Accumulated` when the regime has accumulated the
+gradient chunk by chunk itself (:func:`~mowl.training.accumulate_backward`, memory bounded by
+a chunk), or ``None`` for a step with nothing to supervise (no optimiser step, not counted in
+the epoch). The canonical mixture's batches of individuals, the sampled objective of
+GroundedEL (:class:`~mowl.training.sampled_objective.SampledObjectiveTraining`) and the
+triple batches of the knowledge graph models (:class:`~mowl.training.triples.TripleBatches`)
+are such regimes; :class:`~mowl.training.MicroBatchAccumulation` gives any model gradient
+accumulation over micro-batches:
+
+.. testcode::
+
+   import torch as th
+   from mowl.training import MicroBatchAccumulation, RegimeTrained, Rows
+
+   class Toy(RegimeTrained):
+       training_datasets = {"x": Rows(th.tensor([[1.0, 2.0], [3.0, -1.0], [0.5, 0.5]]))}
+       device, learning_rate, model_filepath = "cpu", 0.1, None
+
+       def __init__(self):
+           self.module = th.nn.Linear(2, 1)
+
+       def score_rows(self, form, rows, neg=False):
+           return self.module(rows).squeeze(1) ** 2
+
+       def get_optimizer(self):
+           return th.optim.SGD(self.module.parameters(), lr=self.learning_rate)
+
+   th.manual_seed(0)
+   whole = Toy()
+   th.manual_seed(0)
+   chunked = Toy()
+   chunked.training_regime = MicroBatchAccumulation(chunk_size=1)
+   whole.train(epochs=2)
+   chunked.train(epochs=2)
+   print(th.allclose(whole.module.weight, chunked.module.weight))
+
+.. testoutput::
+
+   True
+
+A model with a step of its own is driven by the same regimes:
+:class:`~mowl.models.GroundedEL` trains in the shared loop through its sampled objective, and
+its default training design is the composition :class:`~mowl.training.GroundedELTraining` of
 :class:`~mowl.training.TemperatureAnnealing`, a learning-rate decay,
 :class:`~mowl.training.IdleComponentReseeding` and
 :class:`~mowl.training.LagrangianDualWeights`. Each of them states the small protocol a

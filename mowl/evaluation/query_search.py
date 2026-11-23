@@ -31,7 +31,10 @@ points and unions of boxes:
     (``family.*_degree(..., tau=...)``, a stable log-sum-exp over the parts of a region).
 
 A family of another kind (sets of a graph, cones, any region with a depth) plugs into the
-same evaluators.
+same evaluators. Users: GroundedEL (its elements) and the query embedding models whose
+entities are points and whose relations are boxes of translations
+(:class:`~mowl.representation.library.translation_box_domain.TranslationBoxDomain`,
+``QueryEmbeddingModel.score_query(..., search="beam" | "compile")``).
 """
 from __future__ import annotations
 

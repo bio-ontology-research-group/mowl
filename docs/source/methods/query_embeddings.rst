@@ -121,6 +121,28 @@ an error that says which.
    False
    ConstructorUnavailable
 
+The objective can also be the margin loss of answers that GroundedEL's queries use
+(:class:`~mowl.representation.library.query_objective.AnswerMarginObjective`, the part
+:class:`~mowl.representation.library.query_objective.AnswerMarginLoss`), and the answers of a
+model whose entities are points and whose relations are boxes of translations (Query2Box) can
+be *searched* over its entities, as GroundedEL searches its elements:
+``score_query(structure, queries, search="beam")`` (the max-min beam over witnesses,
+:class:`~mowl.evaluation.query_search.MaxMinBeam`) or ``search="compile"`` (the query
+compiled to a union of boxes, :class:`~mowl.evaluation.query_search.RegionCompiler`), through
+:class:`~mowl.representation.library.translation_box_domain.TranslationBoxDomain`.
+
+.. testcode::
+
+   from mowl.representation.library.query_objective import AnswerMarginObjective
+
+   model = Query2Box(dataset, embed_dim=8, objective=AnswerMarginObjective(margin=1.0))
+   scores = model.score_query(("e", ("r", "r")), [(0, (0, 1)), (1, (1, 0))], search="beam", k=4)
+   print(model.parts["objective"], tuple(scores.shape) == (2, model.module.num_entities))
+
+.. testoutput::
+
+   answer margin negative sampling True
+
 The earlier hand-written implementations, one geometry and one model class per paper, are in
 :mod:`mowl.baselines` (``mowl.baselines.models.query2box`` and so on). They are the reference
 that the combinations are tested against (same losses, same scores, same training run).

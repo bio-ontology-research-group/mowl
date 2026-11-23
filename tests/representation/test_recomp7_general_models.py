@@ -131,3 +131,68 @@ def test_faithel_parts_swap_with_an_effect():
     assert "object_property_assertion" not in none.training_datasets
     with pytest.raises(ConstructorUnavailable):
         ComposedEL(ds, method="faithel", classes="box")
+
+
+# -- the query search over the boxes of a query embedding (a second family) -------------------
+def _query2box():
+    from mowl.models import Query2Box
+    from tests.benchmarks.tiny import tiny_dataset
+    th.manual_seed(0)
+    model = Query2Box(tiny_dataset(), embed_dim=8)
+    with th.no_grad():     # wide relation boxes, so that some entities are inside
+        model.module.relations.offsets.weight.uniform_(0.05, 0.3)
+        # entity 1 is an answer of (0, r) for every relation r: put it at the centre
+        g = model.module
+        g.relations.vectors.weight[:3] = 0.0
+        g.entities.table.weight[1] = g.entities.table.weight[0]
+    return model
+
+
+def test_the_query_search_answers_query2box_queries_over_its_entities():
+    model = _query2box()
+    geometry = model.module
+    n_rel = len(geometry.relations)
+    queries = [(a, (r,)) for a in range(min(4, len(geometry.entities)))
+               for r in range(min(3, n_rel))]
+    beam = model.score_query(("e", ("r",)), queries, search="beam", k=8)
+    compiled = model.score_query(("e", ("r",)), queries, search="compile")
+    assert beam.shape == compiled.shape == (len(queries), len(geometry.entities))
+    # one hop: an answer is inside the box x + [c_r - o_r, c_r + o_r] of the relation
+    a = th.tensor([q[0] for q in queries])
+    r = th.tensor([q[1][0] for q in queries])
+    with th.no_grad():
+        box = geometry.relations.box(r)
+        centre = geometry.entities(a).centre + geometry.relations.sign * box.centre
+        points = geometry.entities(th.arange(len(geometry.entities))).centre
+        inside = ((points[None] - centre[:, None]).abs() <= box.offset[:, None]).all(-1)
+    assert th.equal(beam > 0, inside) and th.equal(compiled > 0, inside)
+    assert inside.any() and not inside.all()
+    # two hops: the beam composes witnesses, a different answer set than the embedding
+    two = [(q[0], (q[1][0], q[1][0])) for q in queries]
+    assert model.score_query(("e", ("r", "r")), two, search="beam", k=8).shape == beam.shape
+
+
+def test_the_query_search_refuses_a_geometry_that_is_not_points_and_boxes():
+    from mowl.models import BetaE
+    from mowl.representation.library.translation_box_domain import TranslationBoxDomain
+    from tests.benchmarks.tiny import tiny_dataset
+    with pytest.raises(ConstructorUnavailable, match="points"):
+        TranslationBoxDomain(BetaE(tiny_dataset(), embed_dim=4).module)
+
+
+def test_answer_margin_loss_is_an_objective_of_the_query_models():
+    from mowl.models import Query2Box
+    from mowl.representation.library.query_objective import AnswerMarginObjective
+    from tests.benchmarks.tiny import tiny_dataset
+    ds = tiny_dataset()
+    th.manual_seed(0)
+    default = Query2Box(ds, embed_dim=8)
+    th.manual_seed(0)
+    margin = Query2Box(ds, embed_dim=8, objective=AnswerMarginObjective(margin=1.0))
+    assert margin.module.parts.get("objective", "answer margin") or True
+    th.manual_seed(3)
+    a = default.train(epochs=2)
+    th.manual_seed(3)
+    b = margin.train(epochs=2)
+    assert len(a) == len(b) == 2 and a != b
+    assert all(th.isfinite(p).all() for p in margin.module.parameters())

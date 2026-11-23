@@ -19,6 +19,12 @@ Top and bottom are never touched. The counts of live elements per component are 
 by spatial bins for large domains). Used by GroundedEL (the regime
 :class:`~mowl.training.IdleComponentReseeding` calls the model's ``reseed_components``);
 any geometry of an element domain and a union-of-boxes class model can use it.
+
+Method-specific part: it reads a finite element domain with one element per class and per
+individual (:class:`~mowl.representation.library.grounded_parts.ElementDomain`: the own
+element :math:`x_A` of a class), which only GroundedEL has; MultiBoxEL re-seeds its unions of
+boxes without elements (its own ``reseed_components``). See the catalogue card
+``grounded``.
 """
 from __future__ import annotations
 
