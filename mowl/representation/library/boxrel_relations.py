@@ -414,4 +414,3 @@ class AffineBoxes(Relations):
         range_2, e_2, m_2, c_2 = self._tuple(second)
         composed = (range_2, m_1 * e_2 + e_1, m_1 * m_2, m_1 * c_2 + c_1)
         return self._tuple_inclusion(composed, self._tuple(sup), measure, margin)
-
