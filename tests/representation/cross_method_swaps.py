@@ -223,6 +223,33 @@ def counts(results):
     return total
 
 
+#: Why a case is refused, by the words of the refusal (first match).
+CATEGORIES = (
+    ("the measure compares another region family", ("compares [", "not a box",
+                                                    "point-membership function")),
+    ("no trained form reads a relation model", ("none of the forms",)),
+    ("the relation model does not map these regions", ("maps [", "No relation model for",
+                                                       "DL-Lite", "has no image",
+                                                       "cannot be enlarged")),
+    ("an operation the part does not provide", ("does not provide the operation",
+                                                "has no volume", "cannot detach",
+                                                "has no disjointness", "is not a Ball",
+                                                "has no non-inclusion")),
+    ("a margin the measure cannot read", ("margin",)),
+    ("the method's training regime or solver needs its own part", ("PerColumnCorruption",
+                                                                   "programme",
+                                                                   "regularise")),
+)
+
+
+def category(detail):
+    """The category of a refusal (:data:`CATEGORIES`), or ``"other"``."""
+    for name, words in CATEGORIES:
+        if any(word in detail for word in words):
+            return name
+    return "other"
+
+
 def summary_rst(results):
     """The counts per part kind as a reStructuredText table."""
     by = counts(results)
@@ -235,6 +262,22 @@ def summary_rst(results):
         lines.append(f"   * - {kind}")
         lines += [f"     - {row.get(o, 0)}" for o in outcomes]
         lines.append(f"     - {sum(row.values())}")
+    return "\n".join(lines) + "\n"
+
+
+def refusals_rst(results):
+    """The refusals by category and part kind, as a reStructuredText table."""
+    table = {}
+    for receiver, kind, label, donors_, outcome, detail in results:
+        if outcome == REFUSED:
+            row = table.setdefault(category(detail), {})
+            row[kind] = row.get(kind, 0) + 1
+    lines = [".. list-table::", "   :header-rows: 1", "", "   * - why refused"]
+    lines += [f"     - {k}" for k in KINDS]
+    for name in [c for c, _ in CATEGORIES] + ["other"]:
+        if name in table:
+            lines.append(f"   * - {name}")
+            lines += [f"     - {table[name].get(k, 0)}" for k in KINDS]
     return "\n".join(lines) + "\n"
 
 

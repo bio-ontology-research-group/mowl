@@ -25,7 +25,6 @@ import torch.nn.functional as F
 
 from mowl.representation.library import shapes_gumbel_math as C2B
 from mowl.representation.library import octagon_geometry as G
-from mowl.representation.library import octagon_bounds as OL
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import register_measure
 from mowl.representation.regions import Box, ConstructorUnavailable
@@ -75,22 +74,40 @@ class OctagonBounds(RegionMeasure):
     accepts = (OctagonProduct,)
     part = "bounds per coordinate"
 
+    @staticmethod
+    def _violations(v):
+        """The norm over factors and facet axes of the larger violation of each pair of
+        opposite directions (``(B, P, 8)`` to ``(B, 1)``); on the two axis-parallel facet
+        axes of boxes this is ELBE's per-coordinate term."""
+        folded = th.relu(th.maximum(v[..., :4], v[..., 4:]))
+        return _norm(folded.reshape(folded.shape[0], -1))
+
     def inside(self, a, b, margin=0.0):
-        return _col(OL.inclusion_loss(a.bounds, b.bounds, margin))
+        """Zero iff :math:`T(h_A) + m \\le h_B` on every factor and direction: for a
+        non-empty ``a`` and :math:`m = 0` exactly :math:`A \\subseteq B` (the tightened
+        bounds :math:`T(h_A)` are the support function of :math:`A`)."""
+        return self._violations(G.tighten(a.bounds) - b.bounds + margin)
 
     def meets(self, a, b, margin=0.0):
         widths = G.widths(th.minimum(a.bounds, b.bounds))
         return _norm(th.relu(margin - widths).reshape(widths.shape[0], -1))
 
     def apart(self, a, b, margin=0.0):
-        return _col(OL.disjoint_loss(a.bounds, b.bounds, margin))
+        """:math:`\\mathrm{relu}(s + m)` with :math:`s` the smallest width of :math:`A \\cap
+        B` over factors and facet axes: zero iff :math:`s \\le -m` (for :math:`m > 0`,
+        disjoint with a gap; for :math:`m = 0`, an intersection with empty interior)."""
+        slack = G.product_emptiness_slack(th.minimum(a.bounds, b.bounds))
+        return _col(th.relu(slack + margin))
 
     def outside(self, a, b, margin=0.0):
-        """Zero iff some bound of ``a`` exceeds that of ``b`` by at least ``margin``."""
-        return _col(OL.non_inclusion_loss(a.bounds, b.bounds, margin))
+        """Zero iff some tightened bound of ``a`` exceeds that of ``b`` by at least
+        ``margin`` (for a non-empty ``a``: it sticks out of ``b``)."""
+        v = G.tighten(a.bounds) - b.bounds
+        return _col(th.relu(margin - v.reshape(v.shape[0], -1).amax(dim=-1)))
 
     def empty(self, a, margin=0.0):
-        return _col(OL.interior_empty_loss(a.bounds))
+        """Zero iff the product has empty interior (its smallest width is not positive)."""
+        return _col(th.relu(G.product_emptiness_slack(a.bounds)))
 
     def nonempty(self, a, epsilon=0.0):
         return _col(th.relu(epsilon - G.product_emptiness_slack(a.bounds)))

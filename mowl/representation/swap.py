@@ -96,7 +96,7 @@ def _resolve_measure(value):
     return value
 
 
-def forms_reading_relations(geometry, rows_by_form, limit=8):
+def _forms_reading_relations(geometry, rows_by_form, limit=8):
     """The forms among ``rows_by_form`` (``{form: rows}``, the training rows) whose loss is
     computed from the relation model of ``geometry``: the autograd graph of the loss of the
     form reaches a parameter of the relation model. Empty if no form reads one."""
@@ -125,7 +125,7 @@ def check_relations_are_read(geometry, key, rows_by_form):
         return
     if not list(geometry.relation_model.parameters()):
         return
-    if not forms_reading_relations(geometry, rows_by_form):
+    if not _forms_reading_relations(geometry, rows_by_form):
         raise ConstructorUnavailable(
             f"none of the forms {key!r} is trained on "
             f"({sorted(f for f, r in rows_by_form.items() if len(r))}) reads one in this "
@@ -285,7 +285,11 @@ def swap(geometry, key, sizes, embed_dim, classes=None, relations=None, individu
     if reason:
         # the geometry knows why its parts cannot work together (an open domain of elements
         # that only its own class and relation models evaluate on)
+        asked = sorted(name for name, value in (
+            ("classes", classes), ("relations", relations), ("individuals", individuals),
+            ("measure", measure), ("objective", objective),
+            ("objective_options", objective_options)) if value)
         raise ConstructorUnavailable(
-            f"{key!r} cannot take {sorted(k for k in parts if k != 'regularizers')}: "
-            f"{reason} (the method's other parts: {geometry.parts}).")
+            f"{key!r} cannot take {asked}: {reason} (the method's other parts: "
+            f"{geometry.parts}).")
     return geometry

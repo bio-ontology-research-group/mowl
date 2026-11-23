@@ -1206,6 +1206,74 @@ def test_the_subspace_method_takes_a_replacement_of_every_part(kind):
                                                              "it from the table", kind)
 
 
+# -- cross-method swaps among the region-based EL methods -----------------------------------
+#: Swaps that used to be refused because the general objective called a method that only one
+#: method's part had (audit 3): each now works through a declared operation with a generic
+#: definition (:mod:`mowl.representation.operations`), changes the losses and trains.
+WORK_THROUGH_OPERATIONS = [
+    ("box2el", "relations", "translation"),       # subsumed_negative: generic
+    ("box2el", "relations", "affine map"),        # subsumed_negative: generic
+    ("transbox", "relations", "affine map"),      # preimage_all: functional relation
+    ("boxsel", "measure", "bounds per coordinate"),   # product_overlap: generic
+    ("multiboxel", "classes", "box"),             # a class model without bumps
+    ("box2el", "objective", "prism"),             # meets_shrunk: generic
+    ("regd", "measure", "bounds per coordinate"),     # outside of boxes, host_for itself
+    ("boxel", "objective", "box_lattice"),        # sizes detached through the region
+    ("elkem", "relations", "translation"),        # range: a translation is onto
+    ("octagon", "classes", "box"),                # a box is an octagon product
+    ("multielbe", "relations", "affine map"),     # a union of boxes mapped box by box
+]
+
+
+@pytest.mark.parametrize("key, kind, value", WORK_THROUGH_OPERATIONS,
+                         ids=[f"{k}-{p}-{v}" for k, p, v in WORK_THROUGH_OPERATIONS])
+def test_a_cross_method_swap_works_through_a_declared_operation(key, kind, value):
+    from tests.representation import cross_method_swaps as X
+    base = X.build(key)
+    argument = {kind: value}
+    if kind == "objective":
+        argument = X.donors("objective", value, X.build(value).module)[1]
+    outcome, detail = X.run_case(base, key, kind, argument)
+    assert outcome == X.WORKS, (key, kind, value, outcome, detail)
+
+
+def test_registered_class_models_without_a_method_of_their_own_serve_others():
+    """``half-space point`` (shadow cones on the half-space) and ``binary subspace`` (E2R with
+    binary indicators) are parts that no published method uses as it is: they are used by
+    these swaps."""
+    from tests.representation import cross_method_swaps as X
+    outcome, detail = X.run_case(X.build("shadow_cones"), "shadow_cones", "classes",
+                                 {"classes": "half-space point"})
+    assert outcome == X.WORKS, detail
+    model = _subspace_model(classes="binary subspace")
+    model.train(epochs=1)
+    assert type(model.module.class_model).__name__ == "BinarySubspaceClasses"
+
+
+def test_no_error_of_a_part_is_turned_into_a_refusal():
+    """Only the library's own ConstructorUnavailable is a refusal; the probe of ComposedEL does
+    not wrap other errors (they were AttributeErrors of methods only one part had)."""
+    import inspect
+    from mowl.models.composed import model as composed
+    source = inspect.getsource(composed.ComposedEL._probe)
+    for name in ("AttributeError", "TypeError", "RuntimeError", "ValueError", "KeyError",
+                 "IndexError", "NotImplementedError"):
+        assert name not in source, name
+
+
+@pytest.mark.slow
+def test_cross_method_swaps_work_or_are_refused_with_a_reason():
+    """The whole sweep (about ten minutes): no case raises an error that is not the library's
+    refusal, no class or relation model is accepted and ignored, and the share of swaps that
+    work does not fall below that of this round (624 of 1628)."""
+    from tests.representation import cross_method_swaps as X
+    results = X.sweep()
+    outcomes = [r[4] for r in results]
+    assert X.BUG not in outcomes, [r for r in results if r[4] == X.BUG][:3]
+    assert X.NO_EFFECT not in outcomes, [r for r in results if r[4] == X.NO_EFFECT][:3]
+    assert outcomes.count(X.WORKS) >= 624
+
+
 # -- the outcome matrix ----------------------------------------------------------------------
 def test_the_matrix_in_the_documentation_lists_every_method():
     import os
@@ -1303,6 +1371,33 @@ validated at build time. The table is written by
 """
 
 
+CROSS_HEADER = """Cross-method swaps among the region-based EL methods
+---------------------------------------------------
+
+The table above says whether *some* replacement of a part works. This one counts every
+cross-method swap among the region-based EL methods (balls, boxes, octagons, prisms,
+ellipsoids, unions of boxes, cones and orders: ``REGION_METHODS`` of
+``tests/representation/cross_method_swaps.py``): method A built through ``ComposedEL`` with
+the class model, relation model, measure or objective of method B, once per distinct
+replacement. ``works``: accepted, the losses change, two epochs train to finite numbers;
+``refused``: :class:`~mowl.representation.ConstructorUnavailable` at build time with the
+reason of the part that cannot do it; ``same losses``: an objective or measure that is read
+and gives the costs of the method's own on these forms; ``no effect`` and ``bug`` (an
+accepted part that changes nothing, any other error) must stay at zero. Before the parts
+declared their operations (:mod:`mowl.representation.operations`), 361 of the 1628 cases
+worked, and 289 of the refusals were errors of parts that the general model wrapped as
+refusals. The counts are written by the generator of this page:
+
+"""
+
+CROSS_REFUSALS = """Most refusals are of a class model or measure of another region family: a measure of
+boxes cannot compare balls, and no exact view of one family as the other exists (exact views
+are used: a point is a box of no width, a box is an octagon product). The hierarchy methods
+train only ``C ⊑ D``, so no relation model they are given would be read. By category:
+
+"""
+
+
 def main():
     import os
     import sys
@@ -1314,8 +1409,11 @@ def main():
                         "representation", "swaps.rst")
     # pytest imported the module under its package name: its OUTCOMES are the filled ones
     from tests.representation import test_user_level_swaps as tests
+    from tests.representation import cross_method_swaps as X
+    cross = X.sweep()
     with open(path, "w") as out:
-        out.write(HEADER + tests.matrix_rst())
+        out.write(HEADER + tests.matrix_rst() + "\n" + CROSS_HEADER + X.summary_rst(cross)
+                  + "\n" + CROSS_REFUSALS + X.refusals_rst(cross))
 
 
 if __name__ == "__main__":
