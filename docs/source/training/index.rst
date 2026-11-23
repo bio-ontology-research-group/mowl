@@ -196,7 +196,7 @@ work on other methods; ``embedding_tables`` lists what can be constrained:
 .. testoutput::
    :options: +ELLIPSIS
 
-   ('class_embed', ...)...
+   ('class_model.centres', ...)...
 
 The penalties are :class:`~mowl.training.NormPenalty` (norm near a target),
 :class:`~mowl.training.MaxNormPenalty` (norm below a bound),

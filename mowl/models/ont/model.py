@@ -54,6 +54,7 @@ class OnT(OnTBase, HiT):
         see :func:`mowl.representation.library.poincare_ball.rotate`.
     :param role_scaling: Apply the scaling :math:`k_r` of Eq. 4 (the reference code does
         not).
+
     The model is the combination of parts that the method ``ont`` defines (see
     :class:`~mowl.models.hit.HiT` for the parts of HiT): a relation model
     (:class:`~mowl.representation.library.hierarchy_relations.TextRotation`) and the

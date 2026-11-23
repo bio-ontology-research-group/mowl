@@ -32,6 +32,8 @@ published method does something odd because the paper does.
    combine
    swaps
    combinations
+   sequences
+   constructions
    extending
    defaults
    known_deviations
@@ -134,7 +136,7 @@ The same relation model appears in methods that are trained on different views:
 
 .. testoutput::
 
-   ['query2box', 'transbox']
+   ['query2box', 'transbox', 'grounded']
 
 Benchmarks whose test data name things that training did not see state so
 (``Benchmark.requires``), and only methods whose embeddings are computed, not looked up,

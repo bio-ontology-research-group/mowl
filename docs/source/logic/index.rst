@@ -56,7 +56,7 @@ ontology, which can be less than the paper covers. The catalogue can be queried 
 
    EL⊥ with ABox
    ELH(∘)⊥ with ABox
-   ['alcone', 'alcone-exact', 'cate', 'dfalc', 'falcon', 'graph_kge']
+   ['alcone', 'alcone-exact', 'cate', 'composed-alc', 'dfalc', 'falcon', 'graph_kge']
 
 Checking an ontology before embedding it
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -277,21 +277,23 @@ Which training regimes a model takes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A model declares the hooks of :class:`~mowl.training.TrainingRegime` its training loop
-consults (``training_hooks``). Models on the generic EL loop consult all of them and take
-any regime. Models with an objective of their own (the ALC models, the PyKEEN-based models,
-FaithEL, CatE) consult none, and the query embedding models consult only the optimiser,
-schedule and stopping hooks. Assigning a regime that changes something the loop does not
-consult raises ``TypeError``; a regime is never silently ignored.
+consults (``training_hooks``). All models train in the same loop
+(:class:`mowl.training.loop.TrainingLoop`), and most consult every hook and take any regime.
+A model whose objective is fixed by its method declares fewer: the ALC models take schedule,
+stopping, regularisation and after-step regimes but not a loss or negative sampler; the
+query embedding models take the optimiser, schedule and stopping hooks; the canonical
+mixture takes none. Assigning a regime that changes something the model does not consult
+raises ``TypeError``; a regime is never silently ignored.
 
 .. testcode::
 
-   from mowl.models import DiskEmbeddings, FaithEL, Query2Box
+   from mowl.models import CanonicalMixture, DiskEmbeddings, Query2Box
    from mowl.training import LinearDecay, PairwiseMarginRankingLoss, unsupported_hooks
 
    print(sorted(unsupported_hooks(PairwiseMarginRankingLoss(), DiskEmbeddings)))
    print(sorted(unsupported_hooks(PairwiseMarginRankingLoss(), Query2Box)))
    print(sorted(unsupported_hooks(LinearDecay(), Query2Box)))
-   print(len(unsupported_hooks(LinearDecay(), FaithEL)) > 0)
+   print(len(unsupported_hooks(LinearDecay(), CanonicalMixture)) > 0)
 
 .. testoutput::
 

@@ -132,7 +132,7 @@ and the geometry; you do not get a wrong number:
 
 .. testoutput::
 
-   Box has no complement. A class expression with a complement cannot be evaluated by ComposedGeometry.
+   Box has no complement. A class expression with a complement cannot be evaluated by ELBEModule.
 
 Methods that have the constructor (fuzzy methods such as FALCON and DF-ALC, cone methods such
 as Al-cone, the subspace method E2R) answer the same call. The catalogue says which

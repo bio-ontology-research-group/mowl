@@ -449,10 +449,12 @@ class ComposedSubspace(RegimeTrained, SubspaceAxiomModel):
         ``objective`` (:func:`mowl.representation.swap.build_method`).
     :param objective_options: Options of the method's own objective that are replaced.
     :param regularizers: Penalties added to those of the method.
-    :param embed_dim, learning_rate, batch_size, num_negatives, negative_weight, reg_orth,
-        reg_sep, sep_gap, range_negatives, max_sibling_pairs, role_unit_length, seed:
-        see :class:`mowl.models.E2R`.
     :param method_options: Further options of the method's builder.
+
+    The remaining arguments (``embed_dim``, ``learning_rate``, ``batch_size``,
+    ``num_negatives``, ``negative_weight``, ``reg_orth``, ``reg_sep``, ``sep_gap``,
+    ``range_negatives``, ``max_sibling_pairs``, ``role_unit_length``, ``seed``) are those of
+    :class:`mowl.models.E2R`.
     """
 
     def __init__(self, dataset, method="e2r", classes=None, relations=None, individuals=None,
