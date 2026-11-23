@@ -388,6 +388,6 @@ def test_cone_negation_is_declared_approximate():
 
 def test_ball_intersection_is_not_a_ball():
     a = Ball(th.zeros(1, 2), th.ones(1, 1))
-    with pytest.raises(ConstructorUnavailable):
-        a.intersect(a)
+    lens, gap = a.intersect(a)               # a lens (it has a volume), not a Ball
+    assert not isinstance(lens, Ball) and float(gap) == 0.0
     assert CentreDistance.exact_intersection is False

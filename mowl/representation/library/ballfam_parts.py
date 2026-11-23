@@ -39,7 +39,7 @@ from mowl.representation.methods import (register_measure, register_method,
                                          register_relation_model, DEFAULT_MEASURE)
 from mowl.representation.objectives import Objective
 from mowl.training.losses import GroupedLogSumExpContrastiveLoss, MSETargetLoss
-from mowl.representation.regions import Ball, Box, ConstructorUnavailable
+from mowl.representation.regions import Ball, Box, ConstructorNotImplemented, ConstructorUnavailable
 from mowl.representation.relation_models import Translation
 
 __all__ = ["ToleranceTranslation", "BoundaryDepth", "RegDObjective",
@@ -193,8 +193,8 @@ class BoundaryDepth(RegionMeasure):
     def _args(self, parent, child):
         self.check(parent, child)
         if isinstance(parent, Ball) != isinstance(child, Ball):
-            raise ConstructorUnavailable(
-                f"BoundaryDepth compares two balls or two boxes, not a "
+            raise ConstructorNotImplemented(
+                f"BoundaryDepth has formulas for two balls or two boxes, not for a "
                 f"{type(child).__name__} with a {type(parent).__name__}.")
         parent, child = self.regularise(parent), self.regularise(child)
         if isinstance(parent, Ball):

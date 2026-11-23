@@ -36,6 +36,15 @@ centre and offset of a class form one row of :math:`U(-1, 1)^{2n}` scaled to uni
     :type init: str, optional
     """
 
+    #: Which of the losses of the DELE reference code combines the scores of this module
+    #: (:class:`~mowl.training.DELECodeLoss`).
+    dele_code_form = "box"
+
+    #: What the joint initialisation of the reference code normalises together
+    #: (:class:`~mowl.training.JointNormalisedInitialisation`).
+    joint_init = "box"
+    joint_init_roles = "rel_embed"
+
     #: Normal forms that get a negative loss with ``all_negative_losses=True``.
     DELE_NEG_GCIS = frozenset({"gci0", "gci1", "gci2", "gci3",
                                "gci0_bot", "gci1_bot", "gci3_bot"})

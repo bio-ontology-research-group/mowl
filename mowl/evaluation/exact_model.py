@@ -46,6 +46,7 @@ non-empty interiors.
 import math
 
 from mowl.evaluation.regime import EvaluationRegime
+from mowl.representation.adapters import qualified_name
 from mowl.evaluation.regions import (EmptyRegion, UndecidedInclusion, UnionRegion,
                                      Universe, satisfies)
 
@@ -62,14 +63,6 @@ def _np(t):
 #: reader takes the module and returns one :class:`~mowl.evaluation.regions.Region` per class
 #: index.
 REGION_READERS = {}
-
-#: Modules that subclass a registered module but are not region models of that kind.
-NOT_REGION_MODULES = {
-    "CanonicalMixtureModule": (
-        "classes are columns of a 0/1 membership matrix over the finite canonical domain "
-        "(a set-based model, faithful by construction), not regions of R^d"),
-}
-
 
 def _geometry_regions(module):
     """Every class of the module as an evaluation region, through its geometry."""
@@ -92,15 +85,17 @@ def _has_convertible_geometry(module):
 
 
 def find_reader(module):
-    """The reader of :data:`REGION_READERS` for ``module`` (by class name, walking the
-    method resolution order); failing that, the reader of the geometry of the module if
+    """The reader of :data:`REGION_READERS` for ``module`` (by qualified class name, walking
+    the method resolution order); a module that says it is not a region model
+    (``not_a_region_model``, a reason) has none; failing that, the reader of the geometry of the module if
     its classes are balls or boxes (:func:`mowl.representation.geometry_of`); else
     ``None``."""
+    if getattr(module, "not_a_region_model", None):
+        return None
     for cls in type(module).__mro__:
-        if cls.__name__ in NOT_REGION_MODULES:
-            return None
-        if cls.__name__ in REGION_READERS:
-            return REGION_READERS[cls.__name__]
+        reader = REGION_READERS.get(qualified_name(cls))
+        if reader is not None:
+            return reader
     if _has_convertible_geometry(module):
         return _geometry_regions
     return None
@@ -115,7 +110,7 @@ def extract_regions(model):
     reader = find_reader(module)
     if reader is None:
         name = type(module).__name__
-        why = NOT_REGION_MODULES.get(name)
+        why = getattr(module, "not_a_region_model", None)
         hint = (f": {why}." if why else
                 ". Register a reader in mowl.evaluation.exact_model.REGION_READERS.")
         raise NotImplementedError(

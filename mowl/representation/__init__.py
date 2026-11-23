@@ -12,7 +12,7 @@ from mowl.representation.vocabulary import (
     Parametrisation, Composable, Representation, CONSTRUCTORS)
 from mowl.representation.catalog import REPRESENTATIONS
 from mowl.representation.regions import (Region, Ball, Box, CornerBox,
-                                         ConstructorUnavailable)
+                                         ConstructorUnavailable, ConstructorNotImplemented)
 from mowl.representation.measures import RegionMeasure, CentreDistance, Bounds
 from mowl.representation.class_models import Classes, BallClasses, BoxClasses
 from mowl.representation.relation_models import Relations, Translation
@@ -29,6 +29,7 @@ __all__ = ["View", "Space", "ClassModel", "RelationModel", "IndividualModel",
            "Construction", "Measure", "Parametrisation", "Composable", "Representation",
            "CONSTRUCTORS", "REPRESENTATIONS",
            "Region", "Ball", "Box", "CornerBox", "ConstructorUnavailable",
+           "ConstructorNotImplemented",
            "RegionMeasure", "CentreDistance", "Bounds",
            "Classes", "BallClasses", "BoxClasses", "Relations", "Translation",
            "Objective", "FORMS", "ROLE_FORMS", "Geometry", "ComposedGeometry",

@@ -18,7 +18,7 @@ from mowl.representation.library import octagon_geometry as G
 from mowl.representation.library.shapes_prism_math import supports
 from mowl.representation.class_models import Classes
 from mowl.representation.methods import register_class_model
-from mowl.representation.regions import Ball, Box, ConstructorUnavailable
+from mowl.representation.regions import Ball, Box, ConstructorNotImplemented, ConstructorUnavailable
 from mowl.representation.relation_models import Relations
 from mowl.representation.library.shapes_regions import (
     Point, OctagonProduct, Prism, Ellipsoid, Vector, Linked, SoftBox)
@@ -456,8 +456,8 @@ class RelationsByRegion(Relations):
         for cls, model in self.rules:
             if isinstance(region, cls):
                 return model
-        raise ConstructorUnavailable(
-            f"No relation model for {type(region).__name__} regions.")
+        raise ConstructorNotImplemented(
+            f"the relation model has no rule for {type(region).__name__} regions.")
 
     def image(self, ids, region):
         return self._model(region).image(ids, region)

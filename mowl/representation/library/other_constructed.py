@@ -533,28 +533,38 @@ class ConstructedGeometry(Geometry):
 
 
 def constructed_geometry(model, **options):
-    """The :class:`ConstructedGeometry` of a constructed model, by its type."""
-    name = type(model).__name__
-    if name == "AttributedConvexModel":
+    """The :class:`ConstructedGeometry` of a constructed model, by its class."""
+    from mowl.geometric.attributed import AttributedConvexModel
+    from mowl.geometric.boxes import BoxModel
+    from mowl.geometric.completion import CanonicalModel
+    from mowl.geometric.cones import ALConeInterpretation
+    from mowl.geometric.cones import FiniteInterpretation as ConeFiniteInterpretation
+    from mowl.geometric.convex_regions import ConvexRegionModel
+    from mowl.geometric.convex_regions import FiniteInterpretation
+    from mowl.geometric.intervals import IntervalUnionModel
+    from mowl.geometric.least_model import LeastModel
+    from mowl.geometric.polyhedral import ConvexPolyhedralModel
+    from mowl.geometric.temporal_cones import TemporalALConeInterpretation
+    if isinstance(model, AttributedConvexModel):
         backend = AttributedBackend(model, **{k: v for k, v in options.items()
                                               if k in ("names", "individuals")})
         return ConstructedGeometry(backend)
-    if name == "CanonicalModel":
+    if isinstance(model, CanonicalModel):
         return ConstructedGeometry(FiniteBackend(model, key="canonical_model"))
-    if name == "FiniteInterpretation":
+    if isinstance(model, (FiniteInterpretation, ConeFiniteInterpretation)):
         return ConstructedGeometry(FiniteBackend(model, canonical=options.get("canonical")))
-    if name == "LeastModel":
+    if isinstance(model, LeastModel):
         return ConstructedGeometry(LeastModelBackend(model))
-    if name == "ALConeInterpretation":
+    if isinstance(model, ALConeInterpretation):
         return ConstructedGeometry(ALConeBackend(model))
-    if name == "TemporalALConeInterpretation":
+    if isinstance(model, TemporalALConeInterpretation):
         return ConstructedGeometry(TemporalBackend(model, options.get("time", 0)))
-    keys = {"BoxModel": "box_milp", "IntervalUnionModel": "interval_union",
-            "ConvexPolyhedralModel": "convex_polyhedral",
-            "ConvexRegionModel": "convex_regions"}
-    if name in keys:
-        return ConstructedGeometry(NormalFormBackend(model, key=keys[name]))
-    raise NotImplementedError(f"No geometry for {name}.")
+    for cls, key in ((BoxModel, "box_milp"), (IntervalUnionModel, "interval_union"),
+                     (ConvexPolyhedralModel, "convex_polyhedral"),
+                     (ConvexRegionModel, "convex_regions")):
+        if isinstance(model, cls):
+            return ConstructedGeometry(NormalFormBackend(model, key=key))
+    raise NotImplementedError(f"No geometry for {type(model).__name__}.")
 
 
 # The geometry of these models is now the combination of a source and a reading

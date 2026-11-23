@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import copy
 from typing import Any, Dict
-import torch as th
+from mowl.training.sampled_objective import seeded_generator
 from mowl.nn.el.grounded import crisp_membership
 from mowl.nn.el.grounded.module import _validate_int_ge
 from mowl.nn.el.structural import Regions
@@ -46,8 +46,7 @@ class GroundedEvaluation:
         with ``seed + 9999``, so the report is a function of the parameters."""
         _validate_int_ge("n_eval", n_eval, 1)
         tol_f = _validate_nonneg_weight("tol", tol)
-        gen = th.Generator(device="cpu")
-        gen.manual_seed(self.seed + 9999)
+        gen = seeded_generator(self.seed, 9999)
         regime = copy.copy(self.crisp_regime) if self.crisp_regime is not None else \
             CrispViolations()
         regime.n_eval, regime.tol = int(n_eval), tol_f
@@ -110,8 +109,7 @@ class GroundedEvaluation:
                     "table-constructed GroundedEL models")
             from mowl.geometric.completion import CanonicalModel
             reasoner = CanonicalModel.from_ontology(self.dataset.ontology)
-        gen = th.Generator(device="cpu")
-        gen.manual_seed(self.seed + 2026)
+        gen = seeded_generator(self.seed, 2026)
         regime = self.exact_regime if self.exact_regime is not None else ExactDomainCheck()
         return regime.report(self.module, base, self.training_datasets, gen, n_eval=n_eval,
                              bot_id=self.bot_id, reasoner=reasoner,

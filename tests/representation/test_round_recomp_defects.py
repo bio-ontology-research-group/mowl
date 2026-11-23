@@ -71,8 +71,10 @@ class FaithELNegativeTerm(TestCase):
 
     def test_the_named_method_selects_the_published_form(self):
         from inspect import signature
+        # the named class and the general model have the same default; the authors' loss is
+        # the explicit option
         self.assertEqual(signature(FaithEL.__init__).parameters["negative_term"].default,
-                         "unbounded")
+                         "margin")
         self.assertEqual(signature(sf.AnchoredObjective.__init__)
                          .parameters["negative_term"].default, "margin")
         self.assertEqual(signature(METHODS["faithel"]).parameters["negative_term"].default,

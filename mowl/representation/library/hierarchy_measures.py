@@ -32,8 +32,8 @@ import torch.nn.functional as F
 from mowl.representation.library.manifolds import Euclidean, UpperHalfSpace
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import DEFAULT_MEASURE, register_measure
-from mowl.representation.regions import (Ball, Box, ConstructorUnavailable, CornerBox,
-                                         MarginUnavailable)
+from mowl.representation.regions import (Ball, Box, ConstructorNotImplemented,
+                                         ConstructorUnavailable, CornerBox, MarginUnavailable)
 from mowl.representation.library.hierarchy_regions import (
     CodedBox, ConePoint, Disk, OrderCone, ManifoldPoint, depth, join, meet, volume)
 from mowl.representation.library.cone_regions import (
@@ -67,7 +67,7 @@ class HierarchyMeasure(_LogProbability, RegionMeasure):
         raise NotImplementedError
 
     def _unavailable(self, what):
-        raise ConstructorUnavailable(f"{type(self).__name__} has no {what}.")
+        raise ConstructorNotImplemented(f"{type(self).__name__} has no formula for the {what}.")
 
     def meets(self, a, b, margin=0.0):
         self._unavailable("overlap")

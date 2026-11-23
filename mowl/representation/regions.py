@@ -9,13 +9,41 @@ from dataclasses import dataclass, replace
 
 import torch as th
 
-__all__ = ["Region", "Ball", "Box", "CornerBox", "ConstructorUnavailable",
-           "MarginUnavailable"]
+import math
+
+__all__ = ["Region", "Ball", "BallLens", "Box", "CornerBox", "ConstructorUnavailable",
+           "ConstructorNotImplemented", "MarginUnavailable", "MarginNotImplemented",
+           "family_refusal"]
 
 
 class ConstructorUnavailable(TypeError):
-    """The region family is not closed under the requested constructor (two balls do not
-    intersect in a ball), or the geometry does not define it."""
+    """The combination of parts is refused at build time because it is *undefined*: the
+    region family is not closed under the requested constructor, the quantity does not exist
+    for the family, or the parts live in different spaces. (A combination that is defined but
+    whose formula is not written is the subclass :class:`ConstructorNotImplemented`.)"""
+
+    def reworded(self, before="", after=""):
+        """A refusal of the same kind (undefined or not implemented, the same class) whose
+        message is ``before + (this message without any "not implemented: ") + after``; for
+        code that adds where a refusal was raised without turning one kind into the other."""
+        message = str(self)
+        if isinstance(self, ConstructorNotImplemented):
+            message = message[len(ConstructorNotImplemented.PREFIX):]
+        return type(self)(f"{before}{message}{after}")
+
+
+class ConstructorNotImplemented(ConstructorUnavailable):
+    """The combination is mathematically defined (or may well be), but the formula is not
+    written in mOWL: the message starts with ``"not implemented: "``. Every other
+    :class:`ConstructorUnavailable` says that the combination is undefined (a space that
+    has no such region, a quantity that does not exist for the family, a loss that no
+    constant can change). The documentation of the swaps counts the two apart."""
+
+    PREFIX = "not implemented: "
+
+    def __init__(self, message=""):
+        message = str(message)
+        super().__init__(message if message.startswith(self.PREFIX) else self.PREFIX + message)
 
 
 class MarginUnavailable(ConstructorUnavailable, ValueError):
@@ -24,16 +52,55 @@ class MarginUnavailable(ConstructorUnavailable, ValueError):
     slack. A :class:`ValueError` as well, for the code that checks margins as values."""
 
 
+class MarginNotImplemented(ConstructorNotImplemented, MarginUnavailable):
+    """A margin that has a meaning for the measure but whose reading is not written (a slack
+    as the shrunk region)."""
+
+
+def family_refusal(subject, accepted, region):
+    """The refusal of ``subject`` (a measure, a relation model: a name) for a ``region`` of a
+    family it was not written for, ``accepted`` being the families it was. Both in
+    :math:`\\mathbb{R}^d`: the comparison is defined and only its formula is not written
+    (:class:`ConstructorNotImplemented`); another space: undefined, said so."""
+    names = [c.__name__ for c in accepted]
+    given = region.__name__ if isinstance(region, type) else type(region).__name__
+    if getattr(region, "space", None) == "euclidean" and any(
+            getattr(c, "space", None) == "euclidean" for c in accepted):
+        return ConstructorNotImplemented(
+            f"{subject} has formulas for {names} regions only; a {given} is a region of the "
+            f"same space (R^d), so the comparison is defined, but its formula is not written.")
+    return ConstructorUnavailable(
+        f"{subject} compares {names} regions, which live in another space than a {given}: "
+        f"there is no comparison of the two.")
+
+
 class Region:
     """Base class of regions."""
 
+    #: The space the regions are subsets of: ``"euclidean"`` for the regions of
+    #: :math:`\\mathbb{R}^d` (balls, boxes, octagons, prisms, ellipsoids, unions of boxes),
+    #: ``None`` for the others (points of a manifold, cones, orders, fuzzy sets, element
+    #: sets, symbols). Two families with the same space can be compared by a formula that is
+    #: not written yet; two with different spaces have no comparison.
+    space = None
+
+    def _refuse(self, what):
+        """The refusal of an operation a region of this family does not have: for a region
+        of :math:`\\mathbb{R}^d` the operation exists (a shift, a scaling, an enlargement, a
+        contraction are defined for every subset), so only its formula is missing
+        (:class:`ConstructorNotImplemented`); for another space it is undefined."""
+        if self.space == "euclidean":
+            return ConstructorNotImplemented(f"{type(self).__name__} regions {what} "
+                                             f"(no formula is written for the family).")
+        return ConstructorUnavailable(f"{type(self).__name__} regions cannot be {what}.")
+
     def translate(self, vector):
         """The region shifted by ``vector`` (``(B, d)``)."""
-        raise ConstructorUnavailable(f"{type(self).__name__} cannot be translated.")
+        raise self._refuse("translated")
 
     def scale(self, factor):
         """The region scaled by ``factor`` per coordinate (``(B, d)``)."""
-        raise ConstructorUnavailable(f"{type(self).__name__} cannot be scaled per coordinate.")
+        raise self._refuse("scaled per coordinate")
 
     def rotate(self, d_axis, d_aperture, aperture="clip"):
         """The region turned by the angles ``d_axis``, its aperture changed by
@@ -50,7 +117,7 @@ class Region:
     def grow(self, amount):
         """The region enlarged by ``amount`` in every direction (the Minkowski sum with a
         ball or box of that size)."""
-        raise ConstructorUnavailable(f"{type(self).__name__} cannot be enlarged.")
+        raise self._refuse("enlarged")
 
     def complement(self):
         """The region of :math:`\\neg C` (families closed under complement: fuzzy sets,
@@ -98,20 +165,20 @@ class Region:
 
     def volume(self):
         """``(B, 1)``: the Lebesgue volume of each region (zero for an empty one). Families
-        with a closed form have it."""
-        raise ConstructorUnavailable(f"{type(self).__name__} has no volume.")
+        with a closed form have it; a region whose volume is not written refuses."""
+        raise ConstructorNotImplemented(
+            f"the volume of {type(self).__name__} regions (no formula is written for it).")
 
     def contract(self):
         """The region contracted to its centre: the degenerate region of the same family
         (a box or ball of size zero) at the centre."""
-        raise ConstructorUnavailable(f"{type(self).__name__} cannot be contracted to its "
-                                     f"centre.")
+        raise self._refuse("contracted to their centre")
 
     def detach_size(self):
         """The same region with its size (radius, half-widths) detached from the graph, so
         that a loss computed from it moves only the location (the frozen negatives of the
         box lattice model)."""
-        raise ConstructorUnavailable(f"{type(self).__name__} cannot detach its size.")
+        raise self._refuse("detached from their size")
 
     def is_empty(self):
         """``(B,)`` boolean tensor: whether the region of each row is the empty set. A
@@ -152,6 +219,8 @@ class Ball(Region):
     radius: th.Tensor
     raw: th.Tensor = None
 
+    space = "euclidean"
+
     def translate(self, vector):
         return replace(self, centre=self.centre + vector)
 
@@ -176,6 +245,77 @@ class Ball(Region):
         sum with a ball of that radius); the signed ``raw`` radius is dropped."""
         return replace(self, radius=self.radius + amount, raw=None)
 
+    def volume(self):
+        """``(B, 1)``: :math:`\\pi^{d/2} r^d / \\Gamma(d/2 + 1)`."""
+        d = self.centre.shape[-1]
+        return math.exp(_log_unit_ball(d)) * self.radius ** d
+
+    def intersect(self, other):
+        """``(lens, gap)``: the intersection of two balls is not a ball but a lens
+        (:class:`BallLens`, which has a volume); ``gap`` is zero iff the balls meet."""
+        if not isinstance(other, Ball):
+            raise ConstructorUnavailable(
+                f"The intersection of a Ball with {type(other).__name__} is not a region "
+                f"of one of the two families.")
+        distance = th.linalg.norm(self.centre - other.centre, dim=-1, keepdim=True)
+        return BallLens(self, other), th.relu(distance - self.radius - other.radius)
+
+
+def _log_unit_ball(d):
+    """:math:`\\log` of the volume of the unit ball of dimension ``d``."""
+    return d / 2 * math.log(math.pi) - math.lgamma(d / 2 + 1)
+
+
+_QUADRATURE = {}
+
+
+def _sin_power_integral(angle, power, nodes=64):
+    """:math:`\\int_0^{\\theta} \\sin^n \\varphi\\, d\\varphi` by Gauss-Legendre
+    quadrature (differentiable in ``angle``)."""
+    import numpy as np
+    if nodes not in _QUADRATURE:
+        _QUADRATURE[nodes] = np.polynomial.legendre.leggauss(nodes)
+    x, w = _QUADRATURE[nodes]
+    x = th.as_tensor(x, dtype=angle.dtype, device=angle.device)
+    w = th.as_tensor(w, dtype=angle.dtype, device=angle.device)
+    phi = angle.unsqueeze(-1) / 2 * (x + 1)
+    return (th.sin(phi) ** power * w).sum(dim=-1) * angle / 2
+
+
+@dataclass(frozen=True)
+class BallLens(Region):
+    """The intersection of two balls (a lens); it has a volume and a membership test, and is
+    not a ball. ``first`` and ``second`` are :class:`Ball` regions of the same batch."""
+
+    first: Ball
+    second: Ball
+
+    space = "euclidean"
+
+    def __len__(self):
+        return self.first.centre.shape[0]
+
+    def contains(self, points):
+        return self.first.contains(points) & self.second.contains(points)
+
+    def volume(self):
+        """``(B, 1)``: the two caps cut by the radical plane,
+        :math:`V_{d-1}\\,(r_1^d I_d(\\theta_1) + r_2^d I_d(\\theta_2))` with
+        :math:`I_d(\\theta) = \\int_0^\\theta \\sin^d`, :math:`\\cos\\theta_i = a_i / r_i`
+        and :math:`a_i` the distance of the plane from the centre ``i`` (clamped, so that
+        disjoint balls give 0 and nested balls the smaller one)."""
+        a, b = self.first, self.second
+        d = a.centre.shape[-1]
+        dist = th.linalg.norm(a.centre - b.centre, dim=-1, keepdim=True).clamp_min(1e-12)
+        r1, r2 = a.radius.clamp_min(1e-12), b.radius.clamp_min(1e-12)
+        a1 = (dist ** 2 + r1 ** 2 - r2 ** 2) / (2 * dist)
+        a2 = dist - a1
+        theta1 = th.acos((a1 / r1).clamp(-1.0, 1.0))
+        theta2 = th.acos((a2 / r2).clamp(-1.0, 1.0))
+        cap = lambda r, t: r ** d * _sin_power_integral(t, d)      # noqa: E731
+        total = math.exp(_log_unit_ball(d - 1)) * (cap(r1, theta1) + cap(r2, theta2))
+        return th.where(dist >= a.radius + b.radius, th.zeros_like(total), total)
+
 
 @dataclass(frozen=True)
 class Box(Region):
@@ -187,6 +327,8 @@ class Box(Region):
 
     centre: th.Tensor
     offset: th.Tensor
+
+    space = "euclidean"
 
     @property
     def lower(self):

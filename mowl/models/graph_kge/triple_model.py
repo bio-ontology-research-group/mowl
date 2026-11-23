@@ -504,9 +504,9 @@ class GraphKGEModel(TripleGraphModel):
         except ConstructorUnavailable as error:
             given = sorted(k for k, v in (("classes", self.classes),
                                           ("relations", self.relations)) if v is not None)
-            raise ConstructorUnavailable(
-                f"{self.method!r} cannot take {given}: {error} (the method's other parts: "
-                f"{module.parts}).") from error
+            raise error.reworded(
+                f"{self.method!r} cannot take {given}: ",
+                f" (the method's other parts: {module.parts}).") from error
 
     def _embedding_options(self):
         return {} if self.embed_dim is None else dict(embed_dim=self.embed_dim)

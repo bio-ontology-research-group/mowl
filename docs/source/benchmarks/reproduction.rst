@@ -338,6 +338,15 @@ Not run
 ``box2el-yeast-ppi``, ``box2el-human-ppi``, ``dele-human-ppi``, ``dele-human-function``
 and ``cate-yeast-ppi`` have recipes or published numbers but no finished run yet.
 
+Published, parts and direct implementation
+------------------------------------------
+
+Each method run as the combination of parts users get and as its direct implementation
+(:mod:`mowl.baselines`), with the same recipe and seeds (see :ref:`baseline-benchmarks`).
+The table is written by ``scripts/collect_benchmarks.py``.
+
+.. include:: _three_way.rst
+
 What had to be made explicit
 ----------------------------
 

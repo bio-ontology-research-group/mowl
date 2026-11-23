@@ -25,7 +25,6 @@ The functions have the signature of :func:`~mowl.representation.register_method`
 sequences). :class:`~mowl.models.ComposedSequenceModel` trains them.
 """
 
-import warnings
 
 from mowl.representation.methods import register_method
 from mowl.representation.sequence import SequenceGeometry, OntologyView, SequenceSource
@@ -123,13 +122,8 @@ def compose_sequences(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=
     elif projection is None:
         _unused("there is no projection to walk on", "(a walker needs one)",
                 walker=walker, projection_options=projection_options)
-        ignored = sorted(k for k, v in walk_options.items() if v is not None)
-        if ignored:
-            # the settings of the walks, given to every method alike by the benchmark
-            # recipes: a method without walks does not read them, and says so
-            warnings.warn(f"{ignored} are options of walks; this method has none "
-                          f"(no projection), so they are not used.", UserWarning,
-                          stacklevel=3)
+        _unused("this method has no walks (no projection)", "that they would configure",
+                **walk_options)
     if scorer_options and not isinstance(scorer, str):
         raise TypeError("scorer_options given, but the scorer is an object.")
     if source is None:

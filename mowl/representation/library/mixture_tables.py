@@ -372,7 +372,8 @@ class MembershipReading(Reading):
 
     def check(self, built):
         super().check(built)
-        if isinstance(built, FiniteModel) and type(built.origin).__name__ != "CanonicalModel":
+        from mowl.geometric.completion import CanonicalModel
+        if isinstance(built, FiniteModel) and not isinstance(built.origin, CanonicalModel):
             raise ConstructorUnavailable("The membership reading reads a canonical model "
                                          "(or a finite model built from one).")
 

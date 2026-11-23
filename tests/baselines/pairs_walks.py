@@ -93,14 +93,17 @@ def _old_corpus(with_annotations):
 
 #: The behaviour of the direct code, selected explicitly (see the module docstring).
 PUBLISHED = dict(restart=True, word2vec_options={"hashfxn": hash})
+#: The methods that walk a graph (the others read sentences of the axioms).
+WALK_METHODS = ("dl2vec", "owl2vec_star", "taxonomy_walks")
 
 
 def _new_method(key, **options):
     def build(dataset):
         from mowl.models import ComposedSequenceModel
         w2v = {k: v for k, v in W2V.items() if k != "vector_size"}
+        walks = WALKS if key in WALK_METHODS else {}   # (sentence methods take no walks)
         model = ComposedSequenceModel(dataset, method=key, embed_dim=W2V["vector_size"],
-                                      **WALKS, **w2v, **PUBLISHED, **options)
+                                      **walks, **w2v, **PUBLISHED, **options)
         model.train(epochs=1)
         return model
     return build

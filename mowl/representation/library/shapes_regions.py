@@ -7,6 +7,7 @@ under. How two regions are compared is the business of a measure
 (:mod:`mowl.representation.library.shapes_measures`).
 """
 
+import math
 from dataclasses import dataclass, replace
 from typing import Any, Optional
 
@@ -28,6 +29,8 @@ class Point(Region):
     :param centre: ``(B, d)``.
     :param bump: ``(B, d)`` or ``None``.
     """
+
+    space = "euclidean"
 
     centre: th.Tensor
     bump: th.Tensor = None
@@ -67,6 +70,8 @@ class OctagonProduct(Region):
         (``None`` for results of an intersection).
     """
 
+    space = "euclidean"
+
     bounds: th.Tensor
     centre: Optional[th.Tensor] = None
 
@@ -86,6 +91,11 @@ class OctagonProduct(Region):
         support = th.einsum("pfk,dk->pfd", pairs, directions)                  # (P, F, 8)
         inside = support.unsqueeze(0) <= self.bounds.unsqueeze(1) + 1e-6      # (B, P, F, 8)
         return inside.all(dim=-1).all(dim=-1)
+
+    def volume(self):
+        """``(B, 1)``: the product of the areas of the octagons
+        (:func:`~mowl.representation.library.octagon_geometry.area`, zero for an empty one)."""
+        return G.area(self.bounds).prod(dim=-1, keepdim=True)
 
     @classmethod
     def of_point(cls, centre):
@@ -142,6 +152,8 @@ class Prism(Region):
     :param offset: Half-widths of the box, ``(B, d - 2)``.
     """
 
+    space = "euclidean"
+
     supports: th.Tensor
     centre: th.Tensor
     offset: th.Tensor
@@ -163,6 +175,14 @@ class Prism(Region):
         high = (self.centre + self.offset).unsqueeze(1)
         box = (rest >= low) & (rest <= high)
         return tri.all(dim=-1) & box.all(dim=-1)
+
+    def volume(self):
+        """``(B, 1)``: the area of the triangle times the volume of the box. The three
+        normals are at :math:`120^\\circ`, so the triangle is equilateral with inradius
+        :math:`(h_1 + h_2 + h_3) / 3` and area :math:`(h_1 + h_2 + h_3)^2 / \\sqrt{3}` (zero
+        where the supports sum to less than zero)."""
+        total = th.relu(self.supports.sum(dim=-1, keepdim=True))
+        return total ** 2 / math.sqrt(3.0) * th.relu(2 * self.offset).prod(dim=-1, keepdim=True)
 
     @classmethod
     def of_point(cls, point):
@@ -201,6 +221,8 @@ class Ellipsoid(Region):
     :param centre, axes: ``(B, d)``.
     :param radius: The scale :math:`r`, ``(B, 1)``, non-negative.
     """
+
+    space = "euclidean"
 
     centre: th.Tensor
     axes: th.Tensor

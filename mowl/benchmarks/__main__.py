@@ -7,7 +7,8 @@
     python -m mowl.benchmarks methods BENCHMARK
     python -m mowl.benchmarks published BENCHMARK [--method KEY] [--format FMT]
     python -m mowl.benchmarks run BENCHMARK --method KEY --epochs N --seed S \\
-        --device cuda --param embed_dim=200 --param learning_rate=0.001 --out result.json
+        --device cuda --param embed_dim=200 --param learning_rate=0.001 --out result.json \\
+        [--recipe SOURCE[:NAME]] [--implementation NAME --plugin MODULE]
     python -m mowl.benchmarks compare result.json [--method KEY] [--format FMT]
     python -m mowl.benchmarks compare-methods BENCHMARK [--methods a,b] [--epochs N] \\
         [--seeds 0,1,2] [--device cuda] [--out-dir DIR]
@@ -92,6 +93,13 @@ def _build_parser():
     p.add_argument("--jvm-memory", default="8g")
     p.add_argument("--out", default=None, help="write the result as JSON here")
     p.add_argument("--format", default="text", choices=("text", "markdown", "rst"))
+    p.add_argument("--implementation", default="parts",
+                   help="which implementation of the method to run: 'parts' (default, "
+                        "the combination of parts users get) or one registered by a "
+                        "plugin, e.g. 'baseline' (with --plugin mowl.baselines.benchmarks)")
+    p.add_argument("--plugin", action="append", default=[], metavar="MODULE",
+                   help="import this module first (it may register implementations, "
+                        "model families, benchmarks or recipes); repeatable")
 
     p = sub.add_parser("compare-methods",
                        help="run every method that supports a benchmark's tasks on it")
@@ -158,7 +166,9 @@ def main(argv=None):
         print(report.published_table(args.benchmark, fmt=args.format, method=args.method),
               end="")
     elif args.command == "run":
+        from mowl.benchmarks.implementations import load_plugins
         from mowl.benchmarks.runner import run_benchmark
+        load_plugins(args.plugin)
         result = run_benchmark(
             args.benchmark, method=args.method, model_kwargs=dict(args.param),
             epochs=args.epochs, seed=args.seed, device=args.device,
@@ -166,7 +176,7 @@ def main(argv=None):
             dataset_kwargs=dict(args.dataset_param) or None,
             protocol_kwargs=dict(args.protocol_param) or None,
             validate_every=args.validate_every, select_best=not args.no_select_best,
-            recipe=args.recipe,
+            recipe=args.recipe, implementation=args.implementation,
             workdir=args.workdir, jvm_memory=args.jvm_memory)
         if args.out:
             result.save(args.out)

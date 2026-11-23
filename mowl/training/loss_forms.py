@@ -18,17 +18,17 @@ regimes here sets.
 from mowl.training.regime import TrainingRegime
 
 
-# Reference code by definition: these regimes switch options of one specific module (ELEm,
-# EmEL++, BoxEL) to reproduce one publication's implementation, so they name its class.
-def _is(module, name):
-    return any(cls.__name__ == name for cls in type(module).__mro__)
+# These regimes switch options that a module declares (``negative_loss_form``, ``norm_penalty``,
+# ``intersection_radius_term``, ``positive_scale``) to reproduce one publication's
+# implementation; a module without the option is refused.
+def _declares(module, option):
+    return hasattr(module, option)
 
 
-def _set(model, attribute, value, families):
+def _set(model, attribute, value):
     module = model.module
-    if not any(_is(module, f) for f in families):
-        raise TypeError(f"{type(module).__name__} has no option '{attribute}' "
-                        f"(supported: {', '.join(families)} and subclasses).")
+    if not _declares(module, attribute):
+        raise TypeError(f"{type(module).__name__} has no option '{attribute}'.")
     setattr(module, attribute, value)
 
 
@@ -46,7 +46,7 @@ class UnboundedNegativeLoss(TrainingRegime):
 
     def attach(self, model):
         super().attach(model)
-        _set(model, "negative_loss_form", "linear", ("ELEmModule",))
+        _set(model, "negative_loss_form", "linear")
 
 
 class PerAxiomNormPenalty(TrainingRegime):
@@ -62,9 +62,9 @@ class PerAxiomNormPenalty(TrainingRegime):
 
     def attach(self, model):
         super().attach(model)
-        if _is(model.module, "EmELPPModule"):
+        if _declares(model.module, "intersection_radius_term"):    # always per axiom
             return
-        _set(model, "norm_penalty", "per_axiom", ("ELEmModule",))
+        _set(model, "norm_penalty", "per_axiom")
 
 
 class Box2ELBaselineLosses(TrainingRegime):
@@ -104,14 +104,14 @@ class Box2ELBaselineLosses(TrainingRegime):
         super().attach(model)
         module = model.module
         self._sum = False
-        if _is(module, "ELEmModule"):
+        if _declares(module, "negative_loss_form"):
             if self.negative_loss:
                 UnboundedNegativeLoss().attach(model)
             if self.norm_penalty:
                 PerAxiomNormPenalty().attach(model)
-            if _is(module, "EmELPPModule"):
+            if _declares(module, "intersection_radius_term"):
                 module.intersection_radius_term = self.radius_term
-        elif _is(module, "BoxELModule") and self.boxel:
+        elif _declares(module, "positive_scale") and self.boxel:
             module.positive_scale = False  # the code's signed role scale
             self._sum = True
             self._side = None
@@ -198,9 +198,10 @@ class EmELppCodeObjective(TrainingRegime):
         import torch as th
         super().attach(model)
         module = model.module
-        if not _is(module, "ELEmModule"):
-            raise TypeError(f"{type(module).__name__} is not an ELEm/EmEL++ module.")
-        self._emelpp = _is(module, "EmELPPModule")
+        if not _declares(module, "negative_loss_form"):
+            raise TypeError(f"{type(module).__name__} has no option 'negative_loss_form' "
+                            f"(not an ELEm/EmEL++ module).")
+        self._emelpp = _declares(module, "intersection_radius_term")
         module.negative_loss_form = "linear"
         if self._emelpp:
             module.radius_form = "relu"

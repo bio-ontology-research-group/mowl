@@ -89,9 +89,10 @@ class TestBoxesAndBalls(TestCase):
         self.assertEqual(len(expression_region(g, ex(R, A), *self.maps).centre), 1)
         with self.assertRaises(ConstructorUnavailable) as caught:
             subsumption_cost(g, inter(A, B), C, *self.maps)
-        self.assertIn("intersection", str(caught.exception))
-        self.assertIn(type(g).__name__, str(caught.exception))
-        self.assertIn("cannot be evaluated", str(caught.exception))
+        # two balls meet in a lens: the intersection exists, its inclusion in a ball has no
+        # formula (written as such, not as an impossibility)
+        self.assertIn("not implemented", str(caught.exception))
+        self.assertIn("BallLens", str(caught.exception))
 
     def test_missing_constructors_are_named(self):
         g = geometry_of(self.elbe)

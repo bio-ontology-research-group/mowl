@@ -1412,21 +1412,31 @@ class PyKEENGeometry(Geometry):
 
     @property
     def relation_part(self):
-        name = type(self.kge).__name__
-        return {"BoxE": "head and tail boxes", "ExpressivE": "region over pairs",
-                "Reshuffle": "matrix"}.get(name, "model of PyKEEN")
+        return {"boxe": "head and tail boxes", "expressive": "region over pairs",
+                "reshuffle": "matrix"}.get(_parts_kind(self.kge), "model of PyKEEN")
 
     def as_parts(self):
         """The same model as a :func:`triple_geometry` of parts that share its tables
         (``BoxE`` and ``ExpressivE`` only), indexed by *graph* ids: classes are the nodes,
         relations the relation ids of the graph."""
-        name = type(self.kge).__name__
-        if name == "BoxE":
-            return boxe(0, 0, tables=self.kge, subclass_id=self._subclass)
-        if name == "ExpressivE":
-            return expressive(0, 0, tables=self.kge, subclass_id=self._subclass)
-        raise NotImplementedError(f"{name} is not a combination of the parts of this "
+        build = {"boxe": boxe, "expressive": expressive}.get(_parts_kind(self.kge))
+        if build is not None:
+            return build(0, 0, tables=self.kge, subclass_id=self._subclass)
+        raise NotImplementedError(f"{type(self.kge).__name__} is not a combination of the parts of this "
                                   f"module.")
 
 
-register_adapter("GraphPlusPyKEENModel", "BoxE", "ExpressivE", "Reshuffle")(PyKEENGeometry)
+def _parts_kind(kge):
+    """Which combination of parts a PyKEEN model is, ``"boxe"``, ``"expressive"`` or
+    ``"reshuffle"``, or ``None``: what the model class declares in ``parts_kind``, else
+    ``"boxe"`` for a PyKEEN ``BoxE`` (a model class of another implementation declares it)."""
+    declared = getattr(kge, "parts_kind", None)
+    if declared is not None:
+        return declared
+    from pykeen.models import BoxE as PyKEENBoxE
+    return "boxe" if isinstance(kge, PyKEENBoxE) else None
+
+
+register_adapter("mowl.models.graph_kge.graph_pykeen_model.GraphPlusPyKEENModel",
+                 "mowl.models.boxe.model.BoxE", "mowl.models.expressive.model.ExpressivE",
+                 "mowl.models.reshuffle.model.Reshuffle")(PyKEENGeometry)

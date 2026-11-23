@@ -186,6 +186,15 @@ obtained with that code.
     :type gci1_radius_term: bool, optional
     """
 
+    #: Which of the losses of the DELE reference code combines the scores of this module
+    #: (:class:`~mowl.training.DELECodeLoss`).
+    dele_code_form = "ball"
+
+    #: What the joint initialisation of the reference code normalises together
+    #: (:class:`~mowl.training.JointNormalisedInitialisation`).
+    joint_init = "ball"
+    joint_init_roles = "rel_embed"
+
     #: ``"slack"``: a positive margin relaxes the inclusion losses (see the objective).
     margin_semantics = "slack"
 

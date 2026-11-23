@@ -182,6 +182,11 @@ class RegDELBEModule(_RegDInterface, _PartBuiltModule):
         to ``False`` (the normal form's own direction).
     """
 
+    #: What the joint initialisation of the reference code normalises together
+    #: (:class:`~mowl.training.JointNormalisedInitialisation`).
+    joint_init = "box"
+    joint_init_roles = "rel_embed"
+
     regd_gcis = frozenset({"gci0", "gci1", "gci2", "gci3"})
     margin_semantics = "strict"
     _region_class = Box

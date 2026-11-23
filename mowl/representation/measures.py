@@ -20,9 +20,11 @@ import functools
 
 import torch as th
 
-from mowl.representation.operations import Operations, generic, unavailable
-from mowl.representation.regions import (Ball, Box, ConstructorUnavailable, CornerBox,
-                                         MarginUnavailable, Region)
+from mowl.representation.operations import Operations, generic
+from mowl.representation.regions import (Ball, Box, ConstructorNotImplemented,
+                                         ConstructorUnavailable, CornerBox,
+                                         MarginNotImplemented, MarginUnavailable, Region,
+                                         family_refusal)
 
 __all__ = ["RegionMeasure", "CentreDistance", "Bounds", "lens_balls"]
 
@@ -50,11 +52,8 @@ def _checked(method):
             if not isinstance(region, Region):
                 continue
             if accepts and not isinstance(region, accepts):
-                raise ConstructorUnavailable(
-                    f"{type(self).__name__}.{method.__name__} compares "
-                    f"{[c.__name__ for c in accepts]} regions, not "
-                    f"{type(region).__name__} (a combination of parts that cannot "
-                    f"read this axiom form).")
+                raise family_refusal(f"{type(self).__name__}.{method.__name__}", accepts,
+                                     region)
             reason = self.refuses(region)
             if reason:
                 raise ConstructorUnavailable(f"{type(self).__name__}.{method.__name__}: "
@@ -78,7 +77,8 @@ class RegionMeasure(Operations):
     """
 
     OPERATIONS = {
-        "outside": "zero iff a is not inside b, by at least the margin (non-inclusion)",
+        "outside": "zero iff a is not inside b, by at least the margin (non-inclusion); "
+                   "generic: the centre of a is apart from b (a sufficient condition)",
         "negative": "the cost of a pair that should not be included; generic: apart",
         "product_overlap": "Vol(A n B) / (Vol(A) Vol(B)), the BoxEL code's reading of "
                            "disjointness; generic: the measure's intersection and the "
@@ -103,6 +103,13 @@ class RegionMeasure(Operations):
     #: former and require the latter to be declared.
     reading = "truth"
 
+    #: Whether ``meets`` is the distance of the two regions (zero iff they overlap, otherwise
+    #: how far apart they are): the Euclidean distance of two boxes or of two balls. The
+    #: negative of an existential reads such a measure in the published form of Box2EL and
+    #: DELE; for any other measure it is a hinge
+    #: (:meth:`~mowl.representation.Relations.subsumed_negative`).
+    meets_is_distance = False
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         for name in RELATIONS:
@@ -120,28 +127,22 @@ class RegionMeasure(Operations):
         :class:`TypeError`) if a region is not of a family the measure compares."""
         for r in regions:
             if not isinstance(r, self.accepts):
-                raise ConstructorUnavailable(
-                    f"{type(self).__name__} compares "
-                    f"{[c.__name__ for c in self.accepts]} regions, not "
-                    f"{type(r).__name__}.")
+                raise family_refusal(type(self).__name__, self.accepts, r)
 
     def inside(self, a, b, margin=0.0):
         """Zero iff ``a`` lies inside ``b`` (with ``margin`` room)."""
-        raise ConstructorUnavailable(
-            f"{type(self).__name__} has no reading of 'inside' (it does not compare regions "
-            f"in that way).")
+        raise ConstructorNotImplemented(
+            f"{type(self).__name__} has no formula for 'inside' of its regions.")
 
     def meets(self, a, b, margin=0.0):
         """Zero iff ``a`` and ``b`` overlap (by at least ``margin``)."""
-        raise ConstructorUnavailable(
-            f"{type(self).__name__} has no reading of 'meets' (it does not compare regions "
-            f"in that way).")
+        raise ConstructorNotImplemented(
+            f"{type(self).__name__} has no formula for 'meets' of its regions.")
 
     def apart(self, a, b, margin=0.0):
         """Zero iff ``a`` and ``b`` are disjoint (at least ``margin`` apart)."""
-        raise ConstructorUnavailable(
-            f"{type(self).__name__} has no reading of 'apart' (it does not compare regions "
-            f"in that way).")
+        raise ConstructorNotImplemented(
+            f"{type(self).__name__} has no formula for 'apart' of its regions.")
 
     def meets_all(self, a, b, margin=0.0):
         """``meets`` for the negative reading "overlap": every part of a region made of
@@ -150,15 +151,13 @@ class RegionMeasure(Operations):
 
     def empty(self, a, margin=0.0):
         """Zero iff ``a`` is empty (has no extent, with ``margin`` room)."""
-        raise ConstructorUnavailable(
-            f"{type(self).__name__} has no reading of 'empty' (it does not compare regions "
-            f"in that way).")
+        raise ConstructorNotImplemented(
+            f"{type(self).__name__} has no formula for 'empty' of its regions.")
 
     def nonempty(self, a, epsilon=0.0):
         """Zero iff ``a`` has extent at least ``epsilon``."""
-        raise ConstructorUnavailable(
-            f"{type(self).__name__} has no reading of 'nonempty' (it does not compare regions "
-            f"in that way).")
+        raise ConstructorNotImplemented(
+            f"{type(self).__name__} has no formula for 'nonempty' of its regions.")
 
     def member(self, a, b, margin=0.0):
         """Zero iff the individual ``a`` is a member of ``b``. Default: ``inside``; a
@@ -166,10 +165,16 @@ class RegionMeasure(Operations):
         (a point against a region)."""
         return self.inside(a, b, margin)
 
-    outside = unavailable("outside")
-    outside.__doc__ = """Zero iff ``a`` is *not* inside ``b``, by at least ``margin``
-        (non-inclusion; the negative term of RegD). Not every measure has it: there is no
-        generic definition."""
+    @generic
+    def outside(self, a, b, margin=0.0):
+        """Zero only if ``a`` is *not* inside ``b``, by at least ``margin`` (non-inclusion;
+        the negative term of RegD). Generic definition, a sufficient condition: the centre of
+        ``a`` (``a`` contracted to its centre, :meth:`Region.contract
+        <mowl.representation.Region.contract>`) is :meth:`apart` from ``b`` by ``margin``, so
+        a point of ``a`` is outside ``b``. A measure whose own formula is the exact test of
+        its family (boxes, balls, octagons) overrides it. A region family that cannot be
+        contracted, or a measure without ``apart``, refuses."""
+        return self.apart(a.contract(), b, margin)
 
     @generic
     def negative(self, a, b, margin=0.0):
@@ -226,14 +231,18 @@ class RegionMeasure(Operations):
         if not margin:
             return a
         if margin < 0:
-            raise MarginUnavailable(
-                f"{what} reads a strict margin as the enlarged region, but has no reading of "
-                f"a slack (margin {margin!r}).")
+            raise MarginNotImplemented(
+                f"{what} reads a strict margin as the enlarged region, and the reading of a "
+                f"slack (margin {margin!r}) as the shrunk region is not written.")
         if not isinstance(a, Region):
             raise MarginUnavailable(f"{what} reads a strict margin as the enlarged region; "
                                     f"a {type(a).__name__} cannot be enlarged.")
         try:
             return a.grow(margin)
+        except ConstructorNotImplemented as error:
+            raise MarginNotImplemented(
+                f"{what} reads a strict margin as the enlarged region: "
+                f"{error.reworded()}") from error
         except ConstructorUnavailable as error:
             raise MarginUnavailable(f"{what} reads a strict margin as the enlarged region: "
                                     f"{error}") from error
@@ -319,6 +328,8 @@ class CentreDistance(RegionMeasure):
 
     Part (vocabulary value): ``centre distance``. Used by: ``elem``, ``emelpp``, ``emelvar``.
     """
+
+    meets_is_distance = True
 
     accepts = (Ball,)
     part = "centre distance"
@@ -429,6 +440,8 @@ class Bounds(RegionMeasure):
     Part (vocabulary value): ``bounds per coordinate``. Used by: ``box2el``, ``elbe``,
     ``multiboxel``, ``multielbe``, ``query2box``.
     """
+
+    meets_is_distance = True
 
     accepts = (Box,)
     part = "bounds per coordinate"

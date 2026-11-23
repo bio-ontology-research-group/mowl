@@ -20,14 +20,17 @@ class JointObjectiveSteps(TrainingRegime):
     """The regime of the module docstring.
 
     :param seed: Seed of the generator of the samples of the steps (default: the model's
-        ``seed`` if it has one, else 0).
+        ``seed`` if it has one, else 0, plus ``seed_offset``).
+    :param seed_offset: Added to the default seed (a method that draws its samples from a
+        generator offset from the model's seed, as the sampled-objective loop does, says so
+        here).
     """
 
     key = "joint-objective-steps"
 
-    def __init__(self, seed=None):
+    def __init__(self, seed=None, seed_offset=0):
         super().__init__()
-        self.seed = seed
+        self.seed, self.seed_offset = seed, int(seed_offset)
         self.generator = None
         #: The regime of the run whose negatives are used (set by the model).
         self.outer = None
@@ -40,7 +43,8 @@ class JointObjectiveSteps(TrainingRegime):
         super().attach(model)
 
     def training_datasets(self, datasets):
-        seed = self.seed if self.seed is not None else getattr(self.model, "seed", 0) or 0
+        seed = self.seed if self.seed is not None else (
+            (getattr(self.model, "seed", 0) or 0) + self.seed_offset)
         self.generator = th.Generator().manual_seed(int(seed))
         self._datasets = datasets
         return datasets

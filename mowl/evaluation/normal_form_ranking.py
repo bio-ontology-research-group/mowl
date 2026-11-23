@@ -307,13 +307,3 @@ class SubsumeeRankingRegime(EvaluationRegime):
         self.info = {"scoring": scoring_name, "num_candidates": int(len(cands)),
                      "queries": int(kept.sum()), "skipped_axioms": skipped}
         return {"all": {k: m[k] for k in self.metrics}}
-
-
-def mean_over_seeds(results):
-    """Average a list of ``{subset: {metric: value}}`` dicts (the published numbers of
-    Box2EL are means over 5 seeds)."""
-    out = {}
-    for subset in results[0]:
-        out[subset] = {m: float(np.mean([r[subset][m] for r in results]))
-                       for m in results[0][subset]}
-    return out

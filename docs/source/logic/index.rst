@@ -282,7 +282,7 @@ consults (``training_hooks``). All models train in the same loop
 A model whose objective is fixed by its method declares fewer: the ALC models take schedule,
 stopping, regularisation and after-step regimes but not a loss or negative sampler; the
 query embedding models take the optimiser, schedule and stopping hooks; the canonical
-mixture takes none. Assigning a regime that changes something the model does not consult
+mixture takes schedule, stopping and projection regimes. Assigning a regime that changes something the model does not consult
 raises ``TypeError``; a regime is never silently ignored.
 
 .. testcode::
@@ -293,7 +293,7 @@ raises ``TypeError``; a regime is never silently ignored.
    print(sorted(unsupported_hooks(PairwiseMarginRankingLoss(), DiskEmbeddings)))
    print(sorted(unsupported_hooks(PairwiseMarginRankingLoss(), Query2Box)))
    print(sorted(unsupported_hooks(LinearDecay(), Query2Box)))
-   print(len(unsupported_hooks(LinearDecay(), CanonicalMixture)) > 0)
+   print(len(unsupported_hooks(PairwiseMarginRankingLoss(), CanonicalMixture)) > 0)
 
 .. testoutput::
 

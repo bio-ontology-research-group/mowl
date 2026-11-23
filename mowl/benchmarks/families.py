@@ -11,6 +11,11 @@ Some catalogue methods are a configuration of a general class: DL2Vec is
 name a *factory* (``MethodCard.factory``) that builds the configured model, so that
 ``run_benchmark(benchmark, method="dl2vec")`` works like for any other method. The
 factories here are plain defaults for comparison runs, not the settings of a paper.
+The walker and Word2Vec run with one worker by default (``workers=1``): with several
+workers their output depends on thread scheduling, so two runs with the same seed differ;
+pass ``workers`` to trade reproducibility for speed. Every factory takes
+``model_class``: the class it configures (default: the one of :mod:`mowl.models`), so that
+another implementation of the same interface is configured in exactly the same way.
 """
 
 import inspect
@@ -66,11 +71,12 @@ class ScoredModelFamily(runner.ModelFamily):
 # ---------------------------------------------------------------------------------------
 
 def _walk_model(dataset, projector, embed_dim=100, num_walks=10, walk_length=20, alpha=0.1,
-                window=5, min_count=1, workers=4, seed=0, model_filepath=None, device="cpu",
-                walker="deepwalk", p=1.0, q=1.0):
-    from mowl.models import RandomWalkPlusW2VModel
+                window=5, min_count=1, workers=1, seed=0, model_filepath=None, device="cpu",
+                walker="deepwalk", p=1.0, q=1.0, model_class=None):
     from mowl.walking import DeepWalk, Node2Vec
-    model = RandomWalkPlusW2VModel(dataset, model_filepath=model_filepath)
+    if model_class is None:
+        from mowl.models import RandomWalkPlusW2VModel as model_class
+    model = model_class(dataset, model_filepath=model_filepath)
     model.set_projector(projector)
     outfile = (model_filepath or model.model_filepath) + ".walks"
     if walker == "node2vec":
@@ -90,33 +96,36 @@ def _walk_model(dataset, projector, embed_dim=100, num_walks=10, walk_length=20,
     return model
 
 
-def dl2vec(dataset, bidirectional_taxonomy=True, **kwargs):
+def dl2vec(dataset, bidirectional_taxonomy=True, seed=0, **kwargs):
     """DL2Vec: DL2Vec projection, random walks, skip-gram Word2Vec."""
     from mowl.projection import DL2VecProjector
-    return _walk_model(dataset, DL2VecProjector(bidirectional_taxonomy), **kwargs)
+    return _walk_model(dataset, DL2VecProjector(bidirectional_taxonomy), seed=seed,
+                       **kwargs)
 
 
-def owl2vec_star(dataset, bidirectional_taxonomy=True, include_literals=False, **kwargs):
+def owl2vec_star(dataset, bidirectional_taxonomy=True, include_literals=False, seed=0,
+                 **kwargs):
     """OWL2Vec*: its structural projection, random walks, skip-gram Word2Vec (no lexical
     document)."""
     from mowl.projection import OWL2VecStarProjector
     return _walk_model(dataset, OWL2VecStarProjector(
         bidirectional_taxonomy=bidirectional_taxonomy, include_literals=include_literals),
-        **kwargs)
+        seed=seed, **kwargs)
 
 
-def taxonomy_walks(dataset, bidirectional_taxonomy=True, **kwargs):
+def taxonomy_walks(dataset, bidirectional_taxonomy=True, seed=0, **kwargs):
     """Random walks on the class hierarchy only, skip-gram Word2Vec."""
     from mowl.projection import TaxonomyProjector
-    return _walk_model(dataset, TaxonomyProjector(bidirectional_taxonomy), **kwargs)
+    return _walk_model(dataset, TaxonomyProjector(bidirectional_taxonomy), seed=seed,
+                       **kwargs)
 
 
 def _corpus_model(dataset, with_annotations, embed_dim=100, window=5, min_count=1,
-                  workers=4, seed=0, model_filepath=None, device="cpu"):
-    from mowl.models import SyntacticPlusW2VModel
+                  workers=1, seed=0, model_filepath=None, device="cpu", model_class=None):
+    if model_class is None:
+        from mowl.models import SyntacticPlusW2VModel as model_class
     corpus = (model_filepath + ".corpus") if model_filepath else None
-    model = SyntacticPlusW2VModel(dataset, model_filepath=model_filepath,
-                                  corpus_filepath=corpus)
+    model = model_class(dataset, model_filepath=model_filepath, corpus_filepath=corpus)
     model.set_w2v_model(vector_size=embed_dim, window=window, min_count=min_count,
                         workers=workers, seed=seed, sg=1)
     model.generate_corpus(save=True, with_annotations=with_annotations)
@@ -124,27 +133,31 @@ def _corpus_model(dataset, with_annotations, embed_dim=100, window=5, min_count=
     return model
 
 
-def onto2vec(dataset, **kwargs):
+def onto2vec(dataset, seed=0, **kwargs):
     """Onto2Vec: Word2Vec on the axioms of the ontology written as sentences."""
-    return _corpus_model(dataset, False, **kwargs)
+    return _corpus_model(dataset, False, seed=seed, **kwargs)
 
 
-def opa2vec(dataset, **kwargs):
+def opa2vec(dataset, seed=0, **kwargs):
     """OPA2Vec: Word2Vec on the axioms and the annotations of the ontology."""
-    return _corpus_model(dataset, True, **kwargs)
+    return _corpus_model(dataset, True, seed=seed, **kwargs)
 
 
 def graph_kge(dataset, projector="dl2vec", kge_method="TransE", embed_dim=100,
               learning_rate=1e-3, batch_size=1024, seed=0, model_filepath=None,
-              device="cpu"):
+              device="cpu", model_class=None):
     """A knowledge graph embedding (PyKEEN) of a projection of the ontology.
 
     :param projector: ``"dl2vec"``, ``"owl2vec_star"``, ``"taxonomy"`` or a projector.
     :param kge_method: Name of a class of :mod:`pykeen.models` or the class.
+    :param model_class: The class to configure (default
+        :class:`mowl.models.GraphPlusPyKEENModel`); another implementation of the same
+        interface can be configured the same way.
     """
     import pykeen.models
     import torch as th
-    from mowl.models import GraphPlusPyKEENModel
+    if model_class is None:
+        from mowl.models import GraphPlusPyKEENModel as model_class
     from mowl.projection import DL2VecProjector, OWL2VecStarProjector, TaxonomyProjector
     if isinstance(projector, str):
         projector = {"dl2vec": lambda: DL2VecProjector(False),
@@ -152,7 +165,7 @@ def graph_kge(dataset, projector="dl2vec", kge_method="TransE", embed_dim=100,
                      "taxonomy": lambda: TaxonomyProjector(False)}[projector]()
     if isinstance(kge_method, str):
         kge_method = getattr(pykeen.models, kge_method)
-    model = GraphPlusPyKEENModel(dataset, model_filepath=model_filepath, device=device)
+    model = model_class(dataset, model_filepath=model_filepath, device=device)
     model.set_projector(projector)
     model.set_kge_method(kge_method, embedding_dim=embed_dim, random_seed=seed)
     model.optimizer = th.optim.Adam
@@ -161,11 +174,16 @@ def graph_kge(dataset, projector="dl2vec", kge_method="TransE", embed_dim=100,
     return model
 
 
+def load_factory(path):
+    """The function at the dotted ``path``."""
+    import importlib
+    module_name, _, attr = path.rpartition(".")
+    return getattr(importlib.import_module(module_name), attr)
+
+
 def build_from_factory(card, dataset, model_kwargs, device, model_filepath):
     """Call the factory named by ``card.factory`` with the arguments it accepts."""
-    import importlib
-    module_name, _, attr = card.factory.rpartition(".")
-    factory = getattr(importlib.import_module(module_name), attr)
+    factory = load_factory(card.factory)
     kwargs = dict(model_kwargs)
     kwargs.setdefault("device", device)
     kwargs.setdefault("model_filepath", model_filepath)

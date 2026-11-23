@@ -579,3 +579,11 @@ def test_word2vec_models_differ_from_2_1_0_only_on_a_second_train(family_dataset
         m.train(epochs=1)
     assert same(direct, released)
     assert not same(direct, default)
+
+
+def test_evaluate_predictions_is_deprecated_and_as_released():
+    from mowl.evaluation.predictions import evaluate_predictions
+    with pytest.warns(DeprecationWarning):
+        metrics = evaluate_predictions({"a", "b"}, {"a": 0.9, "b": 0.8, "c": 0.1, "d": 0.3},
+                                       [1, 2])
+    assert metrics["auc"] == 1.0 and metrics["prec@2"] == 1.0
