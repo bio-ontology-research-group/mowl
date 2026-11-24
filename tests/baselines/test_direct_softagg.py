@@ -45,7 +45,8 @@ def _random_batch(
 
 def test_softmin_limits() -> None:
     gen = torch.Generator().manual_seed(0)
-    v = torch.randn((16, 4), generator=gen)
+    # (double precision: at tau = 1e4 the rounding of float32 is of the size of the tolerance)
+    v = torch.randn((16, 4), generator=gen, dtype=torch.float64)
 
     sm_low = softmin(v, tau=1e-4, dim=1)
     hard_min = torch.amin(v, dim=1)
@@ -58,7 +59,7 @@ def test_softmin_limits() -> None:
     w = soft_weights(v, tau=0.5, dim=1)
     assert w.shape == v.shape
     assert (w > 0).all()
-    assert torch.allclose(w.sum(dim=1), torch.ones(16), atol=1e-6)
+    assert torch.allclose(w.sum(dim=1), torch.ones(16, dtype=torch.float64), atol=1e-6)
 
     with pytest.raises(ValueError, match="tau"):
         softmin(v, tau=0.0, dim=1)
