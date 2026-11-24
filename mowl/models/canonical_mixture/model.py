@@ -74,6 +74,7 @@ class CanonicalMixture(EmbeddingELModel):
     #: and may schedule the optimiser, act at the start and end of an epoch, stop, add a loss
     #: term, project after a step or replace the step itself.
     training_hooks = SCHEDULE_HOOKS | frozenset({"after_step", "step_loss"})
+    _supports_axiom_updates = False
 
     def __init__(
         self,

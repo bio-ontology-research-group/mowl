@@ -64,3 +64,9 @@ docs/source/representation/combinations.rst
 \#*#
 docs/source/sg_execution_times.rst
 docs/source/examples/sg_execution_times.rst
+
+# Local agent instructions and rendered documents
+AGENTS.md
+CLAUDE.md
+README.html
+*.pdf

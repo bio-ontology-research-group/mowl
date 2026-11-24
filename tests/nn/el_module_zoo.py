@@ -84,12 +84,14 @@ def all_el_module_classes():
     out = {}
     for c in subs(ELModule):
         # (the graph modules, BCBox and CatE, score the vertices of a graph and the elements of
-        # a lattice, not the normal forms of an ontology; the ALC modules read ALC axioms;
+        # a lattice, not the normal forms of an ontology; the ALC modules read ALC axioms and
+        # the language model modules read text (they are subclasses only once imported);
         # modules built from parts live with the parts and are exported by mowl.nn)
         exported = getattr(mowl.nn, c.__name__, None) is c
         if (c.__module__.startswith("mowl.nn.") or exported) \
                 and not c.__module__.startswith("mowl.nn.graph.") \
                 and not c.__module__.startswith("mowl.nn.alc.") \
+                and not c.__module__.startswith("mowl.nn.lm.") \
                 and not c.__name__.startswith("_"):
             out[c.__name__] = c
     return [out[k] for k in sorted(out)]
