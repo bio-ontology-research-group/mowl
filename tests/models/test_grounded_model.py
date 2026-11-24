@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import resource
+import subprocess
+import sys
 import tempfile
 from typing import Dict, List, Set
 
@@ -479,29 +481,26 @@ def _peak_rss_kb() -> int:
                     return int(line.split()[1])
     except OSError:
         pass
-    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-
-
-def _reset_peak_rss() -> bool:
-    """Reset the peak RSS of this process to its current RSS (Linux); ``False`` if the
-    kernel does not allow it."""
-    import gc
-    gc.collect()
-    try:
-        with open("/proc/self/clear_refs", "w") as f:
-            f.write("5")
-        return True
-    except OSError:
-        return False
+    peak = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    return peak // 1024 if sys.platform == "darwin" else peak
 
 
 def test_go_scale_memory_smoke() -> None:
-    """GO-scale smoke test: 50,000 classes, random gci0/gci2/gci3 rows, d=16, K=2, 1 train step + reseed_idle + crisp_report(n_eval=1000) under 4 GB peak RSS."""
+    """Check the GO-scale workload in a process with its own RSS peak."""
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from tests.models.test_grounded_model import _run_go_scale_memory_smoke; "
+            "_run_go_scale_memory_smoke()",
+        ],
+        check=True,
+    )
+
+
+def _run_go_scale_memory_smoke() -> None:
     n_classes = 50_000
     n_roles = 8
-    # The peak is a high-water mark of the whole process: reset it, so that the test
-    # measures itself and not the tests that ran before it in the same process.
-    peak_is_ours = _reset_peak_rss()
     ds = _SyntheticLargeDataset(n_classes=n_classes, n_roles=n_roles)
 
     gen = th.Generator(device="cpu").manual_seed(2026)
@@ -548,8 +547,6 @@ def test_go_scale_memory_smoke() -> None:
 
     # Peak RSS in kilobytes; assert < 4 GB (4 * 1024 * 1024 KiB)
     peak_rss_kb = _peak_rss_kb()
-    if not peak_is_ours and peak_rss_kb >= 4 * 1024 * 1024:
-        pytest.skip("the process peak could not be reset and earlier tests exceeded it")
     assert peak_rss_kb < 4 * 1024 * 1024, (
         f"Expected peak RSS < 4 GB (4194304 KiB), got {peak_rss_kb} KiB"
     )
