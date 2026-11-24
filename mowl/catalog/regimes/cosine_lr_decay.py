@@ -13,7 +13,7 @@ REGIME = RegimeCard(
     references=(SINGH2026,),
     standalone=False,
     introduced_with=('elkem',),
-    used_by=(),
+    used_by=('grounded',),
     implementation='mowl.training.schedules.ConstantThenCosine',
     notes=("ELK-Em, Section 5.2 ('held constant for the first third of training and then "
            "cosine-decayed to 10^-4')."),

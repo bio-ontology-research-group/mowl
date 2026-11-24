@@ -33,6 +33,15 @@ its neutral default. Several regimes are combined with
 :class:`~mowl.training.ComposedRegime`. Models that override ``train`` with a loop of their
 own may ignore regimes.
 
+A model with a training loop of its own can still be driven by regimes:
+:class:`~mowl.models.GroundedEL` calls the same hooks from its loop, and its default
+training design is the composition :class:`~mowl.training.GroundedELTraining` of
+:class:`~mowl.training.TemperatureAnnealing`, a learning-rate decay,
+:class:`~mowl.training.IdleComponentReseeding` and
+:class:`~mowl.training.LagrangianDualWeights`. Each of them states the small protocol a
+model must provide (a temperature, ``reseed_components``, ``dual_weights``) and refuses
+other models when it is attached. See :doc:`../methods/grounded`.
+
 Strict and slack margins
 ------------------------
 

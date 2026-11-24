@@ -384,6 +384,7 @@ either way, before they are scored;
         - ``additional_loss(epoch)``, added to the model's own \
 :meth:`additional_training_loss`;
         - ``optimizer()``; ``NotImplemented`` falls back to :meth:`get_optimizer`;
+        - ``on_epoch_end(epoch, losses)`` after the optimisation step of every epoch;
         - ``should_stop(epoch)`` at the end of every epoch, after validation; ``True`` \
 ends training;
         - ``on_train_end()`` once after the last epoch, also after an early stop;
@@ -801,6 +802,8 @@ that override :meth:`train` with a loop of their own may ignore the regime.
             loss.backward()
             optimizer.step()
             train_loss += loss.detach().item()
+            if regime is not None:
+                regime.on_epoch_end(epoch, {"total": train_loss})
 
             if epoch_callback is not None:
                 epoch_callback(epoch, self)

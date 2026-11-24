@@ -19,7 +19,8 @@ KEYS = (
     "intersection-equivalence-ranking", "complex-axiom-prediction",
     "paraconsistent-entailment-classification", "protein-centric-threshold-f1",
     "hierarchy-threshold-f1", "sampled-negative-auc", "kg-filtered-link-prediction",
-    "query-answering")
+    "query-answering", "temperature-annealing", "linear-lr-decay",
+    "idle-component-reseeding", "lagrangian-dual-weights", "grounded-el-training")
 
 
 class TestRegimeCards(TestCase):

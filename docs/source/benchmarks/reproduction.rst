@@ -324,6 +324,9 @@ can be reproduced. The full reasoning is on each catalogue card.
    * - :class:`mowl.models.E2R` (Garg et al., 2019)
      - FB15K and WN18 are knowledge-graph benchmarks; the LUBM protocol and the training
        settings are not specified, and no code was found.
+   * - :class:`mowl.models.GroundedEL` (original to mOWL)
+     - No publication yet; its guarantees are tested on small ontologies
+       (``tests/models/test_grounded_model.py``).
    * - :class:`mowl.models.EmELVar` (Mohapatra et al., 2021)
      - With the loss as printed, the total loss is never lower than that of EmEL++, so
        the reported improvement is not explained by the paper; the authors' code was not

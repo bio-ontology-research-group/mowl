@@ -60,6 +60,8 @@ first_syntactic_w2v_model
 
 # Local agent instructions and rendered documents
 AGENTS.md
+# Track the project guide at the repository root.
+!/AGENTS.md
 CLAUDE.md
 README.html
 *.pdf
