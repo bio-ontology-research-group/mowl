@@ -134,15 +134,58 @@ Runs that cannot be made
 * **HiT and OnT** need the optional language-model packages and a GPU with enough memory
   for the encoder.
 
-Open defects seen in the joint benchmarks
------------------------------------------
+Which epoch is kept, and what it did to the joint benchmarks
+------------------------------------------------------------
 
-* **Concept2Box** with the default settings does not train on GO, GALEN and ANATOMY: the
-  loss stays at 2.0 from the first epoch and every candidate gets the same score (AUC 0.50).
-  On small ontologies and with the recipe of the paper it trains.
-* **BoxSEL** trains on the joint benchmarks (the loss falls) but ranks at chance level
-  (AUC 0.50): the scores of subsumptions are almost all zero. BoxEL, which shares its
-  geometry, reaches an AUC of 0.90 on the same benchmark.
+Up to mOWL 2.1.0 an EL model kept the epoch with the lowest loss of the validation axioms.
+That loss looks at true axioms only, and for several box models it is lowest before training
+has separated true from false axioms (all boxes still overlap). In the first round of the
+joint benchmarks 84 of 758 runs kept such an untrained state, among them every BoxSEL run and
+most Concept2Box runs, which then ranked at chance level (AUC 0.50).
+
+The default is now ``validation_criterion="separation"``: the epoch is kept at which the
+validation axioms score better than corrupted copies of themselves most often
+(:func:`mowl.evaluation.validation.corrupted_pair_error`). ``validation_criterion="loss"``
+gives the rule of 2.1.0. The affected runs were repeated with the new rule (AUC, one seed):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 20
+
+   * - Benchmark
+     - BoxSEL
+     - Concept2Box
+   * - ``common-go-subsumption-prediction``
+     - 0.50 → 0.74
+     - 0.91
+   * - ``common-go-subsumption-inference``
+     - 0.50 → 0.76
+     - 0.93
+   * - ``common-go-existential-prediction``
+     - 0.50 → 0.91
+     - 0.87
+   * - ``common-galen-subsumption-prediction``
+     - 0.50 → 0.81
+     - 0.92
+   * - ``common-galen-subsumption-inference``
+     - 0.50 → 0.61
+     - 0.52
+   * - ``common-galen-existential-prediction``
+     - 0.51 → 0.89
+     - 0.87
+   * - ``common-anatomy-subsumption-prediction``
+     - 0.50 → 0.89
+     - 0.92
+   * - ``common-anatomy-subsumption-inference``
+     - 0.50 → 0.89
+     - 0.94
+   * - ``common-anatomy-existential-prediction``
+     - 0.51 → 0.94
+     - 0.94
+
+Still open: ``common-galen-subsumption-inference`` stays close to chance for the box models
+(BoxSEL 0.61, Concept2Box 0.52, EIKE 0.54, ELBE baseline 0.50). The baseline code with its
+own training regimes does not use this rule and its results did not change.
 
 Numbers
 -------
