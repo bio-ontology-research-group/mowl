@@ -342,3 +342,56 @@ class TestEmbeddingElModelAuxiliaryNegatives(TestCase):
         self.assertIn("http://test.org/elmodel_neg#New", model.class_index_dict)
         for key in before:
             np.testing.assert_allclose(before[key], after[key], rtol=1e-6)
+
+    def test_add_axioms_refreshes_training_data(self):
+        from mowl.models import (BoxEL, BoxSquaredEL, ELBE, EmELPP, EmELVar,
+                                 MultiBoxEL, MultiELBE, OctagonEL, PrismEL,
+                                 TransBox, VolumeMultiBoxEL)
+        from mowl.owlapi import OWLAPIAdapter
+
+        ns = "http://test.org/update#"
+        for model_class in (ELEmbeddings, ELBE, BoxEL, BoxSquaredEL, TransBox, EmELPP,
+                            EmELVar, MultiBoxEL, MultiELBE, OctagonEL, PrismEL, VolumeMultiBoxEL):
+            for load_before_update in (False, True):
+                with self.subTest(model=model_class.__name__, loaded=load_before_update):
+                    adapter = OWLAPIAdapter()
+                    dataset = Dataset(adapter.create_ontology(ns))
+                    a, b, c, d = [adapter.create_class(ns + name) for name in "ABCD"]
+                    dataset.add_axioms(adapter.create_subclass_of(a, b))
+                    settings = {"num_points": 64} if model_class is VolumeMultiBoxEL else {"batch_size": 4}
+                    model = model_class(dataset, embed_dim=4, **settings)
+                    if load_before_update:
+                        self.assertEqual(len(model.training_dataloaders["gci0"].dataset), 1)
+
+                    role = adapter.create_object_property(ns + "r")
+                    filler = adapter.create_object_intersection_of(c, d)
+                    atomic = adapter.create_subclass_of(b, c)
+                    nested = adapter.create_subclass_of(b, adapter.create_object_some_values_from(role, filler))
+                    model.add_axioms(atomic, nested)
+                    model.add_axioms(atomic, nested)
+
+                    classes = model.class_index_dict
+                    gci0 = model.training_dataloaders["gci0"].dataset
+                    gci2 = model.training_dataloaders["gci2"].dataset
+                    self.assertIn([classes[ns + "B"], classes[ns + "C"]], gci0.data.tolist())
+                    self.assertEqual(len(gci0), 4)
+                    self.assertEqual(len(gci2), 1)
+                    auxiliary = next(iter(classes.keys() - model.named_class_index_dict.keys()))
+                    self.assertEqual(gci2.data.tolist(), [[classes[ns + "B"],
+                                                         model.object_property_index_dict[ns + "r"],
+                                                         classes[auxiliary]]])
+                    model.module(gci2.data, "gci2").sum().backward()
+
+    def test_add_axioms_rejects_stale_structural_objective(self):
+        from mowl.models import MultiBoxEL
+        from mowl.owlapi import OWLAPIAdapter
+
+        adapter = OWLAPIAdapter()
+        dataset = Dataset(adapter.create_ontology("http://test.org/structural-update"))
+        a, b, c = [adapter.create_class(f"http://test.org/{name}") for name in "ABC"]
+        dataset.add_axioms(adapter.create_subclass_of(a, b))
+        model = MultiBoxEL(dataset, embed_dim=4, batch_size=4, objective="structural")
+        new_axiom = adapter.create_subclass_of(b, c)
+        with self.assertRaisesRegex(NotImplementedError, "structures built from its training ontology"):
+            model.add_axioms(new_axiom)
+        self.assertFalse(dataset.ontology.containsAxiom(new_axiom))

@@ -30,6 +30,12 @@ class TransBoxModule(ELModule):
 
     FORMULATIONS = ("mowl", "reference")
 
+    entity_embedding_names = (
+        ("class_center_embedding", "class_offset_embedding"),
+        ("relation_center_embedding", "relation_offset_embedding"),
+        ("ind_embedding",),
+    )
+
     neg_capable_gcis = frozenset({"gci2"})
 
     #: TransBox implements the EL++ role axiom losses, so a model built with

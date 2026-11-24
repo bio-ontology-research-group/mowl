@@ -78,6 +78,11 @@ class OctagonELModule(ELModule):
 
     neg_capable_gcis = frozenset({"gci2"})
     role_axiom_capable = False
+    entity_embedding_names = (
+        ("class_embed", "class_radius"),
+        ("rel_embed",),
+        ("ind_embed",),
+    )
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.0,
                  disjoint_margin=None, neg_margin=0.1, init_radius=0.5, min_width=0.0):

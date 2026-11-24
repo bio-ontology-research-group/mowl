@@ -58,6 +58,8 @@ class CanonicalMixture(EmbeddingELModel):
       :attr:`MembershipStructure.M`).
     """
 
+    _supports_axiom_updates = False
+
     def __init__(
         self,
         dataset,

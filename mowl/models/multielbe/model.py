@@ -227,6 +227,7 @@ class MultiELBE(EmbeddingELModel):
         self.volume_reg = float(volume_reg)
         self.points_per_epoch = int(points_per_epoch)
         self.points_seed = int(points_seed)
+        self._supports_axiom_updates = self.objective == "axiom"
         self._point_supervision: Optional[PointSupervision] = None
         self._loaded = False
         self.extended = False

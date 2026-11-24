@@ -95,6 +95,11 @@ class PrismModule(ELModule):
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
     role_axiom_capable = False
+    entity_embedding_names = (
+        ("tri_center", "tri_inradius", "box_center", "box_offset"),
+        ("rel_embed",),
+        ("ind_embed",),
+    )
 
     def __init__(
         self,

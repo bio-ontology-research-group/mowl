@@ -324,6 +324,7 @@ class MultiBoxEL(EmbeddingELModel):
         self.existence_weight = existence_weight
         self.size_reg = size_reg
         self.reseed_every = reseed_every
+        self._supports_axiom_updates = self.objective == "axiom"
         self.canonical_model = canonical_model
         self.bot_agg = bot_agg
         self.witness_weight = float(witness_weight)
