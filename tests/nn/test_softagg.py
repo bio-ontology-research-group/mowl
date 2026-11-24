@@ -1,6 +1,8 @@
 """Unit tests for soft component aggregation and diversity regularisation."""
 from __future__ import annotations
 
+import math
+
 import pytest
 import torch
 
@@ -54,6 +56,8 @@ def test_softmin_limits() -> None:
     sm_high = softmin(v, tau=1e4, dim=1)
     mean_v = v.mean(dim=1)
     assert torch.allclose(sm_high, mean_v, atol=1e-3, rtol=1e-3)
+    reference = -1e4 * (torch.logsumexp(-v.double() / 1e4, dim=1) - math.log(v.size(1)))
+    torch.testing.assert_close(sm_high, reference.to(v.dtype), atol=1e-5, rtol=1e-5)
 
     w = soft_weights(v, tau=0.5, dim=1)
     assert w.shape == v.shape

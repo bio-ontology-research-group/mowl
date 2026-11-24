@@ -135,7 +135,18 @@ def softmin(
     if k == 1:
         return v if keepdim else v.squeeze(dim)
     lse = th.logsumexp(-v / tau_f, dim=dim, keepdim=keepdim)
-    return -tau_f * (lse - math.log(k))
+    result = -tau_f * (lse - math.log(k))
+    if tau_f < 1e3 or not v.is_floating_point():
+        return result
+
+    # At high temperatures the subtraction above can lose the small correction
+    # to log(k). Compute it directly when the scaled score gaps are small.
+    minimum = v.amin(dim=dim, keepdim=True)
+    correction = th.expm1(-(v - minimum) / tau_f).mean(dim=dim, keepdim=keepdim)
+    if not keepdim:
+        minimum = minimum.squeeze(dim)
+    near_mean = minimum - tau_f * th.log1p(correction.clamp_min(-0.5))
+    return th.where(correction >= -0.5, near_mean, result)
 
 
 def soft_weights(
