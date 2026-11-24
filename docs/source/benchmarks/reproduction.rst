@@ -134,6 +134,16 @@ Runs that cannot be made
 * **HiT and OnT** need the optional language-model packages and a GPU with enough memory
   for the encoder.
 
+Open defects seen in the joint benchmarks
+-----------------------------------------
+
+* **Concept2Box** with the default settings does not train on GO, GALEN and ANATOMY: the
+  loss stays at 2.0 from the first epoch and every candidate gets the same score (AUC 0.50).
+  On small ontologies and with the recipe of the paper it trains.
+* **BoxSEL** trains on the joint benchmarks (the loss falls) but ranks at chance level
+  (AUC 0.50): the scores of subsumptions are almost all zero. BoxEL, which shares its
+  geometry, reaches an AUC of 0.90 on the same benchmark.
+
 Numbers
 -------
 
