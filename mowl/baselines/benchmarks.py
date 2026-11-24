@@ -119,6 +119,7 @@ DIRECT_REGIMES = {
     "mowl.training.loss_forms": "mowl.baselines.training.loss_forms",
     "mowl.training.selection": "mowl.baselines.training.selection",
     "mowl.training.kbc": "mowl.baselines.training.kbc",
+    "mowl.training.lm_reference": "mowl.baselines.training.lm_reference",
 }
 
 

@@ -359,6 +359,10 @@ def test_the_baseline_trains_with_the_direct_regime_where_the_library_one_needs_
     assert type(regime).__module__ == "mowl.baselines.training.dele"
     assert type(resolve_training_regime("dele-code-training", seed=0)).__module__ \
         == "mowl.training.dele"
+    # the regimes of the language-model reference codes accept the models of their own side
+    for key in ("hit-code-training", "ont-code-training"):
+        assert type(resolve_training_regime(key, seed=0, implementation=baseline)).__module__ \
+            == "mowl.baselines.training.lm_reference"
 
 
 def test_the_baseline_modules_are_ranked_by_the_same_published_scores():
