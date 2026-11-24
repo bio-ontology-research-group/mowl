@@ -2,9 +2,9 @@
 
 Implements the constructive convex polyhedral interpretation of
 Gutiérrez-Basulto & Schockaert (KR 2018, Proposition 3) restated in standard
-simplex coordinates (Spec §5.3, Lacerda, Ozaki & Guimarães, TGDK 2024, §5).
+simplex coordinates (Lacerda, Ozaki & Guimarães, TGDK 2024, §5).
 
-Construction (Spec §5.3):
+Construction:
 - Given a :class:`~mowl.geometric.completion.CanonicalModel` with
   :math:`n = |\\text{cm.names}|` satisfiable concept names (including
   :math:`\\top`), let :math:`k = n - 1` be the ambient dimension and
@@ -149,7 +149,7 @@ class ConvexPolyhedralModel(GeometricInterpretation):
         self._empty_role: PairHull = PairHull(np.zeros((0, 2 * k), dtype=float))
 
         self._class_regions: Dict[str, Face] = {}
-        for cname in cm.concept_names:
+        for cname in set(cm.concept_names) | set(cm.names):
             if cname == BOTTOM:
                 self._class_regions[cname] = self._empty_face
             elif cname == TOP:

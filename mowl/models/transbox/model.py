@@ -27,6 +27,14 @@ class TransBox(EmbeddingELModel):
         ``role_axiom_capable``, so ``TransBox`` accepts ``load_role_axioms=True`` to
         train on role inclusions and chains alongside the concept normal forms.
 
+    .. note::
+        ``formulation="reference"`` switches to the loss functions and the
+        initialisation of the authors' code (see :class:`~mowl.nn.TransBoxModule` and
+        :mod:`mowl.nn.el.transbox.code_losses`). Train it with the regime
+        :class:`~mowl.training.TransBoxCodeTraining`, which squares the losses per axiom
+        and pushes negatives to a target; the default ``"mowl"`` formulation is
+        unchanged.
+
     """
 
     def __init__(self,
@@ -40,7 +48,8 @@ class TransBox(EmbeddingELModel):
                  neg_sampling_gcis=None,
                  use_enhancement=True,
                  reg_factor=0.1,
-                 load_role_axioms=False
+                 load_role_axioms=False,
+                 formulation="mowl"
                  ):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
@@ -57,6 +66,7 @@ class TransBox(EmbeddingELModel):
         self.margin = margin
         self.use_enhancement = use_enhancement
         self.reg_factor = reg_factor
+        self.formulation = formulation
         self.init_module()
 
     def init_module(self):
@@ -68,4 +78,5 @@ class TransBox(EmbeddingELModel):
             margin=self.margin,
             use_enhancement=self.use_enhancement,
             reg_factor=self.reg_factor,
+            formulation=self.formulation,
         ).to(self.device)

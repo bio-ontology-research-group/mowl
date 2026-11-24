@@ -373,6 +373,62 @@ class TestElNormalizerCaching(TestCase):
         self.assertEqual(len(normalized_axioms["gci0"]), 7)
         self.assertEqual(len(normalized_axioms["gci1"]), 2)
 
+    def _relative_iri_ontology(self, name):
+        """An ontology whose classes have relative IRIs (as the DELE GO & STRING and
+        FoodOn training files, which name the classes introduced by their normalisation
+        ``A01lu`` etc.), with a GCI1 and a GCI3 over them."""
+        ad = self.adapter
+        df = ad.data_factory
+        ont = ad.create_ontology("urn:absolute:relative_iris_" + name)
+        a = df.getOWLClass(IRI.create("A01lu"))
+        b = df.getOWLClass(IRI.create("mwwoQ"))
+        go1 = ad.create_class("http://purl.obolibrary.org/obo/GO_1")
+        go2 = ad.create_class("http://purl.obolibrary.org/obo/GO_2")
+        r = ad.create_object_property("http://purl.obolibrary.org/obo/RO_1")
+        ad.owl_manager.addAxiom(ont, ad.create_subclass_of(go1, go2))
+        ad.owl_manager.addAxiom(ont, ad.create_subclass_of(
+            df.getOWLObjectIntersectionOf(a, go1), go2))
+        ad.owl_manager.addAxiom(ont, ad.create_subclass_of(
+            ad.create_object_some_values_from(r, go1), b))
+        return ont
+
+    def test_cache_keeps_relative_iris(self):
+        """Normalised axioms loaded from the cache name the same entities as the
+        ontology, also for relative IRIs."""
+        import os
+        ont = self._relative_iri_ontology("roundtrip")
+        path = os.path.join(self.temp_dir, "relative.owl")
+        first = ELNormalizer().normalize(ont, ontology_path=path)
+        second = ELNormalizer().normalize(ont, ontology_path=path)
+        for key in ("gci0", "gci1", "gci3"):
+            self.assertEqual(len(first[key]), 1)
+            self.assertEqual(sorted(str(g.owl_axiom) for g in first[key]),
+                             sorted(str(g.owl_axiom) for g in second[key]))
+        self.assertEqual(second["gci1"][0].left_subclass, "A01lu")
+        self.assertEqual(second["gci3"][0].superclass, "mwwoQ")
+
+    def test_stale_rdfxml_cache_is_replaced(self):
+        """A cache written in RDF/XML (as mOWL did before) renames relative IRIs on
+        reloading; such a cache is detected, the ontology normalised again and the cache
+        replaced."""
+        import os
+        from org.semanticweb.owlapi.apibinding import OWLManager
+        ont = self._relative_iri_ontology("stale")
+        path = os.path.join(self.temp_dir, "relative.owl")
+        normalizer = ELNormalizer()
+        cache_path = normalizer.get_cache_path(path)
+        manager = OWLManager.createOWLOntologyManager()
+        stale = manager.createOntology()
+        for ax in ont.getAxioms():
+            manager.addAxiom(stale, ax)
+        manager.saveOntology(stale, IRI.create("file:" + os.path.abspath(cache_path)))
+        with self.assertLogs("mowl.ontology.normalize", level="WARNING") as log:
+            normalized = normalizer.normalize(ont, ontology_path=path)
+        self.assertTrue(any("Normalising again" in r.getMessage() for r in log.records))
+        self.assertEqual(normalized["gci1"][0].left_subclass, "A01lu")
+        again = ELNormalizer().normalize(ont, ontology_path=path)
+        self.assertEqual(again["gci3"][0].superclass, "mwwoQ")
+
     def test_normalize_loads_from_cache(self):
         """Test that normalize loads from cache file when it exists"""
         import os

@@ -21,6 +21,7 @@ from mowl.geometric import (
     checker,
     export,
     helly,
+    init,
     intervals,
     normal_forms,
     polyhedral,
@@ -39,6 +40,7 @@ from mowl.geometric.errors import (
     MissingDependency,
     NotBoxRepresentable,
     UnsupportedAxiom,
+    UnsupportedAxiomError,
     UnsupportedRegion,
 )
 from mowl.geometric.export import (
@@ -46,7 +48,13 @@ from mowl.geometric.export import (
     class_points,
     to_bounding_boxes,
 )
-from mowl.geometric.helly import HellyCertificate, HellyReport, helly_check
+from mowl.geometric.helly import (
+    HellyCertificate,
+    HellyReport,
+    certificate_triangles,
+    helly_check,
+)
+from mowl.geometric.init import ExactBoxInit
 from mowl.geometric.intervals import IntervalUnionModel
 from mowl.geometric.normal_forms import (
     BOTTOM,
@@ -56,9 +64,13 @@ from mowl.geometric.normal_forms import (
     NF4,
     NF6,
     NF7,
+    NOMINAL_PREFIX,
     TOP,
     Axiom,
     NormalisedOntology,
+    individual_of_name,
+    is_nominal_name,
+    nominal_name,
     normalise,
     to_owl,
 )
@@ -102,6 +114,7 @@ __all__ = [
     "ConvexPolyhedralModel",
     "DictInterpretation",
     "EMPTY_1D",
+    "ExactBoxInit",
     "Face",
     "GeometricError",
     "GeometricInterpretation",
@@ -119,6 +132,7 @@ __all__ = [
     "NF4",
     "NF6",
     "NF7",
+    "NOMINAL_PREFIX",
     "NormalisedOntology",
     "NotBoxRepresentable",
     "PairHull",
@@ -126,16 +140,22 @@ __all__ = [
     "TOP",
     "ThickFace",
     "UnsupportedAxiom",
+    "UnsupportedAxiomError",
     "UnsupportedRegion",
     "boxes",
     "boxes_as_tensors",
+    "certificate_triangles",
     "checker",
     "class_points",
     "completion",
     "export",
     "helly",
     "helly_check",
+    "individual_of_name",
+    "init",
     "intervals",
+    "is_nominal_name",
+    "nominal_name",
     "normal_forms",
     "normalise",
     "polyhedral",

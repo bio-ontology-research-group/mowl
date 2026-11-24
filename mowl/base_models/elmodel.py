@@ -91,6 +91,7 @@ entities of their own cannot be indexed and are skipped (see :class:`~mowl.datas
     #: Normal forms that are loaded only when ``load_role_axioms=True`` and that require a
     #: module declaring :attr:`role_axiom_capable <mowl.nn.ELModule.role_axiom_capable>`.
     ROLE_AXIOM_GCIS = ("role_inclusion", "role_chain")
+    _supports_axiom_updates = True
 
     def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None,
                  load_normalized=False, device="cpu", learning_rate=0.001,
@@ -231,6 +232,7 @@ training ontology.
         training_el_dataset = ELDataset(self.dataset.ontology,
                                         self.class_index_dict,
                                         self.object_property_index_dict,
+                                        individual_index_dict=self.individual_index_dict,
                                         extended=self._extended,
                                         load_normalized=self.load_normalized,
                                         device=self.device,
@@ -244,6 +246,7 @@ training ontology.
         if self.dataset.validation:
             validation_el_dataset = ELDataset(self.dataset.validation, self.class_index_dict,
                                               self.object_property_index_dict,
+                                              individual_index_dict=self.individual_index_dict,
                                               extended=self._extended, device=self.device,
                                               ontology_path=validation_path,
                                               load_role_axioms=self.load_role_axioms)
@@ -254,6 +257,7 @@ training ontology.
         if self.dataset.testing:
             testing_el_dataset = ELDataset(self.dataset.testing, self.class_index_dict,
                                            self.object_property_index_dict,
+                                           individual_index_dict=self.individual_index_dict,
                                            extended=self._extended, device=self.device,
                                            ontology_path=testing_path,
                                            load_role_axioms=self.load_role_axioms)
@@ -357,6 +361,52 @@ of :class:`torch.utils.data.DataLoader`
         return self._testing_dataloaders
 
     # ==================== Training Methods ====================
+
+    @property
+    def training_regime(self):
+        """The :class:`~mowl.training.TrainingRegime` used by :meth:`train`, or ``None`` \
+(the default) to train with the model's own behaviour.
+
+        Assigning a regime calls its :meth:`~mowl.training.TrainingRegime.attach` method with \
+this model; assigning ``None`` removes it. The generic training loop of :meth:`train` then \
+consults the regime's hooks:
+
+        - ``training_datasets(datasets)`` once per call of :meth:`train`, to obtain the \
+datasets to train on;
+        - ``negatives(gci_name, gci_dataset)`` for every axiom type and epoch; \
+``NotImplemented`` falls back to :meth:`generate_negatives`;
+        - ``filter_negatives(gci_name, gci_dataset, negatives)`` on the negatives obtained \
+either way, before they are scored;
+        - ``loss(gci_name, pos_scores, neg_scores)``; ``NotImplemented`` falls back to \
+:meth:`compute_loss`;
+        - ``on_epoch_start(epoch, epochs)``, called after the model's own \
+:meth:`on_epoch_start`;
+        - ``additional_loss(epoch)``, added to the model's own \
+:meth:`additional_training_loss`;
+        - ``optimizer()``; ``NotImplemented`` falls back to :meth:`get_optimizer`;
+        - ``should_stop(epoch)`` at the end of every epoch, after validation; ``True`` \
+ends training;
+        - ``on_train_end()`` once after the last epoch, also after an early stop;
+        - ``score_negatives_like_positives``: if ``True``, negatives are scored with the \
+positive form of the loss (``module(neg_data, gci_name)``) before being passed to \
+``loss``, instead of ``module(neg_data, gci_name, neg=True)``.
+
+        Without a regime, :meth:`train` behaves exactly as before regimes existed. Models \
+that override :meth:`train` with a loop of their own may ignore the regime.
+
+        :rtype: :class:`~mowl.training.TrainingRegime` or None
+        """
+        return getattr(self, "_training_regime", None)
+
+    @training_regime.setter
+    def training_regime(self, regime):
+        if regime is not None:
+            from mowl.training.regime import TrainingRegime
+            if not isinstance(regime, TrainingRegime):
+                raise TypeError("training_regime must be a mowl.training.TrainingRegime "
+                                "or None.")
+            regime.attach(self)
+        self._training_regime = regime
 
     def get_negative_sampling_config(self):
         """Returns the active negative sampling configuration.
@@ -578,6 +628,34 @@ of :class:`torch.utils.data.DataLoader`
         """
         return th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
 
+    def on_epoch_start(self, epoch, epochs):
+        """Hook called at the beginning of each training epoch.
+
+        Override this method in subclasses to update schedules (e.g.,
+        temperature annealing) before each epoch's forward pass. The default
+        implementation is a no-op.
+
+        :param epoch: 0-based index of the current epoch
+        :type epoch: int
+        :param epochs: Total number of epochs in the current :meth:`train` run
+        :type epochs: int
+        """
+        return None
+
+    def additional_training_loss(self, epoch):
+        """Return an optional extra loss term added to the GCI loss each epoch.
+
+        Override this method in subclasses to inject auxiliary objectives
+        (e.g., canonical-element point supervision) before regularization and
+        backpropagation. Return ``None`` when no extra term is active.
+
+        :param epoch: 0-based index of the current epoch
+        :type epoch: int
+        :return: Scalar loss tensor to add to the epoch loss, or ``None``
+        :rtype: torch.Tensor or None
+        """
+        return None
+
     def train(self, epochs, validate_every=1, epoch_callback=None):
         """Train the model.
 
@@ -586,8 +664,13 @@ of :class:`torch.utils.data.DataLoader`
         - :meth:`get_negative_sampling_config`: Configure which GCIs need negatives
         - :meth:`generate_negatives`: Custom negative sampling strategy
         - :meth:`compute_loss`: Custom loss computation (e.g., MSE loss)
+        - :meth:`on_epoch_start`: Per-epoch setup hook (e.g., temperature annealing)
+        - :meth:`additional_training_loss`: Extra per-epoch loss term
         - :meth:`get_regularization_loss`: Add regularization
         - :meth:`get_optimizer`: Use different optimizer
+
+        A :attr:`training_regime` assigned to the model can replace or extend each of these \
+        steps without subclassing; see :attr:`training_regime`.
 
         :param epochs: Number of training epochs
         :type epochs: int
@@ -645,23 +728,36 @@ of :class:`torch.utils.data.DataLoader`
             num_columns = data.shape[1] if data is not None and data.dim() == 2 else None
             self._resolve_neg_config(gci_name, num_columns=num_columns, require_pool=False)
 
+        # Training regime (None by default: every hook below falls back to the model)
+        regime = self.training_regime
+        training_datasets = self.training_datasets
+        if regime is not None:
+            training_datasets = regime.training_datasets(training_datasets)
+
         # Log dataset sizes
-        points_per_dataset = {k: len(v) for k, v in self.training_datasets.items()}
+        points_per_dataset = {k: len(v) for k, v in training_datasets.items()}
         string = "Training datasets: \n"
         for k, v in points_per_dataset.items():
             string += f"\t{k}: {v}\n"
         logger.info(string)
 
-        optimizer = self.get_optimizer()
+        optimizer = NotImplemented
+        if regime is not None:
+            optimizer = regime.optimizer()
+        if optimizer is NotImplemented:
+            optimizer = self.get_optimizer()
         best_loss = float('inf')
 
         for epoch in trange(epochs):
             self.module.train()
+            self.on_epoch_start(epoch, epochs)
+            if regime is not None:
+                regime.on_epoch_start(epoch, epochs)
 
             train_loss = 0
             loss = th.tensor(0.0, device=self.device)
 
-            for gci_name, gci_dataset in self.training_datasets.items():
+            for gci_name, gci_dataset in training_datasets.items():
                 if len(gci_dataset) == 0:
                     continue
 
@@ -669,12 +765,34 @@ of :class:`torch.utils.data.DataLoader`
                 pos_scores = self.module(gci_dataset[:], gci_name)
 
                 # Generate and compute negative loss if applicable
-                neg_data = self.generate_negatives(gci_name, gci_dataset)
+                neg_data = NotImplemented
+                if regime is not None:
+                    neg_data = regime.negatives(gci_name, gci_dataset)
+                if neg_data is NotImplemented:
+                    neg_data = self.generate_negatives(gci_name, gci_dataset)
+                if regime is not None:
+                    neg_data = regime.filter_negatives(gci_name, gci_dataset, neg_data)
                 neg_scores = None
                 if neg_data is not None:
-                    neg_scores = self.module(neg_data, gci_name, neg=True)
+                    if regime is not None and regime.score_negatives_like_positives:
+                        neg_scores = self.module(neg_data, gci_name)
+                    else:
+                        neg_scores = self.module(neg_data, gci_name, neg=True)
 
-                loss = loss + self.compute_loss(pos_scores, neg_scores)
+                gci_loss = NotImplemented
+                if regime is not None:
+                    gci_loss = regime.loss(gci_name, pos_scores, neg_scores)
+                if gci_loss is NotImplemented:
+                    gci_loss = self.compute_loss(pos_scores, neg_scores)
+                loss = loss + gci_loss
+
+            extra_loss = self.additional_training_loss(epoch)
+            if extra_loss is not None:
+                loss = loss + extra_loss
+            if regime is not None:
+                regime_extra_loss = regime.additional_loss(epoch)
+                if regime_extra_loss is not None:
+                    loss = loss + regime_extra_loss
 
             # Add regularization loss
             loss = loss + self.get_regularization_loss()
@@ -708,6 +826,12 @@ of :class:`torch.utils.data.DataLoader`
                     print(f'Epoch {epoch+1}: Train loss: {train_loss} Valid loss: {valid_loss}')
                 else:
                     print(f'Epoch {epoch+1}: Train loss: {train_loss}')
+
+            if regime is not None and regime.should_stop(epoch):
+                break
+
+        if regime is not None:
+            regime.on_train_end()
 
     def eval_method(self, data):
         """Evaluation method used for scoring. Override if needed.
@@ -919,6 +1043,11 @@ of :class:`torch.utils.data.DataLoader`
         additions = {axiom for axiom in axioms if not ontology.containsAxiom(axiom)}
         if not additions:
             return
+        if not self._supports_axiom_updates:
+            raise NotImplementedError(
+                f"{type(self).__name__} uses structures built from its training ontology. "
+                "Create a new model for the updated ontology."
+            )
 
         old_indices = (self.class_index_dict, self.object_property_index_dict, self.individual_index_dict)
         named_additions = {str(entity.toStringID()) for axiom in additions for entity in axiom.getSignature()}
@@ -964,7 +1093,7 @@ of :class:`torch.utils.data.DataLoader`
                 old_module.entity_embedding_names, old_indices, new_indices):
             common = old_index.keys() & new_index.keys()
             for name in embedding_names:
-                key = f"{name}.weight"
+                key = name if name in old_state else f"{name}.weight"
                 if key not in old_state:
                     continue
                 source = old_state.pop(key)

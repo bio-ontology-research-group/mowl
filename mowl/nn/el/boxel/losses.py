@@ -45,6 +45,41 @@ def inclusion_loss(boxes_c, boxes_d, temperature):
     log_box_c = th.log(th.clamp(volumes(boxes_c, temperature), 1e-10, 1e4))
     return 1-th.exp(log_intersection-log_box_c)
 
+def box2el_code_side_regularizer(box):
+    """The regulariser of the BoxEL baseline of the Box2EL code (``model/BoxEL.py``,
+    ``l2_side_regularizer``) for a batch of boxes: the mean excess of the upper corners
+    over 1 plus the excess of the Frobenius norm of the batch's lower corners over 1 (one
+    scalar per batch, not per box)."""
+    return (th.mean(F.relu(box.max_embed - 1 + eps))
+            + F.relu(th.linalg.norm(box.min_embed) - 1))
+
+
+def axiom_boxes(gci_name, data, min_embed, delta_embed, relation_embed, scaling_embed):
+    """The boxes that the Box2EL code regularises for a batch of axioms of one normal
+    form (``model/BoxEL.py``, ``nf*_loss``): the classes of the axiom, the intersection
+    box of :math:`C \\sqcap D` and the translated box of :math:`C`."""
+    def box(col):
+        return Box(min_embed(data[:, col]), delta_embed=delta_embed(data[:, col]))
+
+    if gci_name in ("gci0", "gci1_bot"):
+        return [box(0), box(1)]
+    if gci_name == "gci1":
+        c, d = box(0), box(1)
+        return [intersection(c, d), c, d, box(2)]
+    if gci_name == "gci2":
+        c, d = box(0), box(2)
+        rel, scale = relation_embed(data[:, 1]), scaling_embed(data[:, 1])
+        trans = Box(c.min_embed * (scale + eps) + rel, max_embed=c.max_embed * (scale + eps) + rel)
+        return [trans, c, d]
+    if gci_name == "gci3":
+        c, d = box(1), box(2)
+        rel, scale = relation_embed(data[:, 0]), scaling_embed(data[:, 0])
+        trans = Box((c.min_embed - rel) / (scale + eps),
+                    max_embed=(c.max_embed - rel) / (scale + eps))
+        return [trans, c, d]
+    return []
+
+
 def regularization_loss(min_embed, delta_embed, log_scale=True):
     min_embed = min_embed.weight
     delta_embed = delta_embed.weight
@@ -142,7 +177,9 @@ def gci3_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, tempe
     
     trans_c_min = (boxes_c.min_embed - relation)/(scaling + eps)
     trans_c_max = (boxes_c.max_embed - relation)/(scaling + eps)
-    trans_boxes = Box(trans_c_min, trans_c_max)
+    # The upper corner is passed by keyword: as a positional argument it was taken as the
+    # log-width (delta_embed), which made the translated box min + exp(max) wide.
+    trans_boxes = Box(trans_c_min, max_embed=trans_c_max)
     return inclusion_loss(trans_boxes, boxes_d, temperature)
 
 def gci3_bot_loss(*args, **kwargs):

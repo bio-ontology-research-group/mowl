@@ -1,9 +1,9 @@
 """MILP-based axis-aligned box-model construction with Helly pre-check.
 
 Implements the MILP search for axis-parallel box models of propositional EL
-ontologies and the :class:`BoxModel` interpretation of Spec §5.3 (G5).
+ontologies and the :class:`BoxModel` interpretation.
 
-Contract and mathematical guarantees (Spec §5.3 [v2, contract corrected]):
+Contract and mathematical guarantees:
 - By Helly's theorem for axis-parallel boxes in :math:`\\mathbb{R}^d` (Helly
   number 2; Eckhoff 1988; Leemhuis & Kutz, NeSy 2025, Defs. 3, 6; Prop. 4),
   box semantics always satisfy Helly's property. Consequently, an ontology that
@@ -196,10 +196,11 @@ class BoxModel(GeometricInterpretation):
 
     @property
     def class_regions(self) -> Dict[str, Box]:
-        """Return a copy of the mapping from known concept names to :class:`~mowl.geometric.regions.Box` regions."""
+        """Return a copy of the mapping from known concept and nominal names to :class:`~mowl.geometric.regions.Box` regions."""
         out: Dict[str, Box] = {
             cname: self.class_region(cname)
-            for cname in self.canonical_model.concept_names
+            for cname in set(self.canonical_model.concept_names)
+            | set(self.canonical_model.names)
         }
         out[TOP] = self._universe
         out[BOTTOM] = self._empty_box
@@ -260,7 +261,7 @@ class BoxModel(GeometricInterpretation):
 class BoxModelBuilder:
     """MILP builder searching for an axis-parallel :class:`BoxModel` after a Helly pre-check.
 
-    Contract (Spec §5.3 [v2, contract corrected]; Leemhuis & Kutz, NeSy 2025,
+    Contract (Leemhuis & Kutz, NeSy 2025,
     Prop. 4 & Prop. 5):
     - Raises :class:`~mowl.geometric.errors.UnsupportedAxiom` if ``cm.axioms``
       contains any role axiom (:class:`~mowl.geometric.normal_forms.NF3`,

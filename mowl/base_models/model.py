@@ -33,6 +33,52 @@ class Model():
         self._evaluator = None
         self._evaluation_model = None
         self._metrics = None
+        self.expressivity_report = None
+        if Model.check_expressivity_on_init:
+            self.check_expressivity()
+
+    #: If ``True`` (default), every model compares its ontology with the expressivity its
+    #: method supports when it is created, and warns if axioms go beyond it (they are
+    #: ignored or only partly used). Set ``mowl.base_models.model.Model
+    #: .check_expressivity_on_init = False`` to switch the check off.
+    check_expressivity_on_init = True
+
+    @property
+    def card(self):
+        """The catalogue card (:class:`mowl.catalog.MethodCard`) of this method, or
+        ``None`` if the class is not catalogued."""
+        from mowl.catalog import card_for
+        return card_for(type(self))
+
+    @property
+    def expressivity(self):
+        """The :class:`mowl.logic.Expressivity` this method supports, or ``None`` if it is
+        not catalogued or not defined on a description logic."""
+        card = self.card
+        return None if card is None else card.supported_expressivity
+
+    def check_expressivity(self, warn=True):
+        """Compare the training ontology with the expressivity this method supports.
+
+        Axioms that use constructs outside the supported logic are ignored, or only partly
+        used, by the method. The result is stored in :attr:`expressivity_report`.
+
+        :param warn: Emit a :class:`UserWarning` that lists the axiom types and constructs
+            outside the supported logic.
+        :returns: A :class:`mowl.logic.ExpressivityReport`, or ``None`` if the method
+            states no expressivity.
+        """
+        from mowl.logic import check_ontology
+        supported = self.expressivity
+        if supported is None:
+            return None
+        self.expressivity_report = check_ontology(self.dataset.ontology, supported,
+                                                  warn=False)
+        if warn and not self.expressivity_report.ok:
+            import warnings
+            warnings.warn(f"{type(self).__name__}: {self.expressivity_report.summary()}",
+                          UserWarning, stacklevel=3)
+        return self.expressivity_report
 
     def train(self, *args, **kwargs):
         '''Abstract method for training the model. This method must be implemented in children classes

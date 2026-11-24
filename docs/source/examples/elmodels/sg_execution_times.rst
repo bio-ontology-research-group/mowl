@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:17.565** total execution time for 3 files **from examples/elmodels**:
+**08:54.512** total execution time for 4 files **from examples/elmodels**:
 
 .. container::
 
@@ -32,12 +32,15 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_examples_elmodels_plot_4_multibox_structural_tk.py` (``plot_4_multibox_structural_tk.py``)
+     - 08:54.512
+     - 128.6
    * - :ref:`sphx_glr_examples_elmodels_plot_1_elembeddings.py` (``plot_1_elembeddings.py``)
-     - 00:41.451
-     - 3118.8
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_examples_elmodels_plot_2_elboxembeddings.py` (``plot_2_elboxembeddings.py``)
-     - 00:36.113
-     - 638.1
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_examples_elmodels_plot_3_el_geometry.py` (``plot_3_el_geometry.py``)
      - 00:00.000
      - 0.0

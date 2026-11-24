@@ -20,6 +20,26 @@ class BoxELModule(ELModule):
         ("ind_embedding", "ind_delta_embedding"),
     )
 
+    #: Which regulariser is used: ``"global"`` (default), the mean over all class boxes of
+    #: the excess of the upper corners over 1 and of negative lower corners, once per step;
+    #: or ``"box2el_code"``, the regulariser of the BoxEL baseline of the
+    #: Box\ :sup:`2`\ EL code (:func:`~mowl.nn.el.boxel.losses.box2el_code_side_regularizer`
+    #: of every box of every batch, including negatives, intersections and translated
+    #: boxes). Set by the training regime :class:`~mowl.training.Box2ELBaselineLosses`.
+    regulariser = "global"
+
+    def _record_regulariser(self, gci_name, data):
+        if self.regulariser != "box2el_code" or not (self.training and th.is_grad_enabled()):
+            return
+        boxes = L.axiom_boxes(gci_name, data, self.min_embedding, self.delta_embedding,
+                              self.relation_embedding, self.scaling_embedding)
+        for box in boxes:
+            self._pending_regulariser = (self._pending_regulariser
+                                         + L.box2el_code_side_regularizer(box))
+
+    def forward(self, gci, gci_name, neg=False):
+        self._record_regulariser(gci_name, gci)
+        return super().forward(gci, gci_name, neg=neg)
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50,
                  min_bounds=[1e-4, 0.2], delta_bounds=[-0.1, 0],
                  relation_bounds=[-0.1, 0.1],
@@ -30,6 +50,7 @@ class BoxELModule(ELModule):
         self.nb_inds = nb_inds
         self.embed_dim = embed_dim
         self.temperature = temperature
+        self._pending_regulariser = 0
         
         self.min_embedding = self.init_entity_embedding(nb_ont_classes, embed_dim, min_bounds)
         self.delta_embedding = self.init_entity_embedding(nb_ont_classes, embed_dim, delta_bounds)
@@ -83,4 +104,11 @@ class BoxELModule(ELModule):
         return L.object_property_assertion_loss(data, self.ind_embedding, self.ind_delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg)
 
     def regularization_loss(self):
+        if self.regulariser == "box2el_code":
+            # The terms recorded for the batches of this step (see _record_regulariser).
+            out = self._pending_regulariser
+            self._pending_regulariser = 0
+            if isinstance(out, int):
+                return th.zeros((), device=self.min_embedding.weight.device)
+            return out
         return L.regularization_loss(self.min_embedding, self.delta_embedding)

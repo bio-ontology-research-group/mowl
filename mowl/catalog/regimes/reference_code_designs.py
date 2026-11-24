@@ -1,0 +1,299 @@
+"""Regime cards: training and evaluation designs that the Box2EL and TransBox numbers
+depend on, found by comparing the reference code with the papers."""
+
+from mowl.catalog.card import RegimeCard, RegimeKind, Guarantee, GuaranteeKind
+from mowl.catalog.regimes._regime_refs import JACKERMEIER2024, YANG2025, YANG2025_REGD
+
+_ZERO_LOSS = Guarantee(
+    GuaranteeKind.REGIME_PROPERTY,
+    "With a slack margin γ > 0 the inclusion loss is zero whenever the first box exceeds "
+    "the second by at most γ in every dimension. Zero loss therefore does not imply that "
+    "the axiom holds, and a zero-loss embedding need not be a model of the ontology.",
+    "by inspection of the loss ‖max(0, |c1 − c2| + o1 − o2 − γ)‖ (Jackermeier et al. "
+    "2024, Section 3.2)",
+    "margin > 0")
+
+REGIMES = (
+    RegimeCard(
+        key="slack-inclusion-margin",
+        name="Slack margin on inclusions",
+        kind=RegimeKind.TRAINING,
+        summary=(
+            "The margin γ loosens every inclusion loss: a box may stick out of the box "
+            "that should contain it by up to γ. Training then pulls centres together "
+            "without having to nest the regions, which suits evaluations that rank by "
+            "centre distance, but the result is in general not a model."),
+        components=("loss", "margin"),
+        applies_to="EL modules that declare margin_semantics (ELEm, EmEL++, ELBE, "
+                   "Box2EL, TransBox)",
+        references=(JACKERMEIER2024, YANG2025),
+        standalone=False,
+        introduced_with=("elem",),
+        used_by=("box2el", "elbe", "emelpp", "transbox"),
+        implementation="mowl.training.margin.SlackMargin",
+        properties=(_ZERO_LOSS,),
+        limitations=(
+            "The soundness statements of the methods ('zero loss implies a model') hold "
+            "for margin ≤ 0 only.",),
+        notes=(
+            "Sign conventions differ between code bases. Slack: ELEmbeddings, Box2EL "
+            "(paper and code), the ELBE baseline in the Box2EL code (model/Elbe.py, "
+            "'euc + cr - dr - margin'), the TransBox code (model/TransBox_reg.py). "
+            "Strict: the ELBE code of Peng et al. ('+ margin'), the loss as written in "
+            "the TransBox paper (Section 4.3), and mOWL's ELBE and TransBox modules. The "
+            "regime sets the margin by meaning, whatever the module's convention. The "
+            "published Box2EL-benchmark numbers of ELBE and TransBox were obtained with "
+            "a slack margin."),
+    ),
+    RegimeCard(
+        key="strict-inclusion-margin",
+        name="Strict margin on inclusions",
+        kind=RegimeKind.TRAINING,
+        summary=(
+            "The margin γ tightens every inclusion loss: a box must lie inside the box "
+            "that should contain it with a gap of at least γ on every side."),
+        components=("loss", "margin"),
+        applies_to="EL modules that declare margin_semantics",
+        references=(YANG2025,),
+        standalone=False,
+        introduced_with=("elbe",),
+        used_by=("transbox",),
+        implementation="mowl.training.margin.StrictMargin",
+        properties=(
+            Guarantee(
+                GuaranteeKind.REGIME_PROPERTY,
+                "Zero loss implies that the inclusion holds (with a gap of γ), so the "
+                "soundness statements of the methods apply.",
+                "by inspection of the loss ‖max(0, |c1 − c2| + o1 − o2 + γ)‖",
+                "margin ≥ 0"),),
+        notes=("See slack-inclusion-margin for which code base uses which form."),
+    ),
+    RegimeCard(
+        key="box2el-code-training",
+        name="Training design of the Box2EL code",
+        kind=RegimeKind.TRAINING,
+        summary=(
+            "One step per epoch on 512 random axioms of every normal form (equal weight "
+            "per normal form), negatives for C ⊑ ∃r.D with each side corrupted, a slack "
+            "margin, optionally a per-axiom squared loss to a target (ELBE baseline) and "
+            "a learning-rate step, and selection of the parameters with the best "
+            "validation median rank of C ⊑ D every 100 epochs."),
+        components=("batching", "negative sampling", "margin", "loss", "schedule",
+                    "initialisation", "model selection"),
+        applies_to="EmbeddingELModel",
+        references=(JACKERMEIER2024,),
+        standalone=False,
+        introduced_with=("box2el",),
+        used_by=("elem", "emelpp", "elbe", "boxel"),
+        implementation="mowl.training.reference.Box2ELCodeTraining",
+        properties=(_ZERO_LOSS,),
+        limitations=(
+            "Model selection looks at C ⊑ D only; the selected parameters can be poor on "
+            "the other normal forms.",
+            "The design is tuned to centre-distance ranking and does not aim at a model "
+            "of the ontology.",
+        ),
+        notes=(
+            "From train.py, model/*.py and configs.json of KRR-Oxford/BoxSquaredEL; the "
+            "paper states the optimiser, the number of epochs and the validation "
+            "interval (Section 4.2) and refers to Appendix H for hyperparameters. A "
+            "composition of per-normal-form-minibatch, per-column-corruption, "
+            "slack-inclusion-margin, mse-to-target, step-lr-decay and "
+            "validation-rank-selection. The baselines of the code (ELEm, EmEL++, ELBE, "
+            "BoxEL) are trained with three more parts, switched on by baseline_code=True: "
+            "fixed-negatives, joint-normalised-initialisation and "
+            "box2el-baseline-losses. Without them ELEm and EmEL++ fall far below the "
+            "paper on C ⊓ D ⊑ E and ∃r.C ⊑ D, and ELEm, EmEL++ and ELBE score far above "
+            "it on GO."),
+    ),
+    RegimeCard(
+        key="transbox-code-training",
+        name="Training design of the TransBox code",
+        kind=RegimeKind.TRAINING,
+        summary=(
+            "One step per epoch on 1024 random axioms of every normal form (role "
+            "inclusions and chains included), every per-axiom loss squared, negatives "
+            "for C ⊑ ∃r.D with each side corrupted pushed to the distance neg_dist with "
+            "a squared loss, a slack margin, Adam without schedule, and selection of "
+            "the parameters with the best validation median rank of C ⊑ D every 100 "
+            "epochs. For TransBox it needs the per-axiom losses of the code "
+            "(TransBox(formulation='reference'))."),
+        components=("batching", "negative sampling", "margin", "loss",
+                    "model selection"),
+        applies_to="TransBox with formulation='reference'",
+        references=(YANG2025, JACKERMEIER2024),
+        standalone=False,
+        introduced_with=("transbox",),
+        used_by=("transbox",),
+        implementation="mowl.training.reference.TransBoxCodeTraining",
+        properties=(_ZERO_LOSS,),
+        limitations=(
+            "Model selection looks at C ⊑ D only.",
+            "The code's loss for C ⊓ D ⊑ E only asks the intersection to overlap Box(E) "
+            "(signed half-width), not to lie inside it; see "
+            "mowl.nn.el.transbox.code_losses.",
+        ),
+        notes=(
+            "From run_many_seeds.py, baseline_sweep.py, model/TransBox_reg.py and "
+            "configs_our.json (section 'transbox') of HuiYang1997/TransBox, derived from "
+            "the Box2EL code. A composition of per-normal-form-minibatch, "
+            "per-column-corruption, slack-inclusion-margin, mse-to-target (target 0 for "
+            "positives, neg_dist for negatives) and validation-rank-selection. "
+            "Differences of the code's losses from mOWL's default TransBox losses "
+            "(centre-norm term inside every axiom with weight 1, Minkowski-difference "
+            "loss for C ⊑ ∃r.D without clamping, signed intersection half-width, "
+            "overlap-shaped negative loss, regularisation of role offsets only, joint "
+            "initialisation of centre and offset) are the module option "
+            "formulation='reference'. Not replicated: negatives drawn once before "
+            "training; 1024 draws with replacement from normal forms with fewer axioms; "
+            "an (n, n) broadcast in the C ⊓ D ⊑ E loss that changes only the cross term "
+            "of the squared sum."),
+    ),
+    RegimeCard(
+        key="regd-code-training",
+        name="Training design of the RegD code",
+        kind=RegimeKind.TRAINING,
+        summary=(
+            "Class regions initialised as one unit-norm row (centre and size together), "
+            "one step per epoch on 512 random axioms of every normal form, the "
+            "softmax-energy-contrastive loss of the code on the task's normal form only "
+            "(C ⊑ D for the inference task, C ⊑ ∃r.D with the reversed inclusion for "
+            "the prediction task), the RAW (unrectified) RegD energy of the other normal "
+            "forms with squared error (box host) or plain mean (ball host), and "
+            "selection of the parameters with the best validation F1 every 100 epochs. "
+            "For the baselines (design='baseline') the negative sampling, losses and "
+            "margins of the Box2EL-derived code in the same loop."),
+        components=("initialisation", "batching", "negative sampling", "loss",
+                    "model selection"),
+        applies_to="RegD models (design='regd'), ELBE / ELEm (design='baseline')",
+        references=(YANG2025_REGD, JACKERMEIER2024),
+        standalone=False,
+        introduced_with=("regd",),
+        used_by=("regd", "regd_elem", "elbe", "elem"),
+        implementation="mowl.training.reference.RegDCodeTraining",
+        properties=(
+            Guarantee(
+                GuaranteeKind.REGIME_PROPERTY,
+                "Zero loss is not reachable for the RegD design: the raw energy of a "
+                "contained pair is negative and its square (or, for balls, its mean) is "
+                "minimised at the boundary or below, so the non-task normal forms are "
+                "pulled towards (box host) or pushed past (ball host) the parent's "
+                "boundary; on the task's normal form a zero contribution requires every "
+                "positive contained and every sampled negative not contained.",
+                "Elbe.forward / Elem.forward of the code apply MSE / mean to our_dist, "
+                "which is not rectified",
+                "gamma_1 = gamma_2 = 0"),
+        ),
+        limitations=(
+            "Model selection optimises the reported F1 on the validation split.",
+            "The published numbers were taken from a learning-rate x margin sweep per "
+            "dataset, task, model and dimension, whose results file holds only TEST "
+            "F1s; mOWL's recipes fix one configuration chosen by validation F1.",
+            "The released baseline_sweep.py passes depth_type= to Elbe/Elem, whose "
+            "constructors take plugin_type=; the released script raises a TypeError, so "
+            "the published runs used a different (unreleased) version of it.",
+            "Runs on ORIX (d = 10, seed 0): for the ball host the published ELEM+RegD "
+            "inference F1 (GO 0.400, ANATOMY 0.555) is matched by the variant with all "
+            "RegD energies rectified (rectified=True: GO 0.421, ANATOMY 0.590), not by "
+            "the released code (GO 0.30, ANATOMY 0.45); the published numbers were "
+            "probably produced with the relu that the released PluginRegD.our_dist has "
+            "commented out.",
+        ),
+        notes=(
+            "From EXP_ontology/baseline_sweep.py, run_all_sweeps.py and model/*.py of "
+            "HuiYang1997/RegD, which adapts the Box2EL code. A composition of "
+            "per-normal-form-minibatch (512), softmax-energy-contrastive (the task's "
+            "normal form; the model's own sampler gives its 10 negatives, redrawn every "
+            "step), mse-to-target or loss-sum (the other normal forms, on raw energies) "
+            "and validation-f1-selection. The RegD models need "
+            "depth_on_containment=False (the code adds the depth term only to "
+            "non-contained pairs) and neg_sampling_gcis restricted to the task's normal "
+            "form; for the prediction task flip_gci2=True reproduces the code's reversed "
+            "inclusion; the ball model needs radius='softplus' (the code's Elem). "
+            "Deviations kept by mOWL: the code clips the parent offsets at exp(-1e-4) in "
+            "the plugin energy; the code draws the baselines' negatives once before "
+            "training (mOWL every step); mOWL's ELEm baseline keeps |radius|, its "
+            "rectified negative loss and its overlap loss for ∃r.C ⊑ D, where the code's "
+            "Elem uses softplus radii, an unrectified linear negative loss and a "
+            "containment loss; mOWL's ELBE disjointness loss differs from the code's "
+            "(relu(min_i(-|c-d| + o_c + o_d - margin))). The validation subsets are "
+            "the first 1,000 axioms in mOWL's order, not the reference file order."),
+    ),
+    RegimeCard(
+        key="transbox-normal-form-ranking",
+        task="subsumption-prediction",
+        name="Per-normal-form subsumption ranking (TransBox variant)",
+        kind=RegimeKind.EVALUATION,
+        summary=(
+            "The ranking of box2el-normal-form-ranking with one changed rule: for "
+            "C ⊓ D ⊑ ?E every candidate gets score 0 when the boxes of C and D do not "
+            "intersect, so that such a query gets an uninformative rank."),
+        components=("test set", "candidate set", "filtering", "metrics", "scores"),
+        applies_to="EmbeddingELModel with a centre-distance scorer",
+        references=(YANG2025, JACKERMEIER2024),
+        standalone=False,
+        introduced_with=("transbox",),
+        used_by=("box2el", "elbe", "boxel"),
+        implementation="mowl.evaluation.normal_form_ranking."
+                       "TransBoxNormalFormRankingRegime",
+        limitations=(
+            "Not comparable with box2el-normal-form-ranking for C ⊓ D ⊑ E and for the "
+            "combined ranks: the TransBox paper reports Hits@100 of 0.00 for Box2EL and "
+            "ELBE on GALEN where the Box2EL paper reports 0.28 and 0.11.",),
+        notes=("Yang et al. 2025, Section 6.2 and Appendix E; evaluate.py of the TransBox "
+               "code (compute_nf2_ranks). TransBox itself is scored with the empty "
+               "dimensions masked (compute_nf2_ranks_transbox); its other normal forms "
+               "use centre distances with ∃r.D centred at c(r) + c(D) "
+               "(compute_nf3/nf4_ranks_transbox), ELBE translations (c ± r), Box2EL its "
+               "bump vectors, BoxEL overlap volumes, all as in the Box2EL code. Ties "
+               "follow the class index order of the reference release "
+               "(candidate_order='reference'): when all candidates score 0 the rank is "
+               "the position of the true class in that order, which decides the median "
+               "and mean rank of C ⊓ D ⊑ E for models whose conjunct boxes are "
+               "disjoint."),
+    ),
+    RegimeCard(
+        key="empty-intersection-zero-scoring",
+        name="Zero score for empty intersections",
+        kind=RegimeKind.EVALUATION,
+        summary=(
+            "Scoring rule for C ⊓ D ⊑ E: if the boxes of C and D are disjoint, every "
+            "candidate E gets score 0 instead of the distance to the centre of the "
+            "degenerate intersection box."),
+        components=("scores",),
+        applies_to="Box and ball models with a box reader (Box2EL, ELBE, ELEm, EmEL++)",
+        references=(YANG2025,),
+        standalone=False,
+        introduced_with=("transbox",),
+        implementation="mowl.evaluation.el_scoring.centre_distance_zero_empty_scores",
+        notes=("With all scores equal, the rank of the true answer is its position in "
+               "the candidate list (ordinal ties)."),
+    ),
+    RegimeCard(
+        key="overlap-volume-scoring",
+        name="Ranking by overlap volume (BoxEL baseline)",
+        kind=RegimeKind.EVALUATION,
+        summary=(
+            "Candidate axioms are scored by one minus the soft volume of the "
+            "intersection of the two sides (relative to the transformed left-hand side "
+            "for C ⊑ ∃r.D). The score the BoxEL baseline of the Box2EL benchmarks was "
+            "evaluated with."),
+        components=("scores",),
+        applies_to="BoxEL",
+        references=(JACKERMEIER2024,),
+        standalone=False,
+        introduced_with=("boxel",),
+        implementation="mowl.evaluation.el_scoring.boxel_overlap_scores",
+        limitations=(
+            "The reference function for ∃r.C ⊑ D (compute_nf4_ranks_boxel) ranks the "
+            "class whose index equals the role index instead of D; the published BoxEL "
+            "numbers for that normal form (e.g. Hits@100 0.69 on GALEN) and the combined "
+            "numbers that include them cannot be reproduced by a correct evaluation.",),
+        notes=("evaluate.py of KRR-Oxford/BoxSquaredEL, compute_nf*_ranks_boxel. For "
+               "C ⊓ D ⊑ E the score is one minus the absolute volume of a box in 25-50 "
+               "dimensions, which is about 1 for every candidate; the published 0.00 "
+               "for that normal form reflects these ties. Reproducible with the recipe "
+               "(box2el-code-training with baseline_code): the BoxEL numbers for C ⊑ D, "
+               "C ⊓ D ⊑ E, C ⊑ ∃r.D and the deductive-reasoning numbers."),
+    ),
+)

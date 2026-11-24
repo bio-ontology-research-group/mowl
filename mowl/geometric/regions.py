@@ -9,7 +9,7 @@ Semantics and guarantees:
   an endpoint tolerance of ``1e-12``.
 - :class:`RectUnion`: finite union of closed 2-D axis-aligned rectangles
   :math:`\\bigcup_k (I_k \\times J_k) \\subseteq \\mathbb{R}^2` interpreting
-  binary roles in 1-D interval models (Spec §5.2, §5.3). Provides exact
+  binary roles in 1-D interval models. Provides exact
   domain/range projection (:meth:`RectUnion.exists_left`,
   :meth:`RectUnion.exists_right`), relational composition
   (:meth:`RectUnion.compose`) for role chains (:class:`~mowl.geometric.normal_forms.NF7`),
@@ -639,7 +639,7 @@ class ThickFace(Face):
     :math:`\\{\\lambda_j(x) \\ge 0\\; (0 \\le j < n)\\}` with the half-spaces
     :math:`\\lambda_j(x) \\le \\varepsilon` for every :math:`j \\notin S`, where
     :math:`S = \\text{vertex\\_ids}` and :math:`\\varepsilon = \\tfrac{1}{2n}` by
-    default. Intended for propositional ontologies only (Spec §5.3).
+    default. Intended for propositional ontologies only.
     """
 
     def __init__(

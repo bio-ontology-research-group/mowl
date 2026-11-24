@@ -9,6 +9,7 @@ from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFrom
 from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, \
     ClassExpressionType, IRI, OWLObjectProperty
 from org.semanticweb.owlapi.apibinding import OWLManager
+from org.semanticweb.owlapi.formats import FunctionalSyntaxDocumentFormat
 
 from java.util import HashSet
 from jpype import java
@@ -113,9 +114,36 @@ logic EL language.
             for axiom in axioms_dict.get(key, []):
                 manager.addAxiom(normalized_ont, axiom.owl_axiom)
 
-        # Save to file
-        manager.saveOntology(normalized_ont, IRI.create("file:" + os.path.abspath(cache_path)))
+        # Save to file. OWL functional syntax writes every IRI in full; RDF/XML would
+        # write relative IRIs (e.g. ``A01lu``) unchanged and resolve them against the
+        # cache's own xml:base on reloading, renaming the entities.
+        # Written to a temporary file and renamed, so that a process reading the cache
+        # while another one writes it sees either the old or the complete new file.
+        tmp_path = f"{cache_path}.{os.getpid()}.tmp"
+        manager.saveOntology(normalized_ont, FunctionalSyntaxDocumentFormat(),
+                             IRI.create("file:" + os.path.abspath(tmp_path)))
+        os.replace(tmp_path, cache_path)
         logger.info(f"Saved normalized ontology to cache: {cache_path}")
+
+    @staticmethod
+    def _cache_matches(cached_ont, ontology):
+        """``True`` if every class and object property of the cached normalised ontology
+        is an entity of ``ontology`` or an auxiliary entity of the normaliser. A cache
+        whose entities were renamed (caches written in RDF/XML before mOWL wrote them in
+        functional syntax lose relative IRIs this way) does not match."""
+        known = {str(e.toStringID()) for e in ontology.getClassesInSignature(
+            Imports.fromBoolean(True))}
+        known |= {str(e.toStringID()) for e in ontology.getObjectPropertiesInSignature(
+            Imports.fromBoolean(True))}
+        known |= {"http://www.w3.org/2002/07/owl#Thing",
+                  "http://www.w3.org/2002/07/owl#Nothing"}
+        entities = list(cached_ont.getClassesInSignature()) + \
+            list(cached_ont.getObjectPropertiesInSignature())
+        for entity in entities:
+            name = str(entity.toStringID())
+            if name not in known and not is_auxiliary_iri(name):
+                return False
+        return True
 
     def _load_cached_ontology(self, cache_path):
         """Load a cached normalized ontology from file.
@@ -161,15 +189,22 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         cache_path = None
         if ontology_path is not None and use_cache:
             cache_path = self.get_cache_path(ontology_path)
+            cached_ont = None
             if os.path.exists(cache_path):
                 logger.info(f"Loading normalized ontology from cache: {cache_path}")
                 cached_ont = self._load_cached_ontology(cache_path)
+                if not self._cache_matches(cached_ont, ontology):
+                    logger.warning(
+                        "The cached normalised ontology %s names entities that are not in "
+                        "the ontology (a cache written in RDF/XML loses relative IRIs). "
+                        "Normalising again and replacing the cache.", cache_path)
+                    cached_ont = None
+            if cached_ont is not None:
                 axioms_dict = self.__load_normalized_ontology(cached_ont)
 
                 # Add ABox axioms from original ontology
                 abox = ontology.getABoxAxioms(Imports.fromBoolean(True))
-                axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().getClassExpressionType() == ClassExpressionType.OWL_CLASS]
-                axioms_dict["object_property_assertion"] = [ObjectPropertyAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.OBJECT_PROPERTY_ASSERTION]
+                axioms_dict.update(abox_assertions(abox))
 
                 return axioms_dict
 
@@ -210,8 +245,7 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
             axioms_dict = self.__revert_translation(normalized_ontology)
 
-        axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().getClassExpressionType() == ClassExpressionType.OWL_CLASS]
-        axioms_dict["object_property_assertion"] = [ObjectPropertyAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.OBJECT_PROPERTY_ASSERTION]
+        axioms_dict.update(abox_assertions(abox))
 
         # Save normalized ontology to cache if ontology_path is provided
         if ontology_path is not None and use_cache and not load:
@@ -366,6 +400,45 @@ type org.semanticweb.owlapi.model.OWLOntology")
         owl_manager = OWLAPIAdapter().owl_manager
         new_ontology = owl_manager.createOntology(new_tbox_axioms)
         return new_ontology
+
+
+def abox_assertions(abox):
+    """The class assertions :math:`A(a)` (``A`` a named class) and object property
+    assertions :math:`r(a, b)` of ``abox``, as the ``"class_assertion"`` and
+    ``"object_property_assertion"`` entries of the normalised axiom dictionary.
+
+    Assertions about *anonymous* individuals (RDF blank nodes, ``_:genid...``) are left
+    out, with a warning: a blank node has no identity outside the document it was parsed
+    from (the same node gets a different identifier in every parse, and training and
+    test files cannot refer to it), and OWLAPI's ``getIndividualsInSignature`` -- from
+    which mOWL's individual index is built -- lists named individuals only. Such an
+    assertion therefore cannot be embedded and would break the index lookup.
+
+    :param abox: ABox axioms (e.g. ``ontology.getABoxAxioms(Imports.INCLUDED)``).
+    :rtype: dict
+    """
+    class_assertions, property_assertions = [], []
+    skipped = 0
+    for axiom in abox:
+        axiom_type = axiom.getAxiomType()
+        if axiom_type == AxiomType.CLASS_ASSERTION:
+            if axiom.getClassExpression().getClassExpressionType() != \
+                    ClassExpressionType.OWL_CLASS:
+                continue
+            if axiom.getIndividual().isAnonymous():
+                skipped += 1
+                continue
+            class_assertions.append(ClassAssertion(axiom))
+        elif axiom_type == AxiomType.OBJECT_PROPERTY_ASSERTION:
+            if axiom.getSubject().isAnonymous() or axiom.getObject().isAnonymous():
+                skipped += 1
+                continue
+            property_assertions.append(ObjectPropertyAssertion(axiom))
+    if skipped:
+        logger.warning("%d assertions about anonymous individuals were not included.",
+                       skipped)
+    return {"class_assertion": class_assertions,
+            "object_property_assertion": property_assertions}
 
 
 def process_axiom(axiom: OWLAxiom):

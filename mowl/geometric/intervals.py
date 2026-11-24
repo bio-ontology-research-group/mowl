@@ -4,7 +4,7 @@ Implements the constructive 1-D interval-union interpretation of Lacerda, Ozaki
 & Guimarães (TGDK 2024, Definition 12) and the 1-D case (:math:`n = 1`) of the
 multibox construction of Federico, Leemhuis & Kutz (JOWO 2026, Theorem 3).
 
-Construction (Spec §5.3):
+Construction:
 - Given a :class:`~mowl.geometric.completion.CanonicalModel` with domain
   :math:`\\Delta = \\{d_0, \\dots, d_{m-1}\\}` (indexed :math:`0 \\le i < m`),
   each canonical element at position :math:`i` maps to the closed interval
@@ -90,7 +90,7 @@ class IntervalUnionModel(GeometricInterpretation):
         self._universe: IntervalUnion = IntervalUnion(self._element_intervals)
 
         self._class_regions: Dict[str, IntervalUnion] = {}
-        for cname in cm.concept_names:
+        for cname in set(cm.concept_names) | set(cm.names):
             if cname == BOTTOM:
                 self._class_regions[cname] = EMPTY_1D
             elif cname == TOP:

@@ -1,9 +1,9 @@
 """Helly-satisfiability check and non-box-representability certificates.
 
 Implements the Helly-satisfiability diagnostic and minimal jointly-unsatisfiable
-concept-name set enumeration of Spec §5.3 (G4).
+concept-name set enumeration.
 
-What a certificate proves (Spec §5.3):
+What a certificate proves:
 - By Helly's theorem for axis-parallel boxes in :math:`\\mathbb{R}^d` (Helly
   number 2; Eckhoff 1988; Leemhuis & Kutz, NeSy 2025, Def. 3, Prop. 4), any
   finite family of axis-parallel boxes whose members pairwise intersect has a
@@ -54,7 +54,7 @@ What a certificate proves (Spec §5.3):
   model exists; no sufficiency theorem is known. Use
   :class:`~mowl.geometric.boxes.BoxModelBuilder` to search for a model.
 
-Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
+Propositional exactness lemma, relevance pruning, and completeness:
 - **Lemma (strong reading only).** In the propositional fragment (no
   :class:`~mowl.geometric.normal_forms.NF3`,
   :class:`~mowl.geometric.normal_forms.NF4`,
@@ -68,7 +68,7 @@ Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
   :math:`(\\{u_1\\}, \\{u_2\\}, U \\setminus \\{u_1, u_2\\})` has satisfiable
   pairwise conjunctions (proper subsets of :math:`U`) and unsatisfiable triple
   conjunction :math:`\\sqcap U`.
-- **Soundness vs. completeness for non-degenerate certificates (Spec §5.3 v3).**
+- **Soundness vs. completeness for non-degenerate certificates.**
   The Lemma is complete for *strong* certificates only. Non-degenerate
   certificates are a sound sufficient condition for non-box-representability,
   not a complete one: whether a certificate is non-degenerate depends on how a
@@ -79,7 +79,7 @@ Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
   ``certificates_nondegenerate`` is non-empty, ``True`` only when ``complete``
   is ``True`` and ``certificates_strong`` is empty (since every non-degenerate
   certificate is also a strong certificate), and ``None`` otherwise.
-- **Relevance pruning (Spec §5.3 v3).** Only :math:`\\bot`-relevant concept names
+- **Relevance pruning.** Only :math:`\\bot`-relevant concept names
   are enumerated as candidates, where relevance is the backward closure from the
   :math:`\\bot`-axioms through :class:`~mowl.geometric.normal_forms.NF1` and
   :class:`~mowl.geometric.normal_forms.NF2` (a name is relevant if it is a
@@ -128,9 +128,20 @@ References:
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 import itertools
-from typing import TYPE_CHECKING, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+)
 
 from mowl.geometric.normal_forms import (
     Axiom,
@@ -198,7 +209,7 @@ class HellyReport:
     check is exact for the **strong reading** only
     (:attr:`box_representable_strong` / ``certificates_strong``); non-degenerate
     certificates are a sound sufficient condition for non-box-representability,
-    not a complete one (Spec §5.3 v3). With roles, ``complete`` is always
+    not a complete one. With roles, ``complete`` is always
     ``False`` (Leemhuis & Kutz, NAI 2026, Prop. 38), though any returned
     certificate remains a sound proof of non-box-representability (Eckhoff 1988;
     Leemhuis & Kutz, NeSy 2025, Defs. 3, 6; Props. 4, 5) of its kind:
@@ -367,7 +378,7 @@ def helly_check(
     derivation of :math:`Z \\sqsubseteq \\bot` uses only :math:`\\bot`-relevant
     names (backward closure from :math:`\\bot`-axioms through ``NF1`` and ``NF2``),
     so restricting candidates to :math:`\\bot`-relevant names preserves soundness
-    and completeness of minimal unsatisfiable set enumeration (Spec §5.3 v3).
+    and completeness of minimal unsatisfiable set enumeration.
     If the ontology contains no :math:`\\bot`-axiom (no ``NF1``, ``NF2``, or
     ``NF4`` with ``sup == BOTTOM``), returns immediately with no certificates
     and ``complete = (not has_roles)``.
@@ -389,7 +400,7 @@ def helly_check(
       *non-degenerate* box model of :math:`\\mathcal{O}` exists in any dimension,
       though not a complete one (whether a certificate is non-degenerate depends
       on the split of :math:`U` into :math:`(C_1, C_2, C_3)` and the union of a
-      non-degenerate certificate need not be minimal; Spec §5.3 v3).
+      non-degenerate certificate need not be minimal).
     - A certificate in ``certificates_strong`` proves that no
       *conjunction-faithful* box model of :math:`\\mathcal{O}` (one in which
       every satisfiable conjunction of concept names is non-empty) exists in
@@ -480,3 +491,116 @@ def helly_check(
         has_roles=has_roles,
         k_max=k_max,
     )
+
+
+def certificate_triangles(
+    cm: CanonicalModel, *, max_triangles: Optional[int] = None
+) -> List[HellyCertificate]:
+    """Find non-degenerate singleton Helly certificates via triangle enumeration on direct ``NF2`` definitions.
+
+    Constructs the undirected graph of concept names in which an edge
+    ``{A, B}`` labelled ``N`` exists whenever ``cm.axioms`` contains an
+    :class:`~mowl.geometric.normal_forms.NF2` axiom ``A ⊓ B ⊑ N`` with
+    ``A != B``, ``N != BOTTOM``, ``A, B, N != TOP``, all three satisfiable in
+    ``cm``, and ``cm.entails(N, A) and cm.entails(N, B)`` (so
+    :math:`\\mathcal{O} \\models N \\equiv A \\sqcap B`). If several names
+    ``N`` qualify for the same pair ``{A, B}`` (equivalent definitions of the
+    same conjunction), the edge is labelled with the lexicographically smallest
+    IRI string, so the reported ``pairwise_names`` are deterministic. Enumerates triangles
+    ``(X1, X2, X3)`` with ``X1 < X2 < X3`` lexicographically and retains those
+    whose triple ``{X1, X2, X3}`` is jointly unsatisfiable. The pairwise
+    conjunctions ``{X1, X2}``, ``{X1, X3}``, ``{X2, X3}`` need no separate
+    check: each is equivalent to its satisfiable edge label, so it is jointly
+    satisfiable.
+
+    Guarantees
+    ----------
+    - Every returned :class:`HellyCertificate` is a sound non-degenerate
+      certificate with ``c1=(X1,)``, ``c2=(X2,)``, ``c3=(X3,)``,
+      ``X1 < X2 < X3`` lexicographically, and ``pairwise_names=(N12, N13, N23)``
+      all non-``None`` and satisfiable, excluding every non-degenerate
+      axis-parallel box model of :math:`\\mathcal{O}` in any dimension.
+    - Returns every singleton non-degenerate certificate whose three pairwise
+      conjunctions are direct :class:`~mowl.geometric.normal_forms.NF2`
+      definitions in ``cm.axioms`` (up to ``max_triangles`` if specified).
+    - The returned list is sorted lexicographically by ``(c1, c2, c3)``.
+    - Triangle enumeration over the named-conjunction graph takes
+      :math:`O(\\sum_v \\deg(v)^2)` time in the vertex degrees of that graph
+      (plus one joint-satisfiability check per candidate triangle).
+
+    Non-guarantees
+    --------------
+    - Not complete for all non-degenerate or strong Helly certificates:
+      pairwise conjunctions defined through chains of equivalences or
+      multi-step normalisations without a direct ``NF2(A, B, N)`` axiom, as
+      well as higher-arity certificates where :math:`|C_i| > 1`, are not found.
+
+    Parameters
+    ----------
+    cm : CanonicalModel
+        Canonical model of the normalised ontology.
+    max_triangles : int, optional
+        If given, stop after collecting ``max_triangles`` certificates
+        (returns ``[]`` if ``max_triangles <= 0``).
+
+    Returns
+    ------
+    List[HellyCertificate]
+        Sorted list of non-degenerate singleton certificates.
+    """
+    if max_triangles is not None and max_triangles <= 0:
+        return []
+
+    edge_map: Dict[FrozenSet[str], str] = {}
+    for ax in cm.axioms:
+        if not isinstance(ax, NF2):
+            continue
+        a, b, n = ax.sub1, ax.sub2, ax.sup
+        if a == b or n == BOTTOM or TOP in (a, b, n):
+            continue
+        if (
+            cm.is_satisfiable(a)
+            and cm.is_satisfiable(b)
+            and cm.is_satisfiable(n)
+            and cm.entails(n, a)
+            and cm.entails(n, b)
+        ):
+            key: FrozenSet[str] = frozenset((a, b))
+            if key not in edge_map or n < edge_map[key]:
+                edge_map[key] = n
+
+    adj: Dict[str, Set[str]] = defaultdict(set)
+    for pair in edge_map:
+        u, v = tuple(pair)
+        adj[u].add(v)
+        adj[v].add(u)
+
+    triangles: List[HellyCertificate] = []
+    for a in sorted(adj.keys()):
+        higher = sorted(v for v in adj[a] if v > a)
+        m = len(higher)
+        for i in range(m):
+            b = higher[i]
+            adj_b = adj[b]
+            for j in range(i + 1, m):
+                c = higher[j]
+                if c not in adj_b:
+                    continue
+                # The pairs are jointly satisfiable because their edge labels
+                # N with N ≡ X ⊓ Y are satisfiable; only the triple is checked.
+                if not cm.joint_satisfiable((a, b, c)):
+                    n12 = edge_map[frozenset((a, b))]
+                    n13 = edge_map[frozenset((a, c))]
+                    n23 = edge_map[frozenset((b, c))]
+                    triangles.append(
+                        HellyCertificate(
+                            c1=(a,),
+                            c2=(b,),
+                            c3=(c,),
+                            pairwise_names=(n12, n13, n23),
+                        )
+                    )
+                    if max_triangles is not None and len(triangles) >= max_triangles:
+                        return triangles
+
+    return triangles
