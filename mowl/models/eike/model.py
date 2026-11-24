@@ -56,7 +56,7 @@ class EIKE(ComposedEL):
     def __init__(self, dataset, embed_dim=100, alpha=1.0, margins=(1.0, 1.0, 1.0),
                  instance_map="eye", intensional_vectors=None, freeze_intensional=False,
                  learning_rate=0.001, batch_size=4096 * 8, model_filepath=None, device="cpu",
-                 neg_sampling_gcis=None):
+                 neg_sampling_gcis=None, init="uniform"):
         if isinstance(intensional_vectors, str):
             intensional_vectors = self.load_intensional_vectors(intensional_vectors)
         if intensional_vectors:
@@ -69,7 +69,7 @@ class EIKE(ComposedEL):
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis,
                          alpha=alpha, margins=tuple(margins), instance_map=instance_map,
-                         freeze_intensional=freeze_intensional)
+                         freeze_intensional=freeze_intensional, init=init)
 
     freeze_intensional = property(lambda self: self.method_options["freeze_intensional"])
     alpha = property(lambda self: self.method_options["alpha"])

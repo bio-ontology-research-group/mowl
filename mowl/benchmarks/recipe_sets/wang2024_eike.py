@@ -54,13 +54,37 @@ all five of the above together                         81.2        78.6        9
 No single ingredient of the training loop explains the distance to mOWL (68 / 67 / 85 with
 the same configuration): with all of them replaced by what mOWL does the authors' code still
 reaches 81 / 79 / 91. Adam alone breaks SubClassOf together with the hard negatives and the
-normalisation (68 at epoch 1000, 34 at 2000). Two differences outside the loop remain: the
-code starts from vectors of norm about 0.1 (normal, standard deviation 1/d) and radii
-uniform in (0, 1), mOWL from uniform(-0.5, 0.5) and radius 1; and the code does not decide
-SubClassOf by a threshold on the trained score but by TransC's rule on the two radii and the
-distance of the centres (``check_sub_class`` of ``classification_test_isA.py``).
+normalisation (68 at epoch 1000, 34 at 2000).
 
-Supplying vectors:``EIKE.encode_class_texts(EIKE.class_texts(), encoder)`` with a sentence
+Two differences outside the loop, put into the authors' code: its starting values (normal with
+standard deviation 1/d, norm about 0.1, and radii uniform in (0, 1)) against mOWL's
+(uniform in (-0.5, 0.5), radius 1), and its SubClassOf test, which is not a threshold on the
+trained score but TransC's rule on the two radii and the distance of the centres
+(``check_sub_class`` of ``classification_test_isA.py``):
+
+=====================================================  ==========  ==========  ==========
+run of the authors' code                               InstanceOf  SubClassOf  relational
+=====================================================  ==========  ==========  ==========
+as published, mOWL's starting values                   81.3        76.6        90.2
+as published, SubClassOf by a threshold on the score   87.1        72.9        92.9
+all five above, mOWL's starting values                 79.6        61.8        89.4
+all five above, threshold on the score                 81.2        74.4        90.7
+all five above, both                                   79.6        62.7        89.4
+=====================================================  ==========  ==========  ==========
+
+The starting values cost about six points of InstanceOf and three of the relational triples,
+the threshold on the score eight of SubClassOf; with everything as in mOWL the authors' code
+gives 80 / 63 / 89, which accounts for mOWL's SubClassOf (67) and most of its relational
+score (85) but not for its InstanceOf (68).
+
+``init="small"`` of :func:`~mowl.representation.library.shapes_methods.eike` and of
+:class:`~mowl.models.EIKE` gives the authors' starting values. In mOWL's loop they do not
+help: 62 / 42 / 67 with this configuration, against 68 / 67 / 85 with the default; the loss
+of the training triples falls to 0.02 while that of the validation triples rises from 0.3 to
+1.3 over the 2000 epochs. The recipes therefore keep the default, and what keeps the authors'
+loop from over-fitting where mOWL's does is open.
+
+Supplying vectors: ``EIKE.encode_class_texts(EIKE.class_texts(), encoder)`` with a sentence
 encoder of your choice (``SentenceTransformer("all-MiniLM-L6-v2").encode``), then
 ``EIKE.pca_vectors(vectors, 100)`` and ``EIKE.save_intensional_vectors(path, vectors)``.
 """

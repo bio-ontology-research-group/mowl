@@ -159,11 +159,18 @@ def _redraw_eike(g, a):
     n, d, r = len(g.class_model.first), a["embed_dim"], a["nb_relations"]
     first, second = g.class_model.first, g.class_model.second
 
+    small = a["init"] == "small"
+
     def uniform(w):
-        nn.init.uniform_(w, a=-0.5, b=0.5)
+        if small:
+            nn.init.normal_(w, 0.0, 1.0 / d)
+        else:
+            nn.init.uniform_(w, a=-0.5, b=0.5)
     _put(first.centres, _fresh(n, d, uniform))
     _fresh(n, d, lambda w: None)                    # the two constant tables draw as well
-    _fresh(n, 1, lambda w: None)
+    radii = _fresh(n, 1, lambda w: nn.init.uniform_(w, a=1e-3, b=1.0) if small else None)
+    if small:                                       # softplus(raw) is the radius
+        _put(first.radius_raw, th.log(th.expm1(radii)))
     _put(g.individual_model.first.centres, _fresh(
         len(g.individual_model.first), d, uniform))
     _put(g.relation_model.vectors, _fresh(max(r, 1), d, uniform))
@@ -376,7 +383,7 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
 def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, alpha=1.0,
          margins=(1.0, 1.0, 1.0), instance_map="eye", intensional_init=None,
          freeze_intensional=False, containment="published", norm_term="signed",
-         tables=None, _into=None):
+         init="uniform", tables=None, _into=None):
     r"""EIKE (Wang et al. 2024): every name has an ellipsoid (what it contains) and a vector
     (what it means), individuals are points and the vector :math:`M i`, relations are
     translations of individuals. The cost of an axiom is the cost in the first space plus
@@ -395,8 +402,13 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
     :param instance_map: ``"eye"`` (fixed identity) or ``"matrix"`` (learned).
     :param intensional_init: Optional ``(nb_classes, embed_dim)`` array of vectors for the
         second space (rows with NaN keep their random initialisation).
+    :param init: The starting values. ``"uniform"``: centres, points, translations and
+        vectors uniform in (-0.5, 0.5), every radius 1. ``"small"``: those of the authors'
+        code, normal with standard deviation ``1 / embed_dim`` and radii uniform in (0, 1).
     :param tables: An :class:`~mowl.nn.el.eike.module.EIKEModule` to share parameters with.
     """
+    if init not in ("uniform", "small"):
+        raise ValueError(f"init must be 'uniform' or 'small', got {init!r}.")
     t = tables
     gamma_sub, gamma_ins, gamma_rel = margins if t is None else (
         t.gamma_sub, t.gamma_ins, t.gamma_rel)
