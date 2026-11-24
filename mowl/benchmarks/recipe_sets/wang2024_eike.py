@@ -34,7 +34,33 @@ What mOWL does differently from the paper's code (https://github.com/keyu-wang-2
 * The checkpoint is taken at 1000, 1500 or 2000 epochs by validation accuracy or Hits@10 in
   the paper; the recipes train 2000 epochs and keep the last.
 
-Supplying vectors: ``EIKE.encode_class_texts(EIKE.class_texts(), encoder)`` with a sentence
+What the authors' code gives, and which of its ingredients matter (UNP-EYE, the triple
+classification configuration, YAGO39K, 2000 epochs, seed 0; F1 in percent of InstanceOf /
+SubClassOf / relational triples at the last epoch):
+
+=====================================================  ==========  ==========  ==========
+run of the authors' code                               InstanceOf  SubClassOf  relational
+=====================================================  ==========  ==========  ==========
+as published, Bernoulli negatives                      86.7        80.8        93.5
+as published, uniform negatives                        87.1        80.9        92.9
+no hard (sibling) negatives                            84.4        81.9        92.7
+squared L2 instead of L1 in the relational score       87.9        79.8        92.0
+no normalisation after the steps                       86.5        80.7        92.2
+no alternating phases after epoch 1000                 86.5        81.0        92.5
+Adam instead of SGD                                    82.1        34.0        90.7
+all five of the above together                         81.2        78.6        90.7
+=====================================================  ==========  ==========  ==========
+
+No single ingredient of the training loop explains the distance to mOWL (68 / 67 / 85 with
+the same configuration): with all of them replaced by what mOWL does the authors' code still
+reaches 81 / 79 / 91. Adam alone breaks SubClassOf together with the hard negatives and the
+normalisation (68 at epoch 1000, 34 at 2000). Two differences outside the loop remain: the
+code starts from vectors of norm about 0.1 (normal, standard deviation 1/d) and radii
+uniform in (0, 1), mOWL from uniform(-0.5, 0.5) and radius 1; and the code does not decide
+SubClassOf by a threshold on the trained score but by TransC's rule on the two radii and the
+distance of the centres (``check_sub_class`` of ``classification_test_isA.py``).
+
+Supplying vectors:``EIKE.encode_class_texts(EIKE.class_texts(), encoder)`` with a sentence
 encoder of your choice (``SentenceTransformer("all-MiniLM-L6-v2").encode``), then
 ``EIKE.pca_vectors(vectors, 100)`` and ``EIKE.save_intensional_vectors(path, vectors)``.
 """
