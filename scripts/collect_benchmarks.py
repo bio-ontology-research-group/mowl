@@ -6,8 +6,10 @@
         --out report [--tolerance 0.02] [--published-tolerance 0.05]
 
 writes ``report.md`` (summary, flagged rows, all rows), ``report.csv`` (all rows,
-numbers unformatted) and ``report.rst`` (a ``list-table``; ``--rst
-docs/source/benchmarks/_three_way.rst`` puts it where the documentation includes it). See
+numbers unformatted) and ``report.rst`` (a ``list-table`` of all rows). ``--headline-rst
+docs/source/benchmarks/_headline.rst`` writes the short table that the documentation
+includes: one metric per benchmark, method and recipe; ``report.csv`` is copied next to it
+as ``three_way.csv``. See
 :mod:`mowl.benchmarks.collect` for the flags.
 """
 import argparse
@@ -27,9 +29,11 @@ def main(argv=None):
     p.add_argument("--logs", default=None,
                    help="directory of the run logs (a run with a log and no result failed)")
     p.add_argument("--out", required=True, help="output prefix")
+    p.add_argument("--headline-rst", default=None,
+                   help="also write the short table (one metric per benchmark, method and "
+                        "recipe) here, e.g. docs/source/benchmarks/_headline.rst")
     p.add_argument("--rst", default=None,
-                   help="where to write the RST table (default: <out>.rst), e.g. "
-                        "docs/source/benchmarks/_three_way.rst")
+                   help="where to write the RST table of all rows (default: <out>.rst)")
     p.add_argument("--tolerance", type=float, default=0.02,
                    help="relative difference parts vs baseline that is flagged")
     p.add_argument("--abs-tolerance", type=float, default=0.0)
@@ -80,6 +84,10 @@ def main(argv=None):
     rst = args.rst or args.out + ".rst"
     with open(rst, "w") as f:
         f.write(three_way_table(rows, "rst", title=args.title))
+    if args.headline_rst:
+        from mowl.benchmarks.collect import headline_table
+        with open(args.headline_rst, "w") as f:
+            f.write(headline_table(rows, "rst", title=args.title))
     print("\n".join(lines[:8 + len(counts)]))
     print(f"wrote {args.out}.md, {args.out}.csv, {rst}")
     return 0

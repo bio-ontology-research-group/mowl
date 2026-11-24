@@ -73,3 +73,22 @@ def test_every_recipe_with_published_variants_finds_one_of_its_own():
             if chosen.recipe is not None:
                 assert chosen.recipe == recipe.name
     assert checked > 50
+
+
+def test_the_short_table_has_one_row_per_run_with_a_published_metric():
+    """The short table shows one metric per benchmark, method and recipe: one the
+    publication reports where there is one, on all test axioms."""
+    from mowl.benchmarks.collect import headline_rows, headline_table
+    bench = "dfalc-revision-family-mask20"
+    results = []
+    for loss in ("hierarchical", "rule"):
+        result = _result(bench, "dfalc", "wu2022", loss, 0.9, "success_rate",
+                         {"loss_type": loss})
+        result["metrics"]["all"]["mrr"] = 0.5          # not in the publication
+        result["metrics"]["other"] = {"success_rate": 0.1}
+        results.append(result)
+    rows = headline_rows(collect(results))
+    assert [(r["recipe"], r["metric"], r["subset"]) for r in rows] == [
+        ("wu2022:hierarchical", "success_rate", "all"), ("wu2022:rule", "success_rate", "all")]
+    text = headline_table(collect(results), "rst")
+    assert "dfalc (wu2022:rule)" in text and "0.931" in text

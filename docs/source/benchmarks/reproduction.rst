@@ -343,9 +343,14 @@ Published, parts and direct implementation
 
 Each method run as the combination of parts users get and as its direct implementation
 (:mod:`mowl.baselines`), with the same recipe and seeds (see :ref:`baseline-benchmarks`).
-The table is written by ``scripts/collect_benchmarks.py``.
+The table shows one metric per benchmark, method and recipe, on all test axioms: the mean
+reciprocal rank where it is reported, otherwise the first of Hits\@10, Hits\@100, AUC, F1,
+accuracy, success rate and mean rank. Every metric and subset of every run, with the
+differences and the number of seeds, is in :download:`three_way.csv`. Both are written by
+``scripts/collect_benchmarks.py RESULTS --out report --headline-rst
+docs/source/benchmarks/_headline.rst``.
 
-.. include:: _three_way.rst
+.. include:: _headline.rst
 
 What had to be made explicit
 ----------------------------

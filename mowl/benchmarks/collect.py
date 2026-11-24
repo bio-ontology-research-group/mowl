@@ -41,7 +41,8 @@ import os
 from mowl.benchmarks.report import _fmt, table
 
 __all__ = ["collect", "three_way_table", "write_csv", "read_results", "read_manifest",
-           "status_of_manifest", "summary_counts", "to_csv_string", "HEADER"]
+           "status_of_manifest", "summary_counts", "to_csv_string", "HEADER",
+           "headline_rows", "headline_table", "HEADLINE_METRICS"]
 
 #: Columns of :func:`three_way_table`.
 HEADER = ["benchmark", "method", "recipe", "subset", "metric", "published", "parts",
@@ -384,6 +385,44 @@ def three_way_table(rows, fmt="text", title=None, only_flagged=False):
                      r["parts − baseline"], _pct(r["parts vs published"]),
                      _pct(r["baseline vs published"]), r["flags"]])
     return table(HEADER, body, fmt, title)
+
+
+#: The metric that stands for a run in :func:`headline_rows`: the first of these that the
+#: run reports.
+HEADLINE_METRICS = ("mrr", "f_mrr", "hits@10", "f_hits@10", "hits@100", "f_hits@100", "auc",
+                    "macro_auc", "f_macro_auc", "f1", "accuracy", "success_rate",
+                    "faithfulness", "mr", "macro_mr")
+
+
+def headline_rows(rows, metrics=HEADLINE_METRICS):
+    """One row of :func:`collect` per benchmark, method and recipe: the metric that comes
+    first in ``metrics`` among those reported on all test axioms (subset ``all`` or none)
+    and, if the run has published numbers, among those the publication reports."""
+    groups = collections.OrderedDict()
+    for r in rows:
+        if r["subset"] not in ("all", "", None):
+            continue
+        groups.setdefault((r["benchmark"], r["method"], r["recipe"]), []).append(r)
+    out = []
+    for group in groups.values():
+        with_published = [r for r in group if r["published"] is not None]
+        by_metric = {r["metric"]: r for r in (with_published or group)}
+        chosen = next((by_metric[m] for m in metrics if m in by_metric), None)
+        out.append(chosen if chosen is not None else next(iter(by_metric.values())))
+    return out
+
+
+def headline_table(rows, fmt="text", title=None, metrics=HEADLINE_METRICS):
+    """The rows of :func:`headline_rows` as a table with the columns benchmark, method
+    (recipe), metric, published, parts, direct."""
+    body = []
+    for r in headline_rows(rows, metrics):
+        method = r["method"] if not r["recipe"] else f"{r['method']} ({r['recipe']})"
+        body.append([r["benchmark"], method, r["metric"], r["published"],
+                     _with_sd(r["parts"], r["sd"]["parts"], r["seeds"]["parts"]),
+                     _with_sd(r["baseline"], r["sd"]["baseline"], r["seeds"]["baseline"])])
+    return table(["benchmark", "method (recipe)", "metric", "published", "parts", "direct"],
+                 body, fmt, title)
 
 
 def write_csv(rows, path_or_file):

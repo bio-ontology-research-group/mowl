@@ -558,7 +558,9 @@ published value, and missing or failed runs:
    MANIFEST=manifests/repro-fast.tsv RESULTS=results DEVICE=cuda PAR=4 \
        scripts/run_manifest.sh
    python scripts/collect_benchmarks.py results --manifest manifests/repro-fast.tsv \
-       --logs results/logs --out report --rst docs/source/benchmarks/_three_way.rst
+       --logs results/logs --out report \
+       --headline-rst docs/source/benchmarks/_headline.rst
+   cp report.csv docs/source/benchmarks/three_way.csv
 
 .. testcode::
 
