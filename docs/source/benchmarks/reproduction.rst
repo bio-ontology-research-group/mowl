@@ -73,7 +73,26 @@ Summary
      - ``regd-*``
      - partly
      - About half of 48 cells within 0.04 F1. The prediction-task numbers of the paper
-       depend on a bug in its evaluation code.
+       depend on a bug in its evaluation code. The authors' released code, run with its
+       own sweep, reproduces the paper's ELBE, ELEm and RegD-with-balls numbers but not
+       RegD with boxes (0.39 against 0.63 on ANATOMY inference); mOWL's RegD with boxes is
+       at or above the released code.
+   * - Concept2Box
+     - ``concept2box-*``
+     - not reproduced
+     - MRR 0.02 / 0.30 / 0.73 (instance view / ontology view / concept linking) against
+       0.51 / 0.65 / 0.87. The instance-view numbers of the paper cannot come from the
+       released data: its TransE row is the "TransE (all)" row of the JOIE paper, computed
+       on the larger, unreleased DB111K-174. On the released data plain TransE reaches MRR
+       0.09 to 0.16 against 0.32.
+   * - EIKE
+     - ``yago39k-*``, ``m-yago39k-*``
+     - not reproduced
+     - F1 of 68 / 67 / 85 (InstanceOf / SubClassOf / relational) against 87 / 81 / 93.
+       The authors' code reproduces the paper. With every ingredient of its training loop
+       and its starting values and test rule replaced by mOWL's it still reaches
+       80 / 63 / 89, so the InstanceOf gap is in mOWL's training and is open (see the
+       notes of the recipe module ``mowl.benchmarks.recipe_sets.wang2024_eike``).
    * - ELK-Em
      - ``elkem-*``
      - partly
@@ -96,6 +115,24 @@ Summary
      - none
      - no benchmark
      - The reason is recorded on each catalogue card.
+
+The methods that are not in this table (the order, graph, query and region methods added
+with the parts) are compared with their publications in the three-way table of
+:doc:`index`: published number, mOWL built from parts, and the direct baseline code.
+
+Runs that cannot be made
+------------------------
+
+* **FaithEL** on the joint benchmarks (GO, GALEN, ANATOMY, PPI): the canonical model the
+  method is defined on would have between 3e8 and 6e9 elements for these ontologies; the
+  model refuses to build it.
+* **BoxSEL** on Person, Country and Hybrid (``boxsel-sel-*``): the Statistical EL ontologies
+  of the paper are not released. :mod:`mowl.datasets.builtin.sel_conditionals` builds one
+  from assertions.
+* **AConE** on ``query-wn18rr-qa``: the query sets of WN18RR are not downloaded by mOWL;
+  give ``data_dir``.
+* **HiT and OnT** need the optional language-model packages and a GPU with enough memory
+  for the encoder.
 
 Numbers
 -------
