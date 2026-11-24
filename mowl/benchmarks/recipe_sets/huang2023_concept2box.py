@@ -31,6 +31,22 @@ of the hinge taken apart.) None of them reaches the paper on the instance view. 
 the paper depend on what it does not state (the number of passes, the loss weights, the
 alternation of the three losses) and on the BERT encoder, which gives similar concepts similar
 boxes from the start.
+
+Why the instance view is out of reach on the released data. A plain TransE alone (256
+dimensions, the pairwise hinge, Adam, a random 80% / 10% / 10% split of the released
+instance triples, raw rank of the tail among all entities, 2,000 test triples) reaches an
+MRR of 0.09 with the paper's settings (margin 0.3, learning rate 0.005, batches of 128, 30
+passes), 0.13 after 200 passes with batches of 1024, and 0.16 with the usual TransE setup
+(margin 1, entities kept in the unit ball, learning rate 0.001); with the two halves of
+the hinge taken apart it stays at 0.02. The paper lists 0.32 for TransE and 0.51 for
+Concept2Box. Its TransE row (MRR 0.32, Hits@1 22.70, Hits@10 48.12; ontology view 0.54,
+47.90, 61.84) is the row "TransE (all)" of the JOIE paper (Hao et al. 2019, Table 2:
+0.318, 22.70, 48.12 and 0.539, 47.90, 61.84), which was computed on the full DB111K-174
+(863,643 instance triples; the release has 658,504), with an 85% / 5% / 10% split,
+filtered ranks and a "test candidate set" that the JOIE paper does not define. The
+statistics table of Concept2Box repeats those of the full dataset. So the published
+instance-view numbers belong to a dataset and a protocol that are not released, and no
+training variant of the method on the released data can be expected to reach them.
 """
 
 from mowl.benchmarks.recipes import Recipe
