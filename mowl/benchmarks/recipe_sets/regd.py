@@ -1,5 +1,34 @@
 """Recipes of RegD (Yang and Chen, arXiv:2501.17518) and its ELBE / ELEm baselines, from
-the paper and the authors' code (HuiYang1997/RegD, EXP_ontology)."""
+the paper and the authors' code (HuiYang1997/RegD, EXP_ontology).
+
+What the authors' code gives. The released sweep (``run_all_sweeps.py``: learning rate
+0.0005 / 0.005 / 0.01 times margin 0 / 0.05 / 0.1 / 0.15, 5000 steps, d = 10) was run as
+released on the inference task, after two repairs without which it does not start (the
+keyword ``depth_type=`` of the model constructors, which take ``plugin_type=``, and two
+undefined names in ``model/loaded_models.py``). The best TEST F1 of the twelve
+configurations, next to the paper:
+
+=========  ====================  ==========  =====
+Ontology   Model (plugin)        Code, best  Paper
+=========  ====================  ==========  =====
+ANATOMY    ELBE (tBox)           0.43        0.43
+ANATOMY    ELEm (tBox)           0.39        0.39
+ANATOMY    RegD boxes            0.39        0.63
+ANATOMY    RegD balls            0.54        0.56
+GO         ELBE (tBox)           0.40        0.42
+GO         ELEm (tBox)           0.28        0.27
+GO         RegD boxes            0.36        0.51
+GO         RegD balls            0.40        0.40
+=========  ====================  ==========  =====
+
+So the published numbers of the baselines and of the balls are the maximum over the test
+scores of the sweep, and the released code does not give the published numbers of RegD
+with boxes (the paper's weight lambda and its p are not in the released code). The
+"ELBE" and "ELEm" of the paper are the code's models with its ``tBox`` plugin, which
+score lower than mOWL's ELBE and ELEm under the same training (0.69 to 0.76 on these two
+tasks); mOWL's RegD with boxes (0.41 and 0.49 with the configuration chosen on the
+validation set) is at or above what the released code reaches.
+"""
 
 from mowl.benchmarks.recipes import Recipe
 from mowl.benchmarks.entries._refs import YANG2025_REGD
