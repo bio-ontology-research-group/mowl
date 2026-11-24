@@ -9,6 +9,28 @@ scale, the initialisation and the alpha of the distance. mOWL's defaults are use
 the epoch number is mOWL's choice. The paper alternates the three losses with the learning rates eta,
 lambda_1 eta and lambda_2 eta (Algorithm 1); mOWL sums them (Equation 11) and replaces the
 BERT encoder of the concept and relation texts by learned embeddings (see the method card).
+
+What the recipe reaches, and what was tried (MRR, DBpedia, one seed; the paper: instance view
+0.51, ontology view 0.65, concept linking 0.87):
+
+=======================================================  ========  ========  =======
+Training                                                 instance  ontology  linking
+=======================================================  ========  ========  =======
+this recipe (1000 steps on all axioms)                   0.02      0.30      0.72
+mini-batches of 128, 60,000 steps                        0.005     0.29      0.01
+mini-batches of 4096, 60,000 steps                       0.04      0.31      0.45
+pairwise ranking loss, 1000 steps on all axioms          0.02      0.30      0.25
+pairwise ranking loss, mini-batches of 128               0.03      0.27      0.17
+pairwise ranking loss, mini-batches of 4096              0.07      0.28      0.62
+=======================================================  ========  ========  =======
+
+(mini-batches: the regime ``per-normal-form-minibatch``; pairwise ranking loss: the regime
+``pairwise-margin-ranking`` on the role assertions with margin 0.3 and on the class assertions
+with margin 0.15, the paper's hinge on a pair, where the method's own losses are the two halves
+of the hinge taken apart.) None of them reaches the paper on the instance view. The numbers of
+the paper depend on what it does not state (the number of passes, the loss weights, the
+alternation of the three losses) and on the BERT encoder, which gives similar concepts similar
+boxes from the start.
 """
 
 from mowl.benchmarks.recipes import Recipe
