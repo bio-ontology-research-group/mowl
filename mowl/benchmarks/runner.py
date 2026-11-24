@@ -212,7 +212,8 @@ class ELFamily(ModelFamily):
                     "selection_value": selection.best_value, "eval_gci_name": eval_gci}
         if select_best and validated and os.path.exists(model.model_filepath):
             model.load_best_model()
-        return {"selected": "best validation loss" if (select_best and validated)
+        criterion = getattr(model, "validation_criterion", "loss")
+        return {"selected": f"best validation {criterion}" if (select_best and validated)
                 else "last epoch", "eval_gci_name": eval_gci}
 
     @staticmethod
@@ -494,7 +495,8 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     :param dataset_kwargs: Overrides of the benchmark's dataset arguments.
     :param protocol_kwargs: Overrides of the benchmark's protocol arguments.
     :param validate_every: Passed to ``model.train`` when supported.
-    :param select_best: Reload the parameters with the best validation loss after
+    :param select_best: Reload the parameters with the best validation value (by
+        ``validation_criterion`` of the model; ``model_kwargs`` may set it) after
         training (EL models with a validation set).
     :param workdir: Directory for model checkpoints (default: a new directory under
         the system temporary directory, which honours ``$TMPDIR``).
@@ -568,6 +570,8 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     os.makedirs(workdir, exist_ok=True)
     model_filepath = os.path.join(workdir, f"model_seed{seed}.pt")
 
+    # (not a constructor argument: what the built-in validation keeps the best state by)
+    validation_criterion = model_kwargs.pop("validation_criterion", None)
     set_seed(seed, deterministic)
     if model_factory is not None:
         model = model_factory(dataset)
@@ -578,6 +582,11 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
         model, family = impl.build(card, dataset, model_kwargs, device, model_filepath,
                                    seed=seed)
 
+    if validation_criterion is not None:
+        if not hasattr(model, "validation_criterion"):
+            raise ValueError(f"{type(model).__name__} has no built-in validation to choose a "
+                             f"criterion for.")
+        model.validation_criterion = validation_criterion
     regime = resolve_training_regime(training_regime, seed=seed, implementation=impl)
     if regime is not None:
         impl.attach_regime(model, regime)

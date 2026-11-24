@@ -92,7 +92,8 @@ def _build_parser():
                         "(key:{\"name\": value}); repeat to combine regimes")
     p.add_argument("--validate-every", type=int, default=None)
     p.add_argument("--no-select-best", action="store_true",
-                   help="keep the last epoch instead of the best validation loss")
+                   help="keep the last epoch instead of the best validation epoch (the rule is "
+                        "--param validation_criterion=separation|loss)")
     p.add_argument("--workdir", default=None, help="directory for checkpoints")
     p.add_argument("--jvm-memory", default="8g")
     p.add_argument("--out", default=None, help="write the result as JSON here")

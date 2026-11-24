@@ -4,7 +4,7 @@ from mowl.training.loop import TrainingLoop
 from mowl.training.losses import weighted_mean_loss
 from mowl.training.negatives import corrupt_column_blocks
 from mowl.training.regularization import AnchorPenalty, add_penalties
-from mowl.evaluation.validation import mean_module_cost
+from mowl.evaluation.validation import corrupted_pair_error, mean_module_cost
 from mowl.datasets.el import ELDataset
 from mowl.owlapi import OWLAPIAdapter
 from mowl.projection import projector_factory
@@ -796,9 +796,17 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
             string += f"\t{k}: {len(v)}\n"
         logger.info(string)
 
+    #: What the built-in validation keeps the best state by. ``"separation"`` (default): how
+    #: often a validation axiom of ``eval_gci_name`` scores no better than a corruption of
+    #: it (:func:`~mowl.evaluation.validation.corrupted_pair_error`). ``"loss"``: the mean
+    #: loss of the validation axioms alone, the rule of mOWL 2.1.0; a module that scores
+    #: every axiom as satisfied before it has learned anything (boxes that all overlap)
+    #: has its best value at the first epoch, and the training is thrown away.
+    validation_criterion = "separation"
+
     def validate_epoch(self, epoch: int, loss):
-        """Validation after an epoch: the mean loss of the module on the validation axioms of
-        ``eval_gci_name``; the best state is saved to ``model_filepath``."""
+        """Validation after an epoch on the validation axioms of ``eval_gci_name``; the best
+        state by :attr:`validation_criterion` is saved to ``model_filepath``."""
         if self.dataset.validation is None:
             print(f'Epoch {epoch + 1}: Train loss: {loss}')
             return
@@ -809,11 +817,21 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
             )
         gci_data = self.validation_datasets[self._eval_gci_name][:]
         valid_loss = mean_module_cost(self.module, gci_data, self._eval_gci_name)
-        if valid_loss < self._best_validation_loss:
-            self._best_validation_loss = valid_loss
+        if self.validation_criterion == "loss":
+            value, shown = valid_loss, ""
+        elif self.validation_criterion == "separation":
+            candidates = sorted(self.named_class_index_dict.values())
+            value = corrupted_pair_error(self.module, gci_data, self._eval_gci_name, candidates)
+            shown = f" Valid pair error: {value}"
+            self.module.train()
+        else:
+            raise ValueError("validation_criterion must be 'separation' or 'loss', got "
+                             f"{self.validation_criterion!r}.")
+        if value < self._best_validation_loss:
+            self._best_validation_loss = value
             with th.no_grad():
                 th.save(self.module.state_dict(), self.model_filepath)
-        print(f'Epoch {epoch + 1}: Train loss: {loss} Valid loss: {valid_loss}')
+        print(f'Epoch {epoch + 1}: Train loss: {loss} Valid loss: {valid_loss}{shown}')
 
     def eval_method(self, data):
         """Evaluation method used for scoring. Override if needed.
