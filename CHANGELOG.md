@@ -29,6 +29,7 @@ Behaviour that changed, and how to get the 2.1.0 behaviour back:
 - `GraphPlusPyKEENModel.reinitialise = False` (new) continues from the current parameters instead of the released fresh draw; `batching = "mowl"` (new) uses mOWL's batches, which a training regime that changes negatives or the loss needs.
 - Rows of `ELDataset`/`ALCDataset`, projected edges and corpus lines are in a fixed order (sorted, then shuffled with `shuffle_seed=0`; `shuffle_seed=None` uses the global `random` module as in 2.1.0).
 - `ELNormalizer` no longer corrupts the normal forms of ontologies with nested class expressions, and `EmbeddingELModel` embeds the auxiliary classes: models of such ontologies (e.g. GDA) are trained on other normal forms, and checkpoints of whole models saved with 2.1.0 for them do not load (more rows; a defect, no option).
+- EL models with a validation set keep the epoch at which validation axioms score better than corrupted copies of themselves most often; 2.1.0 kept the epoch with the lowest validation loss, which for box models is often an untrained state. `model.validation_criterion = "loss"`.
 - Datasets are downloaded to `$XDG_CACHE_HOME/mowl/datasets` instead of the working directory (`MOWL_DATA_ROOT` or `data_root=`).
 
 ### Added
