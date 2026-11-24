@@ -1,8 +1,9 @@
 # Guide for AI coding agents
 
 Read this before changing embedding methods, training, evaluation or benchmarks in mOWL.
-`CLAUDE.md` has the general project rules (setup, tests, docs, release); this file
-describes how the embedding code is organised and what a change must include.
+For development setup, see the [installation guide](docs/source/install/index.rst)
+and the development environments in [`envs/`](envs/). To check the documentation
+examples, run `make -C docs doctest`.
 
 ## The four parts
 
@@ -75,7 +76,8 @@ Documentation to read for the area you touch:
    default design is a composition of shared regimes (example: `GroundedEL` and
    `mowl.training.GroundedELTraining`). A regime that needs something from the model
    names a small protocol (`set_tau`, `reseed_components`, `dual_weights`,
-   `score_query`) and refuses other models in `attach`.
+   `score_query`) and refuses other models in `attach`. See the
+   [training regimes documentation](docs/source/training/index.rst).
 2. **Known defects are fixed, and the fix is the default.** If a published number depends
    on a defect of the reference code, keep the old behaviour as an explicit option and
    let the recipe select it (example: `gci1_radius_term=False` for ELEmbeddings).
@@ -95,7 +97,7 @@ Documentation to read for the area you touch:
 ## Tests
 
 ```bash
-pytest -m "not slow"                 # what CI runs
+pytest -m "not slow" -p no:faulthandler  # what CI runs
 pytest tests/catalog tests/benchmarks tests/training   # after touching cards, recipes, regimes
 ```
 

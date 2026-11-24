@@ -206,6 +206,7 @@ class MultiBoxELModule(ELModule):
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
     role_axiom_capable = False
+    entity_embedding_names = BoxSquaredELModule.entity_embedding_names
 
     def __init__(
         self,

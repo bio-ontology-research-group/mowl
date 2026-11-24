@@ -157,6 +157,7 @@ class PrismEL(EmbeddingELModel):
         self.structural_definitions = structural_definitions
         self.existence_weight = existence_weight
         self.size_reg = size_reg
+        self._supports_axiom_updates = self.objective == "axiom"
         self.canonical_model = canonical_model
         self._structural_tables: Optional[
             Tuple[DefinitionTable, ExistenceTargets, Optional[int]]

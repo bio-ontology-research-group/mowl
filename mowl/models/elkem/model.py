@@ -137,6 +137,8 @@ class ELKEm(EmbeddingELModel):
         :class:`~mowl.nn.el.elkem.module.ELKEmModule`.
     """
 
+    _supports_axiom_updates = False
+
     def __init__(self, dataset, embed_dim=50, margin=0.1, learning_rate=0.01,
                  batch_size=1024, k_neg=3, contrastive_factor=3.0, use_contrastive=None,
                  reg_factor=1.0, lr_decay_epoch=5000, lr_decay_factor=0.1,

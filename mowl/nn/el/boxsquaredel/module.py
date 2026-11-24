@@ -20,6 +20,11 @@ forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01`
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
+    entity_embedding_names = (
+        ("class_center", "class_offset", "bump_classes"),
+        ("head_center", "head_offset", "tail_center", "tail_offset"),
+        ("ind_center", "ind_offset", "bump_individuals"),
+    )
 
     #: Normal forms that get a negative loss with ``all_negative_losses=True``.
     DELE_NEG_GCIS = frozenset({"gci0", "gci1", "gci2", "gci3",

@@ -36,6 +36,13 @@ class ELModule(nn.Module):
     #: Name of the attribute holding that margin.
     margin_attribute = "margin"
 
+    #: Embedding tables or parameters indexed by classes, object properties, and individuals.
+    entity_embedding_names = (
+        ("class_embed", "class_rad", "class_offset"),
+        ("rel_embed",),
+        ("ind_embed", "ind_rad", "ind_offset"),
+    )
+
     def __init__(self):
         super().__init__()
 

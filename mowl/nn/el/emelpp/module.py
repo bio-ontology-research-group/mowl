@@ -183,6 +183,12 @@ class EmELVarModule(EmELPPModule):
     :param sigma_reg_weight: Weight of the :math:`+\\sigma(r)` term. The paper's value is 1.
     """
 
+    entity_embedding_names = (
+        EmELPPModule.entity_embedding_names[0],
+        ("rel_embed", "rel_sigma"),
+        EmELPPModule.entity_embedding_names[2],
+    )
+
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=0, embed_dim=50, margin=0.1,
                  sigma_init=0.1, sigma_reg_weight=1.0):
         super().__init__(nb_ont_classes, nb_rels, nb_inds, embed_dim=embed_dim, margin=margin)

@@ -14,6 +14,11 @@ class BoxELModule(ELModule):
     """
 
     neg_capable_gcis = frozenset({"gci2"})
+    entity_embedding_names = (
+        ("min_embedding", "delta_embedding"),
+        ("relation_embedding", "scaling_embedding"),
+        ("ind_embedding", "ind_delta_embedding"),
+    )
 
     #: Which regulariser is used: ``"global"`` (default), the mean over all class boxes of
     #: the excess of the upper corners over 1 and of negative lower corners, once per step;
