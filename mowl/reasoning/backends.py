@@ -54,8 +54,6 @@ class ReasonerBackend:
 
 def _elk(ontology):
     from org.semanticweb.elk.owlapi import ElkReasonerFactory
-    from org.apache.log4j import Logger, Level
-    Logger.getLogger("org.semanticweb.elk").setLevel(Level.ERROR)
     return ElkReasonerFactory().createReasoner(ontology)
 
 
@@ -101,23 +99,32 @@ register_reasoner(
 register_reasoner(
     "elk", _elk,
     Expressivity.parse("ELH(∘)⊥ with ABox") | {Construct.DOMAIN_RANGE}, cost=1,
-    summary="ELK 0.4.3: consequence-based, polynomial, for EL with role hierarchies and "
+    summary="ELK 0.6.0: consequence-based, polynomial, for EL with role hierarchies and "
             "chains, ⊥ and assertions; no nominals, inverses or datatypes.")
 KM_FACTORY = "org.bioontology.kobayashimarust.protege.KMReasonerFactory"
 
 
+_KM_OK = None
+
+
 def _km_owlapi_ok():
-    """KM's OWL API binding is built against OWL API 4.5.29 and uses a constructor of the
-    functional syntax renderer that older 4.5 releases do not have."""
-    import jpype
-    try:
-        renderer = jpype.JClass(
-            "org.semanticweb.owlapi.functional.renderer.FunctionalSyntaxObjectRenderer")
-        return any(len(c.getParameterTypes()) == 3
-                   and "OWLDocumentFormat" in str(c.getParameterTypes()[1].getName())
-                   for c in renderer.class_.getConstructors())
-    except Exception:
-        return False
+    """Whether the KM binding on the class path works with the OWL API on the class path.
+
+    The binding is compiled against one major version of the OWL API (mOWL packages the
+    build for OWL API 5; the Protégé 5 plugin is built for OWL API 4) and fails with a
+    linkage error on the other, so the check creates a reasoner for an empty ontology once.
+    """
+    global _KM_OK
+    if _KM_OK is None:
+        import jpype
+        try:
+            from org.semanticweb.owlapi.apibinding import OWLManager
+            ontology = OWLManager.createOWLOntologyManager().createOntology()
+            jpype.JClass(KM_FACTORY)().createReasoner(ontology).dispose()
+            _KM_OK = True
+        except Exception:
+            _KM_OK = False
+    return _KM_OK
 
 
 def _km_available():
@@ -136,14 +143,14 @@ def _km(ontology):
     except Exception as error:
         raise ImportError(
             "The Kobayashi-MaRust (KM) reasoner is not on the class path. Download "
-            "kobayashi-marust-protege5-<version>.jar from "
+            "a KM jar built for OWL API 5 from "
             "https://github.com/bio-ontology-research-group/kobayashi-marust/releases and "
             "start the JVM with mowl.init_jvm(memory, extra_classpath='<path to the jar>') "
             "or set MOWL_EXTRA_CLASSPATH.") from error
     if not _km_owlapi_ok():
         raise RuntimeError(
-            "The Kobayashi-MaRust (KM) OWL API binding needs OWL API 4.5.29 or later; the "
-            "OWL API on the class path is older.")
+            "The Kobayashi-MaRust (KM) binding on the class path does not work with the OWL "
+            "API that mOWL packages (5.5.1); the Protégé 5 plugin is built for OWL API 4.")
     return factory.createReasoner(ontology)
 
 
@@ -154,7 +161,7 @@ register_reasoner(
             "Its OWL API binding classifies; instances are checked as {a} ⊑ C.")
 register_reasoner(
     "hermit", _hermit, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=10,
-    summary="HermiT 1.3.8: hypertableau, sound and complete for OWL 2 DL.")
+    summary="HermiT 1.4.5: hypertableau, sound and complete for OWL 2 DL.")
 
 
 def list_reasoners():

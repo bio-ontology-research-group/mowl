@@ -44,7 +44,7 @@ def _annotation_lines(ontology, entity_form):
             name = str(entity)
         else:
             name = str(entity.toStringID())
-        annotations = EntitySearcher.getAnnotations(entity, ontology)
+        annotations = EntitySearcher.getAnnotations(entity, ontology).iterator()
         found = []
         for annotation in annotations:
             if isinstance(annotation.getValue(), OWLLiteral):

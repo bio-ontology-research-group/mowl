@@ -41,10 +41,10 @@ class Node():
         
                 
         elif isinstance(owl_class, OWLObjectUnionOf):
-            operands = owl_class.getOperandsAsList()
+            operands = list(owl_class.getOperandsAsList())
             if len(operands) == 1:
                 raise ValueError(f"Union of one element is not allowed\n{owl_class}    \t{operands[0].toString()}")
-            for op in operands:
+            for op in list(operands):
                 if op.isOWLNothing():
                     logging.info(f"owl:Nothing existing in union. Removing it..")
                     operands.remove(op)
@@ -62,10 +62,10 @@ class Node():
         
                 
         if isinstance(owl_class, OWLObjectIntersectionOf):
-            operands = owl_class.getOperandsAsList()
+            operands = list(owl_class.getOperandsAsList())
             if len(operands) == 1:
                 raise ValueError(f"Intersection of one element is not allowed\n{owl_class}    \t{operands[0].toString()}")
-            for op in operands:
+            for op in list(operands):
                 if op.isOWLThing():
                     logging.info(f"owl:Thing existing in intersection. Removing it..")
                     operands.remove(op)

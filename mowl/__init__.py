@@ -3,6 +3,8 @@ import jpype.imports
 import os
 import platform
 
+from mowl import _owlapi_compat  # noqa: F401  (registers the OWLAPI 5 method customizers)
+
 
 def init_jvm(memory, extra_classpath=None):
     """Start the JVM with the JAR files that mOWL packages on the class path.
@@ -39,4 +41,6 @@ and contains the JAR dependencies.")
             jpype.getDefaultJVMPath(), "-ea",
             f"-Xmx{memory}",
             "-Djava.class.path=" + jars,
+            # ELK logs every reasoning stage at INFO through slf4j-simple
+            "-Dorg.slf4j.simpleLogger.log.org.semanticweb.elk=error",
             convertStrings=False)
