@@ -1,0 +1,44 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "consistent": true,
+  "subsumptions": [
+   [
+    "http://mowl.borg/compat/el#Carnivore",
+    "http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow",
+    "http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow",
+    "http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Grass",
+    "http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Heart",
+    "http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore",
+    "http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Lion",
+    "http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Lion",
+    "http://mowl.borg/compat/el#Carnivore"
+   ]
+  ],
+  "types": [],
+  "unsatisfiable": [
+   "http://mowl.borg/compat/el#MadCow"
+  ]
+ }
+}

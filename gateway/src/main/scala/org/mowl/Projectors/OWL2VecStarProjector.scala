@@ -29,7 +29,6 @@ class OWL2VecStarProjector(
 ) extends AbstractProjector{
 
   
-  val searcher = new EntitySearcher()
   var subRoles = scala.collection.mutable.Map[String, List[String]]()
   var inverseRoles = scala.collection.mutable.Map[String, String]()
 
@@ -113,7 +112,7 @@ class OWL2VecStarProjector(
     
     if (include_literals) {
       for (owl_class <- ontology.getClassesInSignature(imports).asScala.toList){
-        val annotations = EntitySearcher.getAnnotations(owl_class, ontology).asScala.toList
+        val annotations = EntitySearcher.getAnnotations(owl_class, ontology).iterator.asScala.toList
         for (annotation <- annotations){
           annotationAxioms += ((annotation, owl_class))
         }
@@ -186,7 +185,7 @@ class OWL2VecStarProjector(
 	var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala
         assert(ontClass == ax.head)
         val rightSide = ax.tail
-	projectSubClassOrEquivAxiom(ontClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.asJava), ontology)
+	projectSubClassOrEquivAxiom(ontClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.toList.asJava), ontology)
       }
       case _ => Nil
     }
@@ -292,10 +291,12 @@ class OWL2VecStarProjector(
        
         val valueStr = value.isLiteral match {
           case true => {
-            val datatype = value.asLiteral.get.getDatatype
+            val literal = value.asLiteral.get
+            val datatype = literal.getDatatype
 
-            if (datatype.isString) value.asInstanceOf[OWLLiteralImplString].getLiteral
-            else if(datatype.isRDFPlainLiteral) value.asInstanceOf[OWLLiteralImplPlain].getLiteral
+            // Untyped literals: xsd:string, rdf:langString (OWL API 5) or
+            // rdf:PlainLiteral (OWL API 4)
+            if (datatype.isString || datatype.isRDFPlainLiteral || literal.hasLang) literal.getLiteral
             else {
               println("Warning: datatype not detected: ", datatype)
               stripValue(axiom.getValue.toString)
@@ -513,7 +514,7 @@ class OWL2VecStarProjector(
 
   def processAnnotationProperty(annotProperty: OWLAnnotationProperty, ontology: OWLOntology): List[Triple] = {
 
-    val annotations = EntitySearcher.getAnnotations(annotProperty, ontology).asScala.toList
+    val annotations = EntitySearcher.getAnnotations(annotProperty, ontology).iterator.asScala.toList
     val property = annotProperty.toStringID.toString
 
     property match {

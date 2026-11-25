@@ -3,12 +3,19 @@ from org.semanticweb.owlapi.manchestersyntax.renderer import \
     ManchesterOWLSyntaxOWLObjectRendererImpl
 from org.semanticweb.owlapi.model import OWLLiteral, OWLOntology
 from org.semanticweb.owlapi.search import EntitySearcher
+from java.util.stream import Collectors
 from deprecated.sphinx import deprecated
 
 from jpype.types import JString
 
 from org.mowl import MOWLShortFormProvider
 import logging
+
+
+def _annotations(entity, ontology):
+    """The annotations of ``entity`` in ``ontology`` as a list (OWL API 5 returns a
+    stream)."""
+    return EntitySearcher.getAnnotations(entity, ontology).collect(Collectors.toList())
 
 
 ENTITY_FORMS = ("iri", "bracketed iri")
@@ -44,7 +51,7 @@ def _annotation_lines(ontology, entity_form):
             name = str(entity)
         else:
             name = str(entity.toStringID())
-        annotations = EntitySearcher.getAnnotations(entity, ontology)
+        annotations = _annotations(entity, ontology)
         found = []
         for annotation in annotations:
             if isinstance(annotation.getValue(), OWLLiteral):

@@ -20,6 +20,34 @@ mOWL interfaces the OWLAPI by using JPype to connect to the Java Virtual Machine
    Notice that accessing to Java objects is only possible after starting the JVM
 
 
+OWLAPI version
+--------------------------------
+
+mOWL packages OWLAPI 5.5.1, with the reasoners ELK 0.6.0 and HermiT 1.4.5. The methods of
+OWLAPI 4 that return sets (``getAxioms()``, ``getClassesInSignature()``,
+``getOperands()``, ...) are still there, next to the stream methods of OWLAPI 5
+(``axioms()``, ``classesInSignature()``, ...). A Java stream is not a Python iterable:
+iterate over its ``iterator()``. Lists that OWLAPI returns
+(``getOperandsAsList()``) are read-only, and factory methods that take several class
+expressions need Java arguments or a ``java.util.ArrayList``, not a Python list.
+
+.. testcode::
+
+   from java.util import ArrayList
+   from org.semanticweb.owlapi.model import IRI
+   from org.semanticweb.owlapi.search import EntitySearcher
+
+   factory = manager.getOWLDataFactory()
+   named = [factory.getOWLClass(IRI.create("http://example.org/" + n)) for n in "AB"]
+   both = factory.getOWLObjectIntersectionOf(ArrayList(named))
+   operands = list(both.getOperandsAsList())          # a Python copy that can be changed
+   annotations = list(EntitySearcher.getAnnotations(named[0], ontology).iterator())
+   print(len(operands), len(annotations), len(list(ontology.axioms().iterator())))
+
+.. testoutput::
+
+   2 0 0
+
 Shortcuts to the OWLAPI
 --------------------------------
 

@@ -1,0 +1,106 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "dl2vec": [
+   [
+    "http://mowl.borg/geo#A",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#E",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ]
+  ],
+  "dl2vec_bidirectional": [
+   [
+    "http://mowl.borg/geo#A",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#E",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ]
+  ],
+  "owl2vecstar": [
+   [
+    "http://mowl.borg/geo#A",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://mowl.borg/geo#s",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#D",
+    "http://mowl.borg/geo#t",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#E",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ]
+  ],
+  "owl2vecstar_literals": [
+   [
+    "http://mowl.borg/geo#A",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://mowl.borg/geo#s",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#D",
+    "http://mowl.borg/geo#t",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#E",
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#B"
+   ]
+  ],
+  "taxonomy": [],
+  "taxonomy_bidirectional": [],
+  "taxonomy_rels": []
+ }
+}

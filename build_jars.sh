@@ -1,10 +1,5 @@
 set -e
+# Rebuilds mowl/lib: gateway.jar, jcel-owlapi5 and the libraries resolved from Maven
+# Central (see gateway/build.gradle). The KM reasoner JAR is kept.
 cd gateway
-rm -r -f build/
-gradle distZip
-cd build/distributions
-yes | unzip gateway.zip
-cd ../../../
-rm -f mowl/lib/*.jar
-cp -r gateway/build/distributions/gateway/lib mowl
-
+./gradlew --no-daemon clean installLibs

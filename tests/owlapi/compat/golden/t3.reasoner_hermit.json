@@ -1,0 +1,34 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "consistent": true,
+  "subsumptions": [
+   [
+    "http://mowl.borg/geo#A",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#A",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://mowl.borg/geo#X3"
+   ]
+  ],
+  "types": [],
+  "unsatisfiable": []
+ }
+}

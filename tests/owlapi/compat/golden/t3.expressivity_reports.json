@@ -1,0 +1,257 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "acone": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond EL with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "alcone": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ALC with ABox (the ontology uses EL⊥)."
+  },
+  "alcone-exact": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ALC (the ontology uses EL⊥)."
+  },
+  "attributed_dl": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "bcbox": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "betae": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond EL with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "box2el": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "box_lattice": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "box_milp": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within propositional EL⊥ (the ontology uses EL⊥)."
+  },
+  "boxe": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond EL with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "boxel": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "boxlite": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond DL-Lite_H with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊓ (6)."
+  },
+  "boxsel": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "canonical_mixture": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "canonical_model": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "cate": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ALC with ABox (the ontology uses EL⊥)."
+  },
+  "composed": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "composed-alc": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ALC with ABox (the ontology uses EL⊥)."
+  },
+  "composed_graph_kge": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond EL with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "composed_sequences": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within OWL 2 DL (the ontology uses EL⊥)."
+  },
+  "composed_subspace": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within E2R fragment with ABox (the ontology uses EL⊥)."
+  },
+  "concept2box": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond EL without conjunction with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "cone_qe": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond EL with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "convex_polyhedral": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ (the ontology uses EL⊥)."
+  },
+  "convex_regions": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ (the ontology uses EL⊥)."
+  },
+  "dfalc": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ALC with ABox (the ontology uses EL⊥)."
+  },
+  "disk_embeddings": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "dl2vec": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within OWL 2 DL (the ontology uses EL⊥)."
+  },
+  "e2r": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within E2R fragment with ABox (the ontology uses EL⊥)."
+  },
+  "eike": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "elbe": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within EL⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "elem": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within EL⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "elkem": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "emelpp": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "emelvar": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "expressive": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond EL with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "faithel": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "falcon": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ALC with ABox (the ontology uses EL⊥)."
+  },
+  "graph_kge": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within OWL 2 DL (the ontology uses EL⊥)."
+  },
+  "grounded": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "gumbel_box": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "hit": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "hyperbolic_cones": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "interval_union": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ (the ontology uses EL⊥)."
+  },
+  "least_model": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "mcmultibox": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond ELH(∘) (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "multiboxel": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within EL⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "multielbe": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within EL⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "octagon": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within EL⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "ont": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond EL (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "onto2vec": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within OWL 2 DL (the ontology uses EL⊥)."
+  },
+  "opa2vec": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within OWL 2 DL (the ontology uses EL⊥)."
+  },
+  "order_embeddings": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "owl2vec_star": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within OWL 2 DL (the ontology uses EL⊥)."
+  },
+  "prism": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within EL⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "query2box": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond EL with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "regd": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within EL⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "regd_elem": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within EL⊥ with ABox (the ontology uses EL⊥)."
+  },
+  "reshuffle": {
+   "ok": false,
+   "summary": "3 of 6 logical axioms go beyond EL with ABox (the ontology uses EL⊥) and will be ignored or only partly used: 3 SubClassOf. Constructs outside the supported logic: ⊥ (3)."
+  },
+  "shadow_cones": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "taxonomy_walks": {
+   "ok": false,
+   "summary": "6 of 6 logical axioms go beyond taxonomy (the ontology uses EL⊥) and will be ignored or only partly used: 3 EquivalentClasses, 3 SubClassOf. Constructs outside the supported logic: ⊥ (3), ⊓ (6)."
+  },
+  "temporal_cones": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ALC (the ontology uses EL⊥)."
+  },
+  "transbox": {
+   "ok": true,
+   "summary": "All 6 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses EL⊥)."
+  }
+ }
+}

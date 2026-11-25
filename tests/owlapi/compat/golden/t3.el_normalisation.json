@@ -1,0 +1,99 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "auxiliary_classes": 0,
+  "class_assertion": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci0": {
+   "named": [
+    [
+     "http://mowl.borg/geo#A",
+     "http://mowl.borg/geo#X1"
+    ],
+    [
+     "http://mowl.borg/geo#A",
+     "http://mowl.borg/geo#X2"
+    ],
+    [
+     "http://mowl.borg/geo#B",
+     "http://mowl.borg/geo#X2"
+    ],
+    [
+     "http://mowl.borg/geo#B",
+     "http://mowl.borg/geo#X3"
+    ],
+    [
+     "http://mowl.borg/geo#C",
+     "http://mowl.borg/geo#X1"
+    ],
+    [
+     "http://mowl.borg/geo#C",
+     "http://mowl.borg/geo#X3"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci0_bot": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci1": {
+   "named": [
+    [
+     "http://mowl.borg/geo#X1",
+     "http://mowl.borg/geo#X2",
+     "http://mowl.borg/geo#A"
+    ],
+    [
+     "http://mowl.borg/geo#X1",
+     "http://mowl.borg/geo#X3",
+     "http://mowl.borg/geo#C"
+    ],
+    [
+     "http://mowl.borg/geo#X2",
+     "http://mowl.borg/geo#X3",
+     "http://mowl.borg/geo#B"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci1_bot": {
+   "named": [
+    [
+     "http://mowl.borg/geo#A",
+     "http://mowl.borg/geo#B",
+     "http://www.w3.org/2002/07/owl#Nothing"
+    ],
+    [
+     "http://mowl.borg/geo#A",
+     "http://mowl.borg/geo#C",
+     "http://www.w3.org/2002/07/owl#Nothing"
+    ],
+    [
+     "http://mowl.borg/geo#B",
+     "http://mowl.borg/geo#C",
+     "http://www.w3.org/2002/07/owl#Nothing"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci2": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci3": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci3_bot": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "object_property_assertion": {
+   "named": [],
+   "with_auxiliary": 0
+  }
+ }
+}

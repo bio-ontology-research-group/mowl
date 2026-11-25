@@ -12,6 +12,7 @@ from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.formats import FunctionalSyntaxDocumentFormat
 
 from java.util import HashSet
+from java.util.stream import Collectors
 from jpype import java
 
 import os
@@ -227,7 +228,9 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
             translator.getTranslationRepository().addAxiomEntities(root_ont)
 
             for ont in root_ont.getImportsClosure():
-                axioms.addAll(ont.getAxioms())
+                # OWL API 5 gives the ontology implementations here, on which JPype
+                # does not find the default method getAxioms()
+                axioms.addAll(ont.axioms().collect(Collectors.toList()))
                 translator.getTranslationRepository().addAxiomEntities(ont)
 
             intAxioms = translator.translateSA(axioms)

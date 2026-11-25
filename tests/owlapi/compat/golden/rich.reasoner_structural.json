@@ -1,0 +1,91 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "consistent": true,
+  "subsumptions": [
+   [
+    "http://mowl.borg/compat/rich#Adult",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#BusyParent",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner",
+    "http://mowl.borg/compat/rich#PetOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father",
+    "http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father",
+    "http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother",
+    "http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother",
+    "http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Woman",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000002",
+    "http://purl.obolibrary.org/obo/GO_0000001"
+   ]
+  ],
+  "types": [
+   [
+    "http://mowl.borg/compat/rich#anna",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#anna",
+    "http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#bob",
+    "http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#bob",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#carl",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#rex",
+    "http://mowl.borg/compat/rich#Dog"
+   ]
+  ],
+  "unsatisfiable": []
+ }
+}

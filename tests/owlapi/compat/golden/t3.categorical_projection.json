@@ -1,0 +1,501 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "edges": 334,
+  "named_edges": [
+   [
+    "http://mowl.borg/geo#A",
+    "http://arrow",
+    "http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#A",
+    "http://arrow",
+    "http://mowl.borg/geo#A or not http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#A",
+    "http://arrow",
+    "http://mowl.borg/geo#A or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#A",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B and not http://mowl.borg/geo#A and http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B and not http://mowl.borg/geo#A and http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B and not http://mowl.borg/geo#A or not http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B and not http://mowl.borg/geo#A or not http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B or not http://mowl.borg/geo#A and http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B or not http://mowl.borg/geo#A and http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B or not http://mowl.borg/geo#A or not http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#B or not http://mowl.borg/geo#A or not http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C and not http://mowl.borg/geo#A and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C and not http://mowl.borg/geo#A and http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C and not http://mowl.borg/geo#A or not http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C and not http://mowl.borg/geo#A or not http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C or not http://mowl.borg/geo#A and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C or not http://mowl.borg/geo#A and http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C or not http://mowl.borg/geo#A or not http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#A and http://mowl.borg/geo#C or not http://mowl.borg/geo#A or not http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#A and not http://mowl.borg/geo#A",
+    "http://arrow",
+    "http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#A and not http://mowl.borg/geo#A",
+    "http://arrow",
+    "http://mowl.borg/geo#A and not http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#A or not http://mowl.borg/geo#A",
+    "http://arrow",
+    "http://mowl.borg/geo#A or not http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#A or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#A or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#A or not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#A or not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#B or not http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#B or not http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C and not http://mowl.borg/geo#B and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C and not http://mowl.borg/geo#B and http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C and not http://mowl.borg/geo#B or not http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C and not http://mowl.borg/geo#B or not http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C or not http://mowl.borg/geo#B and http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C or not http://mowl.borg/geo#B and http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C or not http://mowl.borg/geo#B or not http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#B and http://mowl.borg/geo#C or not http://mowl.borg/geo#B or not http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#B and not http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B and not http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#B and not http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B or not http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#B or not http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#B or not http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#B or not http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#B or not http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#B or not http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#C or not http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#C or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#C and not http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#C and not http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#C and not http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#C or not http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#C or not http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#C or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#C or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#C or not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#C or not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X1",
+    "http://arrow",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#X1",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 or not http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 and not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 and not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 and not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 and not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 or not http://mowl.borg/geo#A",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 or not http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#C",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and not http://mowl.borg/geo#X1",
+    "http://arrow",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#X1 and not http://mowl.borg/geo#X1",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 and not http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X1",
+    "http://arrow",
+    "http://mowl.borg/geo#X1 or not http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#B",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and not http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X2 and not http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 and not http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X2",
+    "http://arrow",
+    "http://mowl.borg/geo#X2 or not http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X3 and not http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X3",
+    "http://arrow",
+    "http://mowl.borg/geo#X3 or not http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#Z",
+    "http://arrow",
+    "http://mowl.borg/geo#Z"
+   ],
+   [
+    "http://mowl.borg/geo#Z",
+    "http://arrow",
+    "http://mowl.borg/geo#Z or not http://mowl.borg/geo#Z"
+   ],
+   [
+    "http://mowl.borg/geo#Z and not http://mowl.borg/geo#Z",
+    "http://arrow",
+    "http://mowl.borg/geo#Z"
+   ],
+   [
+    "http://mowl.borg/geo#Z and not http://mowl.borg/geo#Z",
+    "http://arrow",
+    "http://mowl.borg/geo#Z and not http://mowl.borg/geo#Z"
+   ],
+   [
+    "http://mowl.borg/geo#Z or not http://mowl.borg/geo#Z",
+    "http://arrow",
+    "http://mowl.borg/geo#Z or not http://mowl.borg/geo#Z"
+   ]
+  ],
+  "relations": [
+   "http://arrow"
+  ]
+ }
+}

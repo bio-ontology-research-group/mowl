@@ -1,0 +1,27 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "role_chain": [
+   [
+    "http://mowl.borg/compat/rich#hasAncestor",
+    "http://mowl.borg/compat/rich#hasAncestor",
+    "http://mowl.borg/compat/rich#hasAncestor"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasParent",
+    "http://mowl.borg/compat/rich#hasParent",
+    "http://mowl.borg/compat/rich#hasAncestor"
+   ]
+  ],
+  "role_inclusion": [
+   [
+    "http://mowl.borg/compat/rich#hasMother",
+    "http://mowl.borg/compat/rich#hasParent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasParent",
+    "http://mowl.borg/compat/rich#hasAncestor"
+   ]
+  ]
+ }
+}

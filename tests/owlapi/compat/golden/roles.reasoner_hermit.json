@@ -1,0 +1,28 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "consistent": true,
+  "subsumptions": [
+   [
+    "http://mowl.borg/geo#A",
+    "http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#A",
+    "http://mowl.borg/geo#D"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://mowl.borg/geo#D"
+   ]
+  ],
+  "types": [],
+  "unsatisfiable": [
+   "http://mowl.borg/geo#E"
+  ]
+ }
+}

@@ -1,0 +1,9 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "consistent": true,
+  "subsumptions": [],
+  "types": [],
+  "unsatisfiable": []
+ }
+}

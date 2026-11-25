@@ -41,17 +41,16 @@ class Node():
         
                 
         elif isinstance(owl_class, OWLObjectUnionOf):
-            operands = owl_class.getOperandsAsList()
+            # A Python copy: the operand list of OWL API 5 must not be changed.
+            operands = list(owl_class.getOperandsAsList())
             if len(operands) == 1:
                 raise ValueError(f"Union of one element is not allowed\n{owl_class}    \t{operands[0].toString()}")
-            for op in operands:
-                if op.isOWLNothing():
-                    logging.info(f"owl:Nothing existing in union. Removing it..")
-                    operands.remove(op)
-                elif op.isOWLThing():
-                    logging.info(f"owl:Thing existing in union. Simplifying to owl:Thing..")
-                    operands = None
-                    break
+            if any(op.isOWLThing() for op in operands):
+                logging.info(f"owl:Thing existing in union. Simplifying to owl:Thing..")
+                operands = None
+            elif any(op.isOWLNothing() for op in operands):
+                logging.info(f"owl:Nothing existing in union. Removing it..")
+                operands = [op for op in operands if not op.isOWLNothing()]
             if operands is None:
                 owl_class = top_class
             elif len(operands) == 1:
@@ -62,17 +61,15 @@ class Node():
         
                 
         if isinstance(owl_class, OWLObjectIntersectionOf):
-            operands = owl_class.getOperandsAsList()
+            operands = list(owl_class.getOperandsAsList())
             if len(operands) == 1:
                 raise ValueError(f"Intersection of one element is not allowed\n{owl_class}    \t{operands[0].toString()}")
-            for op in operands:
-                if op.isOWLThing():
-                    logging.info(f"owl:Thing existing in intersection. Removing it..")
-                    operands.remove(op)
-                if op.isOWLNothing():
-                    logging.info(f"owl:Nothing existing in intersection. Simplifying to owl:Nothing..")
-                    operands = None
-                    break
+            if any(op.isOWLNothing() for op in operands):
+                logging.info(f"owl:Nothing existing in intersection. Simplifying to owl:Nothing..")
+                operands = None
+            elif any(op.isOWLThing() for op in operands):
+                logging.info(f"owl:Thing existing in intersection. Removing it..")
+                operands = [op for op in operands if not op.isOWLThing()]
 
             if operands is None:
                 owl_class = bot_class

@@ -1,0 +1,23 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "annotation_properties": [],
+  "classes": [
+   "http://mowl.borg/geo#A",
+   "http://mowl.borg/geo#B",
+   "http://mowl.borg/geo#C",
+   "http://mowl.borg/geo#D",
+   "http://mowl.borg/geo#E",
+   "http://www.w3.org/2002/07/owl#Nothing"
+  ],
+  "data_properties": [],
+  "datatypes": [],
+  "individuals": [],
+  "object_properties": [
+   "http://mowl.borg/geo#r",
+   "http://mowl.borg/geo#s",
+   "http://mowl.borg/geo#t"
+  ],
+  "ontology_iri": "http://mowl.borg/geo/roles"
+ }
+}
