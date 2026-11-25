@@ -152,3 +152,19 @@ def test_axiom_scores_for_the_joint_benchmarks():
     scorer, _ = resolve_model_scorer(model)
     rows = T([[model.class_index_dict[NS + "Cat"], model.class_index_dict[NS + "Animal"]]])
     assert scorer(model, "gci0", rows).shape == (1,)
+
+
+def test_train_axes_false_keeps_spheres():
+    """``train_axes=False``: the axes stay at their starting value, centres and radii train."""
+    th.manual_seed(0)
+    np.random.seed(0)
+    model = EIKE(_dataset(), embed_dim=8, alpha=0.5, learning_rate=0.05, train_axes=False)
+    axes = model.module.class_axes_raw.weight.detach().clone()
+    radii = model.module.class_radius_raw.weight.detach().clone()
+    model.train(epochs=30)
+    assert th.equal(model.module.class_axes_raw.weight.detach(), axes)
+    assert not th.equal(model.module.class_radius_raw.weight.detach(), radii)
+    trained = EIKE(_dataset(), embed_dim=8, alpha=0.5, learning_rate=0.05)
+    start = trained.module.class_axes_raw.weight.detach().clone()
+    trained.train(epochs=30)
+    assert not th.equal(trained.module.class_axes_raw.weight.detach(), start)

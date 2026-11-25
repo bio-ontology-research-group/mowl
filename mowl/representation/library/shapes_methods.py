@@ -383,7 +383,7 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
 def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, alpha=1.0,
          margins=(1.0, 1.0, 1.0), instance_map="eye", intensional_init=None,
          freeze_intensional=False, containment="published", norm_term="signed",
-         init="uniform", tables=None, _into=None):
+         init="uniform", train_axes=True, tables=None, _into=None):
     r"""EIKE (Wang et al. 2024): every name has an ellipsoid (what it contains) and a vector
     (what it means), individuals are points and the vector :math:`M i`, relations are
     translations of individuals. The cost of an axiom is the cost in the first space plus
@@ -405,6 +405,9 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
     :param init: The starting values. ``"uniform"``: centres, points, translations and
         vectors uniform in (-0.5, 0.5), every radius 1. ``"small"``: those of the authors'
         code, normal with standard deviation ``1 / embed_dim`` and radii uniform in (0, 1).
+    :param train_axes: ``False`` keeps the axes of every ellipsoid at 1, so that a concept is
+        a sphere with a learned radius. The authors' code does this for its first 1000
+        epochs and trains the axes only in every second block of 100 epochs after that.
     :param tables: An :class:`~mowl.nn.el.eike.module.EIKEModule` to share parameters with.
     """
     if init not in ("uniform", "small"):
@@ -414,6 +417,8 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
         t.gamma_sub, t.gamma_ins, t.gamma_rel)
     if t is None:
         first = EllipsoidClasses(nb_classes, embed_dim)
+        if not train_axes:
+            first.axes_raw.weight.requires_grad_(False)
         second = VectorClasses(nb_classes, embed_dim)
         if intensional_init is not None:
             import numpy as np

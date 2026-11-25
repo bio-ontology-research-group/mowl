@@ -77,12 +77,34 @@ the threshold on the score eight of SubClassOf; with everything as in mOWL the a
 gives 80 / 63 / 89, which accounts for mOWL's SubClassOf (67) and most of its relational
 score (85) but not for its InstanceOf (68).
 
-``init="small"`` of :func:`~mowl.representation.library.shapes_methods.eike` and of
-:class:`~mowl.models.EIKE` gives the authors' starting values. In mOWL's loop they do not
-help: 62 / 42 / 67 with this configuration, against 68 / 67 / 85 with the default; the loss
-of the training triples falls to 0.02 while that of the validation triples rises from 0.3 to
-1.3 over the 2000 epochs. The recipes therefore keep the default, and what keeps the authors'
-loop from over-fitting where mOWL's does is open.
+What closes the distance for InstanceOf and the relational triples is a third difference:
+the authors' code does not train the axes of the ellipsoids in its first 1000 epochs
+(``concept_axis.weight.requires_grad = False``, axes 1: a concept is a sphere with a radius)
+and trains them only in every second block of 100 epochs after that, with SGD at 0.001, so
+that they hardly move; without the alternating phases they are never trained. mOWL trains the
+axes from the first epoch, 100 more parameters per concept, and over-fits: the loss of the
+training triples falls to 0.02 while that of the validation triples rises. ``train_axes=False``
+and ``init="small"`` of :func:`~mowl.representation.library.shapes_methods.eike` and of
+:class:`~mowl.models.EIKE` give the authors' spheres and starting values (mOWL, this
+configuration, 2000 epochs, seed 0, F1):
+
+=====================================================  ==========  ==========  ==========
+mOWL                                                   InstanceOf  SubClassOf  relational
+=====================================================  ==========  ==========  ==========
+default (axes trained, uniform starting values)        68          67          85
+``init="small"``                                       62          42          67
+``train_axes=False``                                   66          66          85
+``train_axes=False``, ``init="small"``                 82          54          92
+authors' code with mOWL's loop and threshold test      81          74          91
+paper (uniform negatives)                              87          81          93
+=====================================================  ==========  ==========  ==========
+
+With both options mOWL gives what the authors' code gives under the same loop for InstanceOf
+and the relational triples. SubClassOf does not follow (54 against 74): it is not the length
+term of the intensional score, which the authors' test drops (``norm(a) - norm(a)``): scoring
+mOWL's trained model without it gives 50. This part is open. The recipes keep the defaults,
+which are the model as the paper describes it (ellipsoids); add ``--param train_axes=false
+--param init=small`` for the numbers of the fourth row.
 
 Supplying vectors: ``EIKE.encode_class_texts(EIKE.class_texts(), encoder)`` with a sentence
 encoder of your choice (``SentenceTransformer("all-MiniLM-L6-v2").encode``), then

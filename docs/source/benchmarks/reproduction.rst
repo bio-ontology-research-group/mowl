@@ -89,10 +89,12 @@ Summary
      - ``yago39k-*``, ``m-yago39k-*``
      - not reproduced
      - F1 of 68 / 67 / 85 (InstanceOf / SubClassOf / relational) against 87 / 81 / 93.
-       The authors' code reproduces the paper. With every ingredient of its training loop
-       and its starting values and test rule replaced by mOWL's it still reaches
-       80 / 63 / 89, so the InstanceOf gap is in mOWL's training and is open (see the
-       notes of the recipe module ``mowl.benchmarks.recipe_sets.wang2024_eike``).
+       The authors' code reproduces the paper. It keeps the axes of the ellipsoids fixed
+       for most of the training (concepts are spheres); mOWL trains them and over-fits.
+       With ``train_axes=False`` and ``init="small"`` mOWL gives 82 / 54 / 92, which is
+       what the authors' code gives under mOWL's loop for InstanceOf and the relational
+       triples (81 / 74 / 91). SubClassOf is open (see the notes of the recipe module
+       ``mowl.benchmarks.recipe_sets.wang2024_eike``).
    * - ELK-Em
      - ``elkem-*``
      - partly
@@ -183,9 +185,21 @@ gives the rule of 2.1.0. The affected runs were repeated with the new rule (AUC,
      - 0.51 → 0.94
      - 0.94
 
-Still open: ``common-galen-subsumption-inference`` stays close to chance for the box models
-(BoxSEL 0.61, Concept2Box 0.52, EIKE 0.54, ELBE baseline 0.50). The baseline code with its
-own training regimes does not use this rule and its results did not change.
+``common-galen-subsumption-inference`` stays close to chance for Concept2Box (0.52) and
+EIKE (0.54) with either rule, and this is what the two methods can do, not a defect. The test
+axioms are subsumptions a reasoner derives from the ontology. In GALEN 0.4% of them (64 of
+16,325) follow from the stated subsumptions between named classes alone; all others need the
+definitions (13,595 axioms ``C ⊓ D ⊑ E`` and 13,597 axioms ``∃r.C ⊑ D``). In GO 60% and in
+ANATOMY 46% follow from the stated hierarchy. Concept2Box and EIKE train on ``C ⊑ D`` (and
+Concept2Box on ``C ⊑ ∃r.D``) and do not use the other normal forms, so on GALEN they are
+trained (the training loss falls) but cannot rank the derived subsumptions, while on GO and
+ANATOMY Concept2Box reaches 0.93 and 0.94. The geometric methods above 0.8 on this benchmark
+(such as ELEm, EmEL++, ELBE and Box\ :sup:`2`\ EL built from parts) train on the four
+normal forms.
+
+The baseline code with its own training regimes keeps its released selection rule, and its
+results did not change. The baseline ELBE stays at chance on GALEN inference (0.50, against
+0.84 for ELBE built from parts): its training loss does not fall there.
 
 Numbers
 -------
