@@ -515,6 +515,26 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
         :mod:`mowl.baselines.benchmarks` is imported).
     :rtype: :class:`BenchmarkResult`
     """
+    return run_benchmark_with_model(
+        benchmark, method=method, model_factory=model_factory, model_kwargs=model_kwargs,
+        epochs=epochs, seed=seed, device=device, training_regime=training_regime,
+        dataset=dataset, dataset_kwargs=dataset_kwargs, protocol_kwargs=protocol_kwargs,
+        validate_every=validate_every, select_best=select_best, workdir=workdir,
+        jvm_memory=jvm_memory, deterministic=deterministic, recipe=recipe,
+        implementation=implementation)[0]
+
+
+def run_benchmark_with_model(benchmark, method=None, model_factory=None, model_kwargs=None,
+                             epochs=None, seed=0, device="cpu", training_regime=None,
+                             dataset=None, dataset_kwargs=None, protocol_kwargs=None,
+                             validate_every=None, select_best=True, workdir=None,
+                             jvm_memory="8g", deterministic=True, recipe=None,
+                             implementation="parts"):
+    """:func:`run_benchmark`, returning the trained model and the dataset as well.
+
+    :return: ``(result, model, dataset)``: the :class:`BenchmarkResult`, the trained model
+        and the dataset it was trained on (as prepared by the benchmark's protocol).
+    """
     from mowl.benchmarks.implementations import get_implementation
     t0 = time.time()
     impl = get_implementation(implementation)
@@ -605,7 +625,7 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
 
     info = dict(getattr(protocol, "info", {}) or {})
     info["training"] = train_info
-    return BenchmarkResult(
+    result = BenchmarkResult(
         benchmark=benchmark.key, method=method, metrics=_jsonable(metrics),
         settings=_jsonable(_read_settings(model, model_kwargs)), epochs=epochs, seed=seed,
         device=device, evaluation_regime=getattr(protocol, "key", ""),
@@ -623,6 +643,7 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
             "deterministic": deterministic, "dataset_kwargs": d_kwargs,
             "protocol_kwargs": p_kwargs, "jvm_memory": jvm_memory, "workdir": workdir,
             "model_factory": None if model_factory is None else repr(model_factory)}))
+    return result, model, dataset
 
 
 # ---------------------------------------------------------------------------------------

@@ -105,6 +105,7 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    :glob:
 
    install/index
+   first_steps/index
    datasets/index
    ontology/index
    owlapi/index

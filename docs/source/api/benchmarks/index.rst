@@ -1,3 +1,10 @@
+mowl.pipeline
+=============
+
+.. automodapi:: mowl.pipeline
+   :no-heading:
+   :headings: --
+
 mowl.benchmarks
 ===============
 
