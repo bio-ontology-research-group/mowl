@@ -22,7 +22,18 @@ def test_list_show_published(capsys):
     main(["list", "--task", "exact_model"])
     assert "box2el" not in capsys.readouterr().out
     main(["show", "box2el-go-inference"])
-    assert "Jackermeier2024InferencesDataset" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Jackermeier2024InferencesDataset" in out
+    assert "inference tasks: subsumption" in out and "target: deductive inference" in out
+    main(["list", "--task", "link-prediction", "--target", "inductive prediction"])
+    out = capsys.readouterr().out
+    assert "box2el-yeast-ppi" in out and "box2el-go-inference" not in out
+    main(["list", "--method", "bcbox"])
+    out = capsys.readouterr().out
+    assert "box2el-go-inference" in out and "box2el-yeast-ppi" not in out
+    main(["methods", "box2el-go-inference"])
+    out = capsys.readouterr().out
+    assert "bcbox" in out and "gda_projection" not in out
     for fmt in ("text", "markdown", "rst"):
         main(["published", "box2el-galen-prediction", "--method", "box2el", "--format", fmt])
         assert "669" in capsys.readouterr().out

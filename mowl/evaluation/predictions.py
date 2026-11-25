@@ -1,3 +1,10 @@
+"""Precision, recall and AUC of scored axioms (mOWL 2.1.0).
+
+.. deprecated:: 2.2.0
+   Use the evaluation regimes of :mod:`mowl.evaluation` (and :mod:`mowl.evaluation.metrics`).
+"""
+import warnings
+
 import numpy as np
 from mowl.evaluation.metrics import auc, precision_and_recall_at_k, precision, recall
 
@@ -9,7 +16,12 @@ def evaluate_predictions(true_axioms, predictions, ks, pos_label=1):
     :type true_axioms: set
     :param predictions: Dictionary of predictions of the form prediction -> score
     :type: dict
+
+    .. deprecated:: 2.2.0
+       Use the evaluation regimes of :mod:`mowl.evaluation`.
     """
+    warnings.warn("mowl.evaluation.predictions.evaluate_predictions is deprecated: use the "
+                  "evaluation regimes of mowl.evaluation.", DeprecationWarning, stacklevel=2)
 
     y_scores = []
     y_true = []

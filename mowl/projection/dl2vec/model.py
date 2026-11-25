@@ -26,6 +26,9 @@ class DL2VecProjector(ProjectionModel):
     def project(self, ontology, with_individuals=False, verbose=False):
         r"""Generates the projection of the ontology.
 
+        The edges are returned sorted by ``(src, rel, dst)`` (:meth:`Edge.sort
+        <mowl.projection.edge.Edge.sort>`), not in the order of the Java hash set.
+
         :param ontology: The ontology to be processed.
         :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
         :param with_individuals: If true then assertion axioms with named individuals
@@ -50,4 +53,4 @@ class DL2VecProjector(ProjectionModel):
 
         edges = self.projector.project(ontology, with_individuals, verbose)
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
-        return edges
+        return Edge.sort(edges)

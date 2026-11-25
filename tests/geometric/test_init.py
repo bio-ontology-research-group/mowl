@@ -30,7 +30,7 @@ from mowl.geometric.errors import (
 from mowl.geometric.normal_forms import BOTTOM, NF1, NF2, TOP, NormalisedOntology
 from mowl.models import BoxSquaredEL
 from mowl.nn import BoxSquaredELModule, ELBEModule, PrismModule
-import mowl.nn.el.prism.losses as PL
+import mowl.representation.library.shapes_prism_math as PL
 from mowl.owlapi import OWLAPIAdapter
 from tests.geometric.helpers import (
     NS,

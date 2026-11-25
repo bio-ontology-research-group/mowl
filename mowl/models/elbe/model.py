@@ -1,7 +1,7 @@
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn import ELBEModule
-import torch as th
-from deprecated.sphinx import deprecated
+
+from mowl.training.losses import MSETargetLoss
 
 
 class ELBE(EmbeddingELModel):
@@ -10,6 +10,14 @@ class ELBE(EmbeddingELModel):
 
     This model uses MSE loss to train the embeddings, where positive samples
     should have scores close to 0 and negative samples should have scores close to 1.
+
+    The module is the combination of parts that defines ELBE (``model.module.parts``,
+    :class:`~mowl.nn.ELBEModule`) and the loss is the training regime
+    :class:`~mowl.training.MSETargetLoss` (``reduce="mean_first"``, negative target 1) that the
+    model attaches. Assign another :attr:`training_regime` to change it, or
+    :class:`~mowl.models.ComposedEL` to change the parts. The earlier hand-written
+    implementation is ``mowl.baselines.models.elbe.model.ELBE``, the reference that the tests
+    compare this class with.
 
     Parameters
     ----------
@@ -60,7 +68,10 @@ class ELBE(EmbeddingELModel):
         self.init = init
         self._loaded = False
         self.extended = False
-        self._mse_criterion = th.nn.MSELoss()
+        # ELBE's objective: the squared mean score of the positives plus the squared distance
+        # of the mean score of the negatives to 1, per normal form (see compute_loss)
+        self._loss_part = MSETargetLoss(0.0, 1.0, reduce="mean_first")
+        self.training_regime = self._loss_part
         self.init_module()
 
     def init_module(self):
@@ -77,26 +88,10 @@ class ELBE(EmbeddingELModel):
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict)
 
-    def get_regularization_loss(self):
-        loss = super().get_regularization_loss()
-        if self.init_boxes is not None and self.anchor_weight > 0:
-            loss = loss + self.anchor_weight * self.init_boxes.anchor_loss(self.module)
-        return loss
-
     def compute_loss(self, pos_scores, neg_scores=None):
         """Compute MSE loss for ELBE.
 
         Positive samples should have scores close to 0.
         Negative samples should have scores close to 1.
         """
-        pos_mean = th.mean(pos_scores)
-        loss = self._mse_criterion(pos_mean, th.zeros_like(pos_mean, requires_grad=False))
-
-        if neg_scores is not None:
-            neg_mean = th.mean(neg_scores)
-            loss += self._mse_criterion(neg_mean, th.ones_like(neg_mean, requires_grad=False))
-
-        return loss
-
-
-
+        return self._loss_part.combine(None, pos_scores, neg_scores)

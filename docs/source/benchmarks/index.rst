@@ -22,6 +22,61 @@ numbers were transcribed from the PDFs and checked against the rendered pages.
 
 Listing benchmarks and published results needs neither the JVM nor any download.
 
+Benchmarks and tasks
+--------------------
+
+Every benchmark states what it measures in the terms of :doc:`/logic/index`:
+
+- ``completion_tasks``: the form of the ranked candidates
+  (:data:`mowl.logic.COMPLETION_TASKS`), as the data pose them. A benchmark that poses one
+  task in the form of another says so in ``encodes``: protein-protein interaction
+  prediction with proteins as classes ranks the filler of :math:`C \sqsubseteq \exists r.?`
+  (``existential-prediction``) and encodes ``link-prediction``.
+- ``inference_tasks``: the reasoning tasks that decide a candidate
+  (:data:`mowl.logic.TASKS`), derived from the completion tasks.
+- ``target``: whether the correct answers are entailed by the training ontology
+  (deductive inference), held out and not entailed (inductive prediction), or of all
+  three logical statuses (:class:`mowl.logic.Target`).
+- ``evaluation_regime``: the key of the regime card of the regime its protocol runs. A
+  test checks that the card and the benchmark agree on task and target.
+
+A method can be run on a benchmark when its card declares the inference tasks of the
+benchmark and its expressivity has the constructs of the candidates:
+
+.. testcode::
+
+   from mowl.benchmarks import (get_benchmark, list_benchmarks, methods_for,
+                                missing_support, supports)
+
+   ppi = get_benchmark("box2el-yeast-ppi")
+   print(ppi.completion_tasks, ppi.encodes, ppi.inference_tasks, ppi.target.value)
+
+   links = list_benchmarks(completion_task="link-prediction",
+                           target="inductive prediction")
+   print("boxlite-family-v1" in [b.key for b in links])
+
+   print(supports("bcbox", "box2el-go-inference"), supports("bcbox", ppi))
+   print(missing_support("bcbox", ppi))
+   print("box2el" in [m.key for m in methods_for(ppi)])
+   print("box2el-go-inference" in [b.key for b in list_benchmarks(method="bcbox")])
+
+.. testoutput::
+
+   ('existential-prediction',) ('link-prediction',) ('subsumption',) inductive prediction
+   True
+   True False
+   ['construct ∃r.C (for existential-prediction)']
+   True
+   True
+
+The same from the command line:
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks list --task link-prediction --target "inductive prediction"
+   python -m mowl.benchmarks list --method bcbox
+   python -m mowl.benchmarks methods box2el-go-inference
+
 Evaluation protocols
 --------------------
 
@@ -181,11 +236,159 @@ same training and evaluation regime).
    ...['axiom_satisfaction', 'empty_fraction', 'exact_model', 'exact_model_nonempty', 'helly_violation_rate', 'is_model', 'no_interior_fraction']
    []
 
-Models are built through a *family handler*: subclasses of
-:class:`~mowl.base_models.EmbeddingELModel` are supported; graph, syntactic and ALC models
-raise :class:`~mowl.benchmarks.runner.UnsupportedModelError` until a handler is
-registered with :func:`~mowl.benchmarks.runner.register_family`. Any model can also be
-passed as ``model_factory(dataset)``.
+Every model that declares how it scores axioms can be run: the normal-form
+:math:`\\mathcal{EL}^{++}` models, CatE, the ALC models, E2R, binary code boxes, knowledge
+graph embeddings of a projection and, through a scoring head, the Word2Vec-based methods
+(see :ref:`joint-benchmarks`). Any model can also be passed as ``model_factory(dataset)``,
+and a new kind of model is added with
+:func:`~mowl.benchmarks.runner.register_family`.
+
+.. _joint-benchmarks:
+
+Comparing all methods: the joint benchmarks
+-------------------------------------------
+
+The benchmarks named after a publication reproduce *its* evaluation: its candidates, its
+tie handling, its score. Numbers from two of them cannot be compared. The ``common-*``
+benchmarks use one evaluation regime (``common-filtered-ranking``) on the data most
+publications share, for every method that supports the task:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 22 18 26
+
+   * - Benchmark
+     - Ranked
+     - Target
+     - Data
+   * - ``common-{galen,go,anatomy}-subsumption-prediction``
+     - :math:`D` in :math:`C \\sqsubseteq D`
+     - inductive prediction
+     - held-out axioms, 80/10/10 split of the Box\ :sup:`2`\ EL release
+   * - ``common-{galen,go,anatomy}-existential-prediction``
+     - :math:`D` in :math:`C \\sqsubseteq \\exists r.D`
+     - inductive prediction
+     - the same split
+   * - ``common-{galen,go,anatomy}-subsumption-inference``
+     - :math:`D` in :math:`C \\sqsubseteq D`
+     - deductive inference
+     - entailed, not stated subsumptions of the Box\ :sup:`2`\ EL release
+   * - ``common-{yeast,human}-ppi``
+     - :math:`P_2` in :math:`P_1 \\sqsubseteq \\exists \\mathit{interacts}.P_2`
+     - inductive prediction
+     - protein-protein interactions (proteins as classes)
+
+For every test axiom the class is ranked among all classes of the ontology (among the
+proteins for the interaction benchmarks), the subclass itself removed, after removing the
+other classes known to be correct for the query (training, validation and test axioms).
+Tied candidates share the average rank, so a model that gives every candidate the same
+score gets chance-level ranks. Reported: filtered MRR, Hits@1/10/100, mean rank, median
+rank and AUC.
+
+What differs between model families is only where the score comes from. A model states
+it with its class attribute ``axiom_scoring`` (:mod:`mowl.evaluation.model_scoring`), and
+the result records it as ``scoring``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 40 38
+
+   * - ``axiom_scoring``
+     - Score of a candidate axiom
+     - Models
+   * - ``"module"``
+     - the loss of the model's module for the normal form (``centre_distance`` where
+       the Box\ :sup:`2`\ EL centre distance is defined for the module, otherwise
+       ``loss``)
+     - normal-form :math:`\\mathcal{EL}^{++}` models, CatE
+   * - ``"evaluation_model"``
+     - ``model.evaluation_model(rows, gci_name)``
+     - binary code boxes
+   * - ``"method"``
+     - ``model.axiom_costs(gci_name, rows)``
+     - FALCON, al-cone, E2R, knowledge graph embeddings of a projection, HiT, OnT,
+       BoxLitE
+   * - ``"vectors"``
+     - the logit of a classifier trained on pairs of class vectors
+       (:class:`~mowl.evaluation.model_scoring.PairClassifierHead`,
+       ``pair_classifier``)
+     - random walk and corpus models with Word2Vec (DL2Vec, OWL2Vec*, Onto2Vec,
+       OPA2Vec)
+
+Methods that give vectors only cannot rank :math:`C \\sqsubseteq D` against
+:math:`D \\sqsubseteq C` by a similarity. As in the publications of these methods, a
+classifier is trained on the vectors of the stated axioms of the training ontology; the
+method card lists the tasks reached this way as ``head_tasks``, and the result then
+measures the vectors together with the head.
+
+Which methods take part is decided by data: the inference tasks and the expressivity on
+the method card against those of the benchmark.
+
+.. testcode::
+
+   from mowl.benchmarks import get_benchmark, methods_for
+   from mowl.benchmarks.comparison import runnable_methods
+
+   bench = get_benchmark("common-go-existential-prediction")
+   print(bench.completion_tasks, bench.target.value, bench.evaluation_regime)
+
+   run, skipped = runnable_methods(bench)
+   print("box2el" in run, "cate" in run, "falcon" in run, "dl2vec" in run)
+   print(skipped["bcbox"])
+   print(skipped["canonical_model"])
+
+.. testoutput::
+
+   ('existential-prediction',) inductive prediction common-filtered-ranking
+   True True True True
+   construct ∃r.C (for existential-prediction)
+   an exact construction, not a trained model; it decides the candidates instead of ranking them
+
+:func:`~mowl.benchmarks.comparison.compare_methods` trains and ranks them one after the
+other and :func:`~mowl.benchmarks.comparison.methods_table` puts the results side by
+side. A run that fails is recorded with its error and does not stop the others; with
+``out_dir`` every result is written to a file and an interrupted comparison continues
+where it stopped.
+
+.. testcode::
+
+   from mowl.benchmarks.comparison import compare_methods, methods_table
+
+   def compare_on_go(device="cuda"):
+       """Hours on a GPU: every method, three seeds, one budget."""
+       outcome = compare_methods("common-go-subsumption-prediction", seeds=(0, 1, 2),
+                                 device=device, out_dir="results")
+       print(methods_table(outcome.results))
+       print(outcome.skipped, outcome.failed)
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks compare-methods common-go-subsumption-prediction --dry-run
+   python -m mowl.benchmarks compare-methods common-go-subsumption-prediction \\
+       --seeds 0,1,2 --device cuda --out-dir results
+   python -m mowl.benchmarks run common-go-subsumption-prediction --method dl2vec \\
+       --recipe --seed 0 --device cuda --out dl2vec_s0.json
+   python -m mowl.benchmarks table results/common-go-subsumption-prediction.*.json
+
+Every method has default settings on the joint benchmarks (recipes with the source
+``mowl-common``, :mod:`mowl.benchmarks.recipe_sets.common_defaults`), which
+``compare_methods`` uses unless ``epochs`` or model arguments are given: where a
+publication trained the method on the same data its settings are reused (Box\ :sup:`2`\ EL
+and its baselines, TransBox, ELK-Em), and every other method gets plain defaults with a
+training length that fits how it is trained (thousands of steps for the geometric models,
+a few passes for Word2Vec, one pass for the language models).
+
+Three things to keep in mind when reading such a table:
+
+- The comparison is of ranks, not of scores, and of the methods *as configured*: the
+  default settings are not a tuned result for any of them. Tune on the validation split,
+  never on the test split, and report the number of seeds.
+- A held-out axiom of the prediction benchmarks may be entailed by the training axioms.
+  The inference benchmarks contain entailed axioms only.
+- Not covered yet: GroundedEL (it has no graded score for a subsumption between named
+  classes) and the exact constructions (they decide candidates instead of ranking
+  them). CatE ranks :math:`\\exists r.D` only for fillers that are elements of its lattice
+  (its ``existentials`` argument).
 
 Command line
 ------------
@@ -276,6 +479,109 @@ apply a recipe; arguments given explicitly take precedence.
 
 Whether mOWL reproduces each publication is recorded in :doc:`reproduction`.
 
+.. _baseline-benchmarks:
+
+The combination of parts against the direct implementation
+-----------------------------------------------------------
+
+Every method of mOWL is a combination of general parts; the earlier, direct
+implementation of each method (one loss module and model class per paper) is kept in
+:mod:`mowl.baselines` and compared with it in ``tests/baselines`` on small data. On the
+benchmarks, the comparison is three-way: *published* (the number in the paper),
+*mOWL (parts)* (the method users get) and *mOWL (direct)* (the direct implementation),
+each run with the same benchmark, recipe, evaluation regime and seed.
+
+The runner builds a method through an *implementation*
+(:mod:`mowl.benchmarks.implementations`). The default, ``"parts"``, is the class of the
+method's catalogue card. :mod:`mowl.baselines.benchmarks` registers ``"baseline"`` when it
+is imported; the library itself never imports it. It maps each catalogue method to the
+direct class of the same name (and the walk, corpus and graph KGE methods to the same
+factory, configured with the direct class), builds it with the same model arguments,
+trains it with the same model family and attaches the *same* training regime object: the
+regime of a recipe is part of the experiment, not of the method. An argument of a recipe
+that the direct class does not have stops the run with a message (none of the current
+recipes needs a mapping). Methods without a direct implementation (the general
+combinations ``composed*``, ``box_milp``, ``least_model``) are refused.
+
+.. testcode::
+
+   import mowl.baselines.benchmarks
+   from mowl.benchmarks.implementations import get_implementation, list_implementations
+
+   print({"parts", "baseline"} <= set(list_implementations()))
+   baseline = get_implementation("baseline")
+   print(baseline.supports("elbe"), baseline.supports("composed"))
+
+.. testoutput::
+
+   True
+   True False
+
+From the command line, ``--plugin`` imports a module first and ``--implementation``
+chooses the implementation; ``python -m mowl.baselines.benchmarks run ...`` is the same as
+``python -m mowl.benchmarks run ... --plugin mowl.baselines.benchmarks --implementation
+baseline``:
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run box2el-galen-prediction --method elbe \
+       --recipe jackermeier2024 --seed 0 --device cuda --out elbe_parts.json
+   python -m mowl.benchmarks run box2el-galen-prediction --method elbe \
+       --recipe jackermeier2024 --seed 0 --device cuda --out elbe_direct.json \
+       --plugin mowl.baselines.benchmarks --implementation baseline
+
+The result records which implementation ran (``implementation``: name and model class),
+the recipe, every option of the run (``options``), the metrics, the wall time and the
+git commit. The runner seeds Python, NumPy and PyTorch, and hands the run's seed to
+every model argument and training-regime argument called ``seed`` that the run does not
+set (several samplers draw from fresh operating-system entropy when their ``seed`` is
+``None``). The walk and corpus methods train Word2Vec and the walker with one worker by
+default, since several workers make the vectors depend on thread scheduling. When a
+recipe attaches a training regime to a method that has regimes of its own (RegD's
+contrastive loss, PRISM's squared mean), the runner keeps those that change hooks the
+recipe's regime leaves alone, as the direct implementation keeps its own loss; the
+result lists them under ``implementation["method_regimes_kept"]``.
+
+For the full-scale runs, ``scripts/benchmark_manifests.py`` writes one line per run
+(benchmark, method, recipe, implementation, seed) for every recipe of a publication whose
+numbers are recorded, in both implementations, and for the joint benchmarks; the lines
+are split by expected cost so that small runs can be packed on one GPU.
+``scripts/run_manifest.sh`` runs a manifest locally (or inside a batch job), and
+``scripts/collect_benchmarks.py`` reads the result files into the three-way table
+(Markdown, CSV and an RST ``list-table``), flagging parts and direct implementation that
+differ by more than 2% (or the seed standard deviation), results more than 5% from the
+published value, and missing or failed runs:
+
+.. code-block:: bash
+
+   python scripts/benchmark_manifests.py --out-dir manifests --seeds 0,1,2
+   MANIFEST=manifests/repro-fast.tsv RESULTS=results DEVICE=cuda PAR=4 \
+       scripts/run_manifest.sh
+   python scripts/collect_benchmarks.py results --manifest manifests/repro-fast.tsv \
+       --logs results/logs --out report \
+       --headline-rst docs/source/benchmarks/_headline.rst
+   cp report.csv docs/source/benchmarks/three_way.csv
+
+.. testcode::
+
+   from mowl.benchmarks.collect import collect, three_way_table
+
+   def result(implementation, value):
+       return {"benchmark": "common-galen-subsumption-prediction", "method": "elbe",
+               "seed": 0, "implementation": {"name": implementation},
+               "recipe": {"source": "mowl-common", "name": ""},
+               "metrics": {"all": {"f_mrr": value}}}
+
+   rows = collect([result("parts", 0.30), result("baseline", 0.25)])
+   row = [r for r in rows if r["metric"] == "f_mrr"][0]
+   print(row["parts"], row["baseline"], row["flags"])
+
+.. testoutput::
+
+   0.3 0.25 parts≠baseline
+
+The table of the full-scale runs is in :doc:`reproduction`.
+
 .. toctree::
    :maxdepth: 1
 
@@ -288,3 +594,169 @@ The tables below are generated from the registry
 (:func:`mowl.benchmarks.report.published_to_rst`).
 
 .. include:: _published.rst
+
+Two-view benchmarks: EIKE and Concept2Box
+-----------------------------------------
+
+Both papers learn from data with a concept level and an instance level. In mOWL the data
+are ontologies with an ABox: instances are individuals, concepts are classes,
+``InstanceOf`` pairs are class assertions, ``SubClassOf`` pairs are subclass axioms and
+relational triples between instances are object property assertions.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Benchmark
+     - Data
+     - Task (evaluation regime)
+   * - ``yago39k-instanceof-classification``, ``yago39k-subclassof-classification``,
+       ``yago39k-relational-classification``, ``m-yago39k-instanceof-classification``,
+       ``m-yago39k-subclassof-classification``
+     - YAGO39K and M-YAGO39K [lv2018transc]_, with the negatives of the release
+     - Triple classification with one threshold per relation (``triple-classification-thresholds``)
+   * - ``yago39k-link-prediction``
+     - YAGO39K
+     - Raw and filtered head and tail ranking of relational triples (``assertion-link-prediction``)
+   * - ``joie-dbpedia-instance-view-completion``, ``joie-dbpedia-ontology-view-completion``
+     - DBpedia of JOIE [hao2019joie]_ with a seeded random 80/10/10 split of the triples
+     - Tail prediction (``two-view-kg-completion``)
+   * - ``joie-dbpedia-concept-linking``
+     - The same, with the cross-view links split
+     - Ranking all concepts of an entity (``concept-linking-ranking``)
+
+Data that cannot be used: the third dataset of EIKE, DB99K-242, has no released splits or
+negatives (the DBpedia of the EIKE repository is another one), and the Recipe dataset of
+Concept2Box is built from Amazon.com listings and is not public. The public DBpedia
+release of JOIE is smaller than the statistics printed in the Concept2Box paper, and the
+paper's random split is not released: its numbers are indicative targets only.
+
+EIKE encodes the concept names with a pre-trained language model. mOWL takes the vectors as
+an optional input and neither imports nor downloads a model: encode the texts with any encoder, reduce
+them to the embedding dimension and pass them as ``intensional_vectors`` (a dictionary, or the
+path of a file written by ``EIKE.save_intensional_vectors``; a recipe run takes it with
+``--param intensional_vectors=<file>``). The paper used Sentence-BERT
+(``all-MiniLM-L6-v2``, 384 dimensions, frozen) and a trained linear map to 100 dimensions.
+
+.. testcode::
+
+   import numpy as np
+   from mowl.models.eike.model import EIKE
+
+   texts = {"http://example.org/Danish_male_actors": "Danish male actors",
+            "http://example.org/Footballer": "Footballer"}
+   encoder = lambda strings: np.array([[len(s), s.count("a"), 1.0] for s in strings])
+   vectors = EIKE.encode_class_texts(texts, encoder)       # the paper: a Sentence-BERT encoder
+   vectors = EIKE.pca_vectors(vectors, 2)                   # down to the embedding dimension
+   print({iri.rsplit("/", 1)[-1]: v.shape for iri, v in vectors.items()})
+
+.. testoutput::
+
+   {'Danish_male_actors': (2,), 'Footballer': (2,)}
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run yago39k-instanceof-classification --method eike \
+       --recipe wang2024eike:pre-eye --param intensional_vectors=minilm100.npz \
+       --seed 0 --device cuda --out yago_eike_pre_eye.json
+
+Inductive link prediction
+-------------------------
+
+The twelve ``kg-inductive-*`` benchmarks are the inductive knowledge graph completion
+datasets of Teru et al. [teru2020]_ (ICML 2020), derived from FB15k-237, WN18RR and NELL-995 (versions
+``v1`` to ``v4``), with the protocol of RESHUFFLE [pavlovic2025]_: a model is trained on one
+graph and tested on a second graph that has other entities and the same relations.
+
+* The dataset (:class:`mowl.datasets.builtin.inductive_kg.InductiveKnowledgeGraphDataset`)
+  has the training graph as its ontology (a triple is the axiom ``h ⊑ ∃r.t``), the
+  validation triples of the training graph as its validation ontology, and, apart from
+  both, the facts of the test graph (``inference_graph``) and the triples to predict
+  (``test_triples``). Its ``testing`` ontology is ``None`` so that the test entities are
+  not classes of a model built on it.
+* **How a model receives the test graph.** The evaluation regime
+  (:class:`mowl.evaluation.inductive_ranking.InductiveSampledRankingRegime`, 50 sampled
+  corruptions of the head and 50 of the tail per test triple, Hits@10) calls
+  ``model.inductive_costs(graph, rows)``: ``graph`` is the ``inference_graph`` and ``rows``
+  are candidate triples as indices into it; the result is one cost per row, lower is more
+  plausible. Any model that computes entity representations from the facts about an entity
+  can implement it. A model with one vector per training entity cannot: the regime
+  raises :class:`~mowl.evaluation.inductive_ranking.UnsupportedInductiveModel`.
+* The published numbers (Hits@10, Table 2 and Table 3 of the paper) and the settings of the
+  authors' code are registered for the method ``reshuffle`` (three variants: ``reshuffle``,
+  ``no-loop``, ``square``).
+
+.. testcode::
+
+   from mowl.benchmarks import get_benchmark, get_recipe, published_results
+
+   b = get_benchmark("kg-inductive-nell995-v1")
+   print(b.evaluation_regime, b.metrics[0])
+   (main,) = [r for r in published_results(benchmark=b.key, method="reshuffle")
+              if r.settings["variant"] == "reshuffle"]
+   print(main.metrics, main.locator)
+   recipe = get_recipe(b.key, "reshuffle", "pavlovic2025", "reshuffle")
+   print(recipe.epochs, recipe.model_kwargs["num_layers"], recipe.model_kwargs["l"])
+
+.. testoutput::
+
+   inductive-sampled-ranking hits@10
+   {'hits@10': 0.638} Table 2 (RESHUFFLE row)
+   1000 3 20
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run kg-inductive-nell995-v1 --method reshuffle \
+       --recipe pavlovic2025:reshuffle --seed 0 --device cuda --out nell_v1_s0.json
+
+
+Logical query answering benchmarks
+----------------------------------
+
+The ``query-<kg>-betae`` and ``query-<kg>-q2b`` benchmarks (``kg`` is ``fb15k``,
+``fb15k237`` or ``nell995``) are the released query sets of BetaE and Query2Box, on which
+Query2Box, BetaE, ConE and AConE report their results. ``query-wn18rr-qa`` is the
+WN18RR-QA set that AConE adds; mOWL does not download it (pass the directory as
+``dataset_kwargs={"data_dir": ...}``).
+
+The dataset (:class:`mowl.datasets.builtin.query_sets.QueryAnsweringDataset`) downloads the
+archive ``KG_data.zip`` (1.4 GB, checksum pinned) once and converts it. The training graph is
+an ontology of axioms :math:`h \sqsubseteq \exists r.t` between entity classes; the released
+validation and test queries, with easy and hard answers and including the negation
+structures 2in, 3in, inp, pin, pni and the unions 2u, up, are read with the entity and
+relation ids of the model that is evaluated, and ranked by
+:class:`mowl.evaluation.ReleasedQueryAnswering`, which reports one subset per structure and
+the averages ``average_epfo`` and ``average_negation`` that the papers print.
+
+.. testcode::
+
+   from mowl.benchmarks import get_benchmark, get_recipe, published_results
+
+   b = get_benchmark("query-nell995-betae")
+   print(b.assumption.value, b.target.value)
+   print(b.subsets)
+   recipe = get_recipe("query-nell995-betae", "acone")
+   print(recipe.model_kwargs["queries"], recipe.epochs * recipe.model_kwargs["steps_per_epoch"])
+   print([r.metrics for r in published_results("query-nell995-betae", "acone", "3i")])
+
+.. testoutput::
+
+   closed world over stated axioms inductive prediction
+   ('1p', '2p', '3p', '2i', '3i', 'pi', 'ip', '2u', 'up', '2in', '3in', 'inp', 'pin', 'pni', 'average_epfo', 'average_negation', 'average')
+   released 300000
+   [{'mrr': 0.53}]
+
+These benchmarks are **closed world with negation as absence**
+(:class:`mowl.logic.WorldAssumption` ``CLOSED_STATED``): the answers of a query are those
+in the graph of stated edges, an entity that no stated edge makes an answer of :math:`q` is
+an answer of :math:`\neg q`, and a hidden complete graph defines which answers are
+"correct". A reasoner over an open world would give a negated query almost no answers.
+
+The recipes train on the **released training queries** (``queries="released"``), as the
+four papers do, not on queries that mOWL samples from the graph. Both are options of
+:class:`~mowl.models.composed.query.QueryEmbeddingModel`; the sampler is the default because it works
+on any ontology.
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run query-nell995-betae --method cone_qe --recipe \
+       --seed 0 --device cuda --out nell_cone_s0.json

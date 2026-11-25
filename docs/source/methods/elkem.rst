@@ -66,6 +66,14 @@ An axiom is scored by :math:`s(\alpha) = \exp(-\ell^0(\alpha))`, the loss with m
 :class:`~mowl.nn.el.elkem.module.ELKEmModule` returns :math:`\ell^0` in evaluation mode, so
 mOWL's evaluators (which rank by ascending value) rank exactly as the paper does.
 
+:class:`~mowl.nn.el.elkem.module.ELKEmModule` is a :class:`~mowl.representation.ComposedGeometry`
+made of the parts that the builder ``elkem`` (``mowl/representation/library/boxrel_methods.py``)
+names: boxes with classes fixed to the empty or the full box, a relation with a range box, an
+error box and an affine map, bounds averaged over the coordinates, points for individuals, and
+the ELK-Em objective (``module.parts`` lists them). The hand-written module that this one
+replaced is kept as ``mowl.baselines.nn.el.elkem.module``; the tests compare the two number by
+number, for both variants.
+
 Training (:class:`~mowl.models.elkem.model.ELKEm`): one mini-batch per normal form and epoch,
 the mean losses of all normal forms, and, when there are no assertions, a Pearson
 correlation loss between the scores of positive ``gci0``/``gci2`` axioms and of ``k_neg``
@@ -76,10 +84,15 @@ example protein language model embeddings) given as a matrix. Adam with a step d
 learning rate; with a validation ontology, the checkpoint with the best validation median
 rank of the ``gci0`` subsumptions is kept.
 
-With a :attr:`~mowl.base_models.elmodel.EmbeddingELModel.training_regime` attached, the
-generic regime-aware loop of
-:meth:`~mowl.base_models.elmodel.EmbeddingELModel.train` runs instead of the built-in one.
-The regime ``elkem-code-training``
+The model trains with the generic loop of
+:meth:`~mowl.base_models.elmodel.EmbeddingELModel.train` and the regime
+:class:`~mowl.training.elkem.ELKEmTraining` that the method names as its default; it is the
+combination of :class:`~mowl.training.elkem.FixedConceptRouting`,
+:class:`~mowl.training.elkem.AssertionCorruption`, mini-batches, the weighted assertion losses,
+:class:`~mowl.training.elkem.PearsonContrastiveTerm`,
+:class:`~mowl.training.elkem.LexicalRegularisation`, a step decay and
+:class:`~mowl.training.elkem.ValidationCheckpoint`, and any of them can be replaced by assigning
+another ``training_regime``. The regime ``elkem-code-training``
 (:class:`~mowl.training.reference.ELKEmCodeTraining`) is the design of the authors'
 ranking code, and the recipes of the ELK-Em paper
 (:mod:`mowl.benchmarks.recipe_sets.singh2026`) use it together with the evaluation regime

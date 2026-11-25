@@ -19,11 +19,13 @@ the model's loss:
   :math:`C_1 \\cup C_2 \\cup C_3` have a common point, i.e. when it does not satisfy the
   entailed axiom :math:`C_1 \\sqcap C_2 \\sqcap C_3 \\sqsubseteq \\bot`.
 
-Regions are read from the model's module by a *reader* registered in
-:data:`REGION_READERS` (keyed by module class name; subclasses inherit the reader of
-their closest registered base class). Supported families and what is decided exactly are
-listed in :mod:`mowl.evaluation.regions`: single boxes (ELBE, Box\\ :sup:`2`\\ EL,
-TransBox, ELK-Em, RegD-ELBE, BoxEL), balls (ELEmbeddings, EmEL++, EmEL(var),
+Regions are read through the geometry of the model's module
+(:func:`mowl.evaluation.region_access.geometry_evaluation_regions`; the converters are
+registered for each region family of the library), except for the modules that have a
+*reader* of their own in :data:`REGION_READERS` (keyed by module class name; subclasses
+inherit the reader of their closest registered base class). Supported families and what is
+decided exactly are listed in :mod:`mowl.evaluation.regions`: single boxes (ELBE,
+Box\\ :sup:`2`\\ EL, TransBox, ELK-Em, RegD-ELBE, BoxEL), balls (ELEmbeddings, EmEL++, EmEL(var),
 RegD-ELEm), prisms (PrismEL), products of octagons (OctagonEL) and unions of boxes
 (MultiBoxEL, MultiELBE, the volume-based MultiBoxEL). For these families every
 propositional normal form with binary conjunctions is decided; an axiom that falls outside
@@ -43,11 +45,9 @@ non-empty interiors.
 
 import math
 
-import numpy as np
-
 from mowl.evaluation.regime import EvaluationRegime
-from mowl.evaluation.regions import (BallRegion, BoxRegion, EmptyRegion, OctagonRegion,
-                                     PrismRegion, UndecidedInclusion, UnionRegion,
+from mowl.representation.adapters import qualified_name
+from mowl.evaluation.regions import (EmptyRegion, UndecidedInclusion, UnionRegion,
                                      Universe, satisfies)
 
 
@@ -55,153 +55,49 @@ def _np(t):
     return t.detach().cpu().double().numpy()
 
 
-def _boxes(center, offset):
-    center, offset = _np(center), np.abs(_np(offset))
-    return [BoxRegion(c - o, c + o) for c, o in zip(center, offset)]
+#: Region readers by module class name, for a module whose class regions the geometry does
+#: not give. Empty: every module is read through its geometry
+#: (:func:`mowl.evaluation.region_access.geometry_evaluation_regions`: balls, boxes, unions
+#: of boxes with slots (MultiBoxEL with the structural objective: its defined classes are the
+#: intersections of their definers in its geometry), prisms and products of octagons). A
+#: reader takes the module and returns one :class:`~mowl.evaluation.regions.Region` per class
+#: index.
+REGION_READERS = {}
+
+def _geometry_regions(module):
+    """Every class of the module as an evaluation region, through its geometry."""
+    from mowl.evaluation.region_access import geometry_evaluation_regions
+    return geometry_evaluation_regions(module, "The exact-model check")
 
 
-def _all_idx(module, n=None):
+def _has_convertible_geometry(module):
+    """Whether the module has a geometry whose class regions have a converter."""
     import torch as th
-    n = module.nb_ont_classes if n is None else n
-    device = next(module.parameters()).device
-    return th.arange(n, device=device)
-
-
-def _elbe_regions(module):
-    return _boxes(module.class_embed.weight, module.class_offset.weight)
-
-
-def _box2el_regions(module):
-    return _boxes(module.class_center.weight, module.class_offset.weight)
-
-
-def _transbox_regions(module):
-    return _boxes(module.class_center_embedding.weight, module.class_offset_embedding.weight)
-
-
-def _elkem_regions(module):
-    import torch as th
-    with th.no_grad():
-        lower, upper = module.class_box(_all_idx(module))
-    return [BoxRegion(lo, hi) for lo, hi in zip(_np(lower), _np(upper))]
-
-
-def _regd_box_regions(module):
-    import torch as th
-    with th.no_grad():
-        center, offset = module._region(_all_idx(module))
-    return [BoxRegion(c - o, c + o) for c, o in zip(_np(center), _np(offset))]
-
-
-def _boxel_regions(module):
-    import torch as th
-    lo = _np(module.min_embedding.weight)
-    hi = lo + _np(th.exp(module.delta_embedding.weight))
-    return [BoxRegion(a, b) for a, b in zip(lo, hi)]
-
-
-def _ball_regions(module):
-    center = _np(module.class_embed.weight)
-    radius = np.abs(_np(module.class_rad.weight)).reshape(-1)
-    return [BallRegion(c, r) for c, r in zip(center, radius)]
-
-
-def _regd_ball_regions(module):
-    import torch as th
-    with th.no_grad():
-        center, radius = module._region(_all_idx(module))
-    return [BallRegion(c, r) for c, r in zip(_np(center), _np(radius).reshape(-1))]
-
-
-def _component_unions(cen, off, active=None):
-    cen, off = _np(cen), _np(off)
-    out = []
-    for i in range(cen.shape[0]):
-        comps = [BoxRegion(cen[i, k] - off[i, k], cen[i, k] + off[i, k])
-                 for k in range(cen.shape[1]) if active is None or active[i, k]]
-        out.append(UnionRegion(comps, dim=cen.shape[2]))
-    return out
-
-
-def _structural_union_regions(module):
-    r = module.all_class_regions()
-    return _component_unions(r.cen, r.w, r.active.cpu().numpy())
-
-
-def _multielbe_regions(module):
-    import torch as th
-    with th.no_grad():
-        cen, off = module.class_boxes(_all_idx(module))
-    return _component_unions(cen, off)
-
-
-def _volume_multibox_regions(module):
-    import torch as th
-    with th.no_grad():
-        cen, off = module.concept_boxes(_all_idx(module))
-    return _component_unions(cen, off)
-
-
-def _prism_regions(module):
-    r = module.all_class_regions()
-    h, cen, w = _np(r.h), _np(r.cen), _np(r.w)
-    return [PrismRegion(h[i], cen[i] - w[i], cen[i] + w[i]) for i in range(h.shape[0])]
-
-
-def _octagon_regions(module):
-    h = _np(module.all_class_bounds())
-    return [OctagonRegion(h[i]) for i in range(h.shape[0])]
-
-
-#: Region readers by module class name. Each takes the module and returns one
-#: :class:`~mowl.evaluation.regions.Region` per class index, reading the parameters as
-#: the module's losses do (absolute values of offsets and radii, materialised defined
-#: classes of the structural objectives, fixed empty / full boxes of ELK-Em).
-REGION_READERS = {
-    "ELBEModule": _elbe_regions,
-    "BoxSquaredELModule": _box2el_regions,
-    "TransBoxModule": _transbox_regions,
-    "ELKEmModule": _elkem_regions,
-    "RegDELBEModule": _regd_box_regions,
-    "BoxELModule": _boxel_regions,
-    "ELEmModule": _ball_regions,  # also EmELPPModule, EmELVarModule (subclasses)
-    "RegDELEmModule": _regd_ball_regions,
-    "MultiBoxELModule": _structural_union_regions,
-    "MultiELBEModule": _multielbe_regions,
-    "VolumeMultiBoxELModule": _volume_multibox_regions,
-    "PrismModule": _prism_regions,
-    "OctagonELModule": _octagon_regions,
-}
-
-#: Single-box extractors in the format of earlier versions (for every class index a list
-#: with one ``(lo, hi)`` pair). Kept for :mod:`mowl.evaluation.inclusion_accuracy`; new
-#: code should use :data:`REGION_READERS`.
-REGION_EXTRACTORS = {
-    name: (lambda module, _f=fn: [[(b.lo, b.hi)] for b in _f(module)])
-    for name, fn in (("ELBEModule", _elbe_regions), ("BoxSquaredELModule", _box2el_regions),
-                     ("TransBoxModule", _transbox_regions))
-}
-
-#: Modules that subclass a registered module but are not region models of that kind.
-NOT_REGION_MODULES = {
-    "CanonicalMixtureModule": (
-        "classes are columns of a 0/1 membership matrix over the finite canonical domain "
-        "(a set-based model, faithful by construction), not regions of R^d"),
-}
+    from mowl.evaluation.region_access import device_of, evaluation_regions
+    from mowl.representation import geometry_of
+    try:
+        geometry = geometry_of(module)
+        # (device_of: a module without parameters, a constructed model, is on the CPU)
+        probe = geometry.classes(th.zeros(1, dtype=th.long, device=device_of(module)))
+    except (NotImplementedError, TypeError, AttributeError, RuntimeError, StopIteration):
+        return False
+    return evaluation_regions.dispatch(type(probe)) is not evaluation_regions.dispatch(object)
 
 
 def find_reader(module):
-    """The reader of :data:`REGION_READERS` for ``module`` (by class name, walking the
-    method resolution order), or ``None``."""
+    """The reader of :data:`REGION_READERS` for ``module`` (by qualified class name, walking
+    the method resolution order); a module that says it is not a region model
+    (``not_a_region_model``, a reason) has none; failing that, the reader of the geometry of the module if
+    its classes are balls or boxes (:func:`mowl.representation.geometry_of`); else
+    ``None``."""
+    if getattr(module, "not_a_region_model", None):
+        return None
     for cls in type(module).__mro__:
-        if cls.__name__ in NOT_REGION_MODULES:
-            return None
-        if cls.__name__ in REGION_READERS:
-            return REGION_READERS[cls.__name__]
-    if hasattr(module, "all_class_regions"):
-        r = module.all_class_regions()
-        if hasattr(r, "active"):
-            return _structural_union_regions
+        reader = REGION_READERS.get(qualified_name(cls))
+        if reader is not None:
+            return reader
+    if _has_convertible_geometry(module):
+        return _geometry_regions
     return None
 
 
@@ -214,7 +110,7 @@ def extract_regions(model):
     reader = find_reader(module)
     if reader is None:
         name = type(module).__name__
-        why = NOT_REGION_MODULES.get(name)
+        why = getattr(module, "not_a_region_model", None)
         hint = (f": {why}." if why else
                 ". Register a reader in mowl.evaluation.exact_model.REGION_READERS.")
         raise NotImplementedError(

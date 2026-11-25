@@ -70,6 +70,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="box2el-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the Box2EL code",
         kind=RegimeKind.TRAINING,
         summary=(
@@ -108,6 +109,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="transbox-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the TransBox code",
         kind=RegimeKind.TRAINING,
         summary=(
@@ -131,7 +133,7 @@ REGIMES = (
             "Model selection looks at C ⊑ D only.",
             "The code's loss for C ⊓ D ⊑ E only asks the intersection to overlap Box(E) "
             "(signed half-width), not to lie inside it; see "
-            "mowl.nn.el.transbox.code_losses.",
+            "mowl.baselines.nn.el.transbox.code_losses.",
         ),
         notes=(
             "From run_many_seeds.py, baseline_sweep.py, model/TransBox_reg.py and "
@@ -151,6 +153,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="regd-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the RegD code",
         kind=RegimeKind.TRAINING,
         summary=(
@@ -221,6 +224,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="transbox-normal-form-ranking",
+        assumption="closed world over stated axioms",
         task="subsumption-prediction",
         name="Per-normal-form subsumption ranking (TransBox variant)",
         kind=RegimeKind.EVALUATION,

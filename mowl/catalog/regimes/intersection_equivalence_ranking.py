@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import PENG2020
 
 REGIME = RegimeCard(
     key='intersection-equivalence-ranking',
+    assumption="closed world over stated axioms",
     task="subsumption-prediction",
     target="inductive prediction",
     name='Ranking of intersection equivalences (ELBE)',

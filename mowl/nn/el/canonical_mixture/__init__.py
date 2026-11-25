@@ -1,4 +1,4 @@
-"""Canonical-element mixture neural module."""
+"""Canonical-element mixture module, built from parts."""
 from mowl.nn.el.canonical_mixture.module import (
     MAX_SUPPORT_ENTRIES,
     CanonicalMixtureModule,

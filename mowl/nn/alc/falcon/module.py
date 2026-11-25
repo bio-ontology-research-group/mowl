@@ -1,277 +1,171 @@
-import torch as th
-from torch.utils import checkpoint
-from mowl.nn.alc.module import ALCModule
-from mowl.owlapi import OWLAPIAdapter, ClassExpressionType, OWLSubClassOfAxiom, \
-    OWLEquivalentClassesAxiom, OWLDisjointClassesAxiom, OWLClassAssertionAxiom, \
-    OWLObjectPropertyAssertionAxiom
+import warnings
+from types import SimpleNamespace
+
+import torch.nn as nn
+
+from mowl.representation.library.logic_alc import ExpressionGeometry
+from mowl.representation.library.logic_fuzzy import ConflictMeasure, falcon_parts
+from mowl.nn.alc.module import ALCModule  # noqa: F401  (importable from here in 2.1.0)
+from mowl.owlapi import OWLAPIAdapter
+
+__all__ = ["FALCONModule"]
 
 
-class FALCONModule(ALCModule):
-    """Implementation of the FALCON model [falcon2022]_, a fuzzy
-    :math:`\\mathcal{ALC}` neural reasoner. Each class expression is mapped to a
-    *fuzzy set* over a collection of (named and anonymous) entity embeddings, and
-    axioms are scored through fuzzy logical operators.
+class FALCONModule(ExpressionGeometry):
+    """The FALCON model [falcon2022]_, a fuzzy :math:`\\mathcal{ALC}` neural reasoner, put
+    together from parts. Each class expression is mapped to a *fuzzy set* over a collection
+    of (named and anonymous) entity embeddings, and axioms are scored through fuzzy logical
+    operators.
 
+    The module is the geometry of the method
+    :func:`~mowl.representation.library.logic_fuzzy.falcon` (class model
+    :class:`~mowl.representation.library.logic_fuzzy.NetworkClasses`, relation model
+    :class:`~mowl.representation.library.logic_fuzzy.PairNetworkRelations`, measure
+    :class:`~mowl.representation.library.logic_fuzzy.ConflictMeasure`, objective
+    :class:`~mowl.representation.library.logic_fuzzy.FuzzyObjective`); the hand-written loss
+    module it replaces is kept for comparison as :mod:`mowl.baselines.nn.alc.falcon`.
     Based on the original implementation at
     https://github.com/bio-ontology-research-group/FALCON
+
+    :param nclasses: Number of classes.
+    :param nentities: Number of named entities (individuals); at least ``1``.
+    :param nrelations: Number of object properties.
+    :param heads_dict: ``(tail, role) -> heads`` of the asserted role assertions, to draw
+        corrupted ones from.
+    :param tails_dict: ``(head, role) -> tails``.
+    :param role_pairs: How :math:`\\exists r.C` and :math:`\\forall r.C` read the role.
+        ``"all"`` (default, as in the original code): the degree of an entity :math:`x` is
+        taken over all pairs :math:`(x, y)` of the domain, :math:`\\max_y r(x, y) \\sqcap C(y)`
+        (and :math:`\\min_y` of the residuum for :math:`\\forall`), with
+        :math:`r(x, y) = \\mu(e_x + r, e_y)`; this needs memory quadratic in the domain.
+        ``"self"``: the pair of an entity with itself only, :math:`r(x, x)`, so one value
+        is computed and given to every entity (a porting error of earlier mOWL versions, not
+        the published method).
+    :param top_index: Class index of ``owl:Thing`` (or ``None``).
+    :param bottom_index: Class index of ``owl:Nothing`` (or ``None``).
+    :param thing: ``"learned"`` (default, as in the original code): ``owl:Thing`` has an
+        embedding like any other class. ``"all"``: it is the constant fuzzy set with degree 1.
+    :param nothing: ``"empty"`` (default, as in the original code): ``owl:Nothing`` is the
+        constant empty fuzzy set. ``"learned"``: an ordinary learned class.
+    :param loss_type: ``"c"`` (default): a sampled role assertion contrasts its degree with
+        those of the corrupted ones (``"contrast"`` of the objective); ``"r"``: a ranking
+        loss between them.
     """
 
-    def __init__(
-            self, nclasses, nentities, nrelations, heads_dict, tails_dict, embed_dim=128,
-            anon_e=4, t_norm='product', max_measure='max', residuum='notCorD',
-            loss_type='c', num_negs=4, device='cpu'):
-        super().__init__()
-        self.nentities = nentities
-        self.anon_e = anon_e
-        self.heads_dict = heads_dict
-        self.tails_dict = tails_dict
-        self.c_embedding = th.nn.Embedding(nclasses, embed_dim)
-        self.r_embedding = th.nn.Embedding(nrelations, embed_dim)
-        self.e_embedding = th.nn.Embedding(nentities, embed_dim)
-        # Two-layer membership network, matching the original FALCON implementation.
-        self.fc_0 = th.nn.Linear(embed_dim * 2, embed_dim)
-        self.fc_1 = th.nn.Linear(embed_dim, 1)
+    #: The anonymous entities are sampled every epoch by the training loop.
+    samples_anonymous = True
 
-        th.nn.init.xavier_uniform_(self.c_embedding.weight.data)
-        th.nn.init.xavier_uniform_(self.r_embedding.weight.data)
-        th.nn.init.xavier_uniform_(self.e_embedding.weight.data)
-        th.nn.init.xavier_uniform_(self.fc_0.weight.data)
-        th.nn.init.xavier_uniform_(self.fc_1.weight.data)
-
-        self.max_measure = max_measure
-        self.t_norm = t_norm
-        self.loss_type = loss_type
-        self.num_negs = num_negs
-        self.nothing = th.zeros(self.nentities).to(device)
-        self.zero_emb = th.zeros(embed_dim).to(device)
+    def __init__(self, nclasses, nentities, nrelations, heads_dict, tails_dict, embed_dim=128,
+                 anon_e=4, t_norm='product', max_measure='max', residuum='notCorD',
+                 loss_type='c', num_negs=4, device='cpu', role_pairs='all', top_index=None,
+                 bottom_index=None, thing='learned', nothing='empty'):
+        if role_pairs not in ('all', 'self'):
+            raise ValueError("role_pairs must be 'all' or 'self'.")
+        if residuum != 'notCorD':
+            raise ValueError("residuum must be 'notCorD'.")
+        if loss_type not in ('c', 'r'):
+            raise ValueError("loss_type must be 'c' or 'r'.")
+        # The tables are drawn in the order of the earlier module (embeddings, then the two
+        # layers, then the Xavier initialisation of all), so that a seed gives the numbers it
+        # always gave.
+        c_embedding = nn.Embedding(nclasses, embed_dim)
+        r_embedding = nn.Embedding(nrelations, embed_dim)
+        e_embedding = nn.Embedding(nentities, embed_dim)
+        fc_0 = nn.Linear(embed_dim * 2, embed_dim)
+        fc_1 = nn.Linear(embed_dim, 1)
+        for table in (c_embedding, r_embedding, e_embedding, fc_0, fc_1):
+            nn.init.xavier_uniform_(table.weight.data)
+        tables = SimpleNamespace(
+            c_embedding=c_embedding, r_embedding=r_embedding, e_embedding=e_embedding,
+            fc_0=fc_0, fc_1=fc_1, t_norm=t_norm, max_measure=max_measure, role_pairs=role_pairs,
+            top_index=top_index if thing == 'all' else None,
+            bottom_index=bottom_index if nothing == 'empty' else None,
+            num_negs=num_negs, heads_dict=heads_dict, tails_dict=tails_dict,
+            nentities=nentities)
+        parts = falcon_parts(None, None, t_norm=t_norm, thing=thing, nothing=nothing,
+                             role_loss="contrast" if loss_type == 'c' else "ranking",
+                             tables=tables)
+        super().__init__(**parts)
+        self.network = parts["classes"].network
+        self.role_pairs = role_pairs
+        self.thing, self.nothing_reading = thing, nothing
+        self.top_index = top_index if thing == 'all' else None
+        self.bottom_index = bottom_index if nothing == 'empty' else None
+        self.nentities, self.anon_e, self.num_negs = nentities, anon_e, num_negs
+        self.t_norm, self.max_measure, self.loss_type = t_norm, max_measure, loss_type
+        self.heads_dict, self.tails_dict = heads_dict, tails_dict
         self.residuum = residuum
-        self.device = device
-        self.adapter = OWLAPIAdapter()
+        self._adapter = None
+
+    @property
+    def adapter(self):
+        """An :class:`~mowl.owlapi.OWLAPIAdapter` (an attribute of the released module)."""
+        if self._adapter is None:
+            self._adapter = OWLAPIAdapter()
+        return self._adapter
+
+    @property
+    def fc_0(self):
+        return self.network.fc_0
+
+    @property
+    def fc_1(self):
+        return self.network.fc_1
 
     def _mem(self, c_emb, e_emb):
-        """Membership-degree network: maps a (concept, entity) embedding pair to a
-        fuzzy membership degree in ``[0, 1]``."""
-        emb = th.cat([c_emb, e_emb], dim=-1)
-        hidden = th.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1)
-        return th.sigmoid(self.fc_1(hidden))
-
-    def _logical_and(self, x, y):
-        if self.t_norm == 'product':
-            return x * y
-        elif self.t_norm == 'minmax':
-            x = x.unsqueeze(dim=-2)
-            y = y.expand_as(x)
-            return th.cat([x, y], dim=-2).min(dim=-2)[0]
-        elif self.t_norm == 'Łukasiewicz':
-            x = x.unsqueeze(dim=-2)
-            y = y.expand_as(x)
-            return (((x + y - 1) > 0) * (x + y - 1)).squeeze(dim=-2)
-        else:
-            raise ValueError
-
-    def _logical_or(self, x, y):
-        if self.t_norm == 'product':
-            return x + y - x * y
-        elif self.t_norm == 'minmax':
-            x = x.unsqueeze(dim=-2)
-            y = y.expand_as(x)
-            return th.cat([x, y], dim=-2).max(dim=-2)[0]
-        elif self.t_norm == 'Łukasiewicz':
-            x = x.unsqueeze(dim=-2)
-            y = y.expand_as(x)
-            return 1 - ((((1 - x) + (1 - y) - 1) > 0) * ((1 - x) + (1 - y) - 1)).squeeze(dim=-2)
-        else:
-            raise ValueError
-
-    def _logical_not(self, x):
-        return 1 - x
-
-    def _logical_residuum(self, r_fs, c_fs):
-        if self.residuum == 'notCorD':
-            return self._logical_or(self._logical_not(r_fs), c_fs)
-        else:
-            raise ValueError
-
-    def _logical_exist(self, r_fs, c_fs):
-        ret = self._logical_and(r_fs, c_fs).max(dim=-1)[0].unsqueeze(-1)
-        return ret.expand_as(r_fs)
-
-    def _logical_forall(self, r_fs, c_fs):
-        ret = self._logical_residuum(r_fs, c_fs).min(dim=-1)[0].unsqueeze(-1)
-        return ret.expand_as(r_fs)
+        """The membership network: maps a (concept, entity) embedding pair to a fuzzy
+        membership degree in ``[0, 1]`` (with a trailing dimension of 1)."""
+        return self.network(c_emb, e_emb).unsqueeze(-1)
 
     def _get_c_fs_batch(self, c_emb, e_emb):
-        e_emb = e_emb.unsqueeze(
-            dim=0).repeat(c_emb.size()[0], 1, 1)
+        """The degrees of the concept vectors ``c_emb`` ``(M, D)`` for the entities ``e_emb``
+        ``(N, D)``: ``(M, N)``."""
+        e_emb = e_emb.unsqueeze(dim=0).repeat(c_emb.size()[0], 1, 1)
         c_emb = c_emb.unsqueeze(dim=1).expand_as(e_emb)
-        return self._mem(c_emb, e_emb).squeeze(dim=-1)
+        return self.network(c_emb, e_emb)
 
-    def _get_r_fs_batch(self, r_emb, e_emb):
-        e_emb = e_emb.unsqueeze(
-            dim=0).repeat(r_emb.size()[0], 1, 1)
-        r_emb = r_emb.unsqueeze(dim=1).expand_as(e_emb)
-        return self._mem(e_emb + r_emb, e_emb).squeeze(dim=-1)
-
+    # -- methods of the released module (deprecated) -----------------------------------------
     def sample_negatives(self, e, r, used_dict):
-        ret = th.zeros((e.shape[0], self.num_negs), dtype=th.int64)
-        for i in range(e.shape[0]):
-            used = th.tensor(used_dict[(e[i].item(), r[i].item())])
-            neg_pool = th.ones(self.nentities)
-            neg_pool[used] = 0
-            neg_pool = neg_pool.nonzero()
-            neg = neg_pool[th.randint(len(neg_pool), (self.num_negs,))]
-            ret[i, :] = neg.flatten()
-        return ret
+        """For every row, ``num_negs`` named entities ``e'`` with ``(e', r)`` not in
+        ``used_dict[(e, r)]``, ``(B, num_negs)``.
 
-    def forward_fs(self, cexpr, x, e_emb, cur_index=0):
-        expr_type = cexpr.getClassExpressionType()
-        if expr_type == ClassExpressionType.OWL_CLASS:
-            c_emb = self.c_embedding(x[:, cur_index])
-            return self._get_c_fs_batch(c_emb, e_emb), cur_index + 1
-        elif expr_type == ClassExpressionType.OBJECT_SOME_VALUES_FROM:
-            r_emb = self.r_embedding(x[:, cur_index])
-            r_fs = checkpoint.checkpoint(self._get_r_fs_batch, r_emb, e_emb,
-                                         use_reentrant=False)
-            c_fs, next_index = self.forward_fs(
-                cexpr.getFiller(), x, e_emb, cur_index=cur_index + 1)
-            return self._logical_exist(r_fs, c_fs), next_index
-        elif expr_type == ClassExpressionType.OBJECT_ALL_VALUES_FROM:
-            r_emb = self.r_embedding(x[:, cur_index])
-            r_fs = checkpoint.checkpoint(self._get_r_fs_batch, r_emb, e_emb,
-                                         use_reentrant=False)
-            c_fs, next_index = self.forward_fs(
-                cexpr.getFiller(), x, e_emb, cur_index=cur_index + 1)
-            return self._logical_forall(r_fs, c_fs), next_index
-        elif expr_type == ClassExpressionType.OBJECT_INTERSECTION_OF:
-            cexprs = cexpr.getOperandsAsList()
-            ret, next_index = self.forward_fs(cexprs[0], x, e_emb, cur_index=cur_index)
-            for i in range(1, len(cexprs)):
-                next_ret, next_index = self.forward_fs(cexprs[i], x, e_emb, cur_index=next_index)
-                ret = self._logical_and(ret, next_ret)
-            return ret, next_index
-        elif expr_type == ClassExpressionType.OBJECT_UNION_OF:
-            cexprs = cexpr.getOperandsAsList()
-            ret, next_index = self.forward_fs(cexprs[0], x, e_emb, cur_index=cur_index)
-            for i in range(1, len(cexprs)):
-                next_ret, next_index = self.forward_fs(cexprs[i], x, e_emb, cur_index=next_index)
-                ret = self._logical_or(ret, next_ret)
-            return ret, next_index
-        elif expr_type == ClassExpressionType.OBJECT_COMPLEMENT_OF:
-            ret, next_index = self.forward_fs(
-                cexpr.getOperand(), x, e_emb, cur_index=cur_index)
-            return self._logical_not(ret), next_index
-        raise NotImplementedError()
+        .. deprecated:: 2.2.0
+           The corruption of role assertions is part of the objective
+           (:class:`~mowl.representation.library.logic_fuzzy.FuzzyObjective`)."""
+        warnings.warn("FALCONModule.sample_negatives is deprecated: the corrupted role "
+                      "assertions are drawn by the objective (FuzzyObjective).",
+                      DeprecationWarning, stacklevel=2)
+        return self.objective._sample_negatives(e, r, used_dict)
 
     def get_cc_loss(self, fs):
-        if self.max_measure == 'max':
-            return - th.log(1 - fs.max(dim=-1)[0] + 1e-10)
-        elif self.max_measure[:5] == 'pmean':
-            p = int(self.max_measure[-1])
-            return - th.log(1 - ((fs ** p).mean(dim=-1))**(1 / p) + 1e-10)
-        else:
-            raise ValueError
+        """The loss :math:`-\\log(1 - \\max_x fs(x) + 10^{-10})` of a fuzzy set ``fs``
+        ``(B, N)`` that is to be empty (``max_measure="pmean<p>"``: the :math:`p`-mean
+        instead of the maximum), ``(B,)``.
 
-    def forward(self, axiom, x, e_emb, stage='train'):
-        if isinstance(axiom, OWLSubClassOfAxiom):
-            # C ⊑ D is violated where C holds and D does not, i.e. on C ⊓ ¬D. We walk
-            # the sub- and super-class expressions sequentially (rather than rebuilding
-            # an intersection, whose operands OWLAPI would reorder) so that the columns
-            # of ``x`` are consumed in the same order they were produced.
-            C = axiom.getSubClass()
-            D = axiom.getSuperClass()
-            c_fs, next_index = self.forward_fs(C, x, e_emb)
-            d_fs, _ = self.forward_fs(D, x, e_emb, cur_index=next_index)
-            fs = self._logical_and(c_fs, self._logical_not(d_fs))
-            return self.get_cc_loss(fs).mean()
-        elif isinstance(axiom, OWLEquivalentClassesAxiom):
-            cexprs = axiom.getClassExpressionsAsList()
-            C, D = cexprs[0], cexprs[1]
-            c_fs, next_index = self.forward_fs(C, x, e_emb)
-            d_fs, next_index = self.forward_fs(D, x, e_emb, cur_index=next_index)
-            fs1 = self._logical_and(c_fs, self._logical_not(d_fs))
-            fs2 = self._logical_and(self._logical_not(c_fs), d_fs)
-            return self.get_cc_loss(fs1).mean() + self.get_cc_loss(fs2).mean()
-        elif isinstance(axiom, OWLDisjointClassesAxiom):
-            # C and D are disjoint iff their intersection C ⊓ D is unsatisfiable. Walk the
-            # two expressions sequentially to consume the columns of ``x`` in order.
-            cexprs = axiom.getClassExpressionsAsList()
-            C, D = cexprs[0], cexprs[1]
-            c_fs, next_index = self.forward_fs(C, x, e_emb)
-            d_fs, _ = self.forward_fs(D, x, e_emb, cur_index=next_index)
-            fs = self._logical_and(c_fs, d_fs)
-            return self.get_cc_loss(fs).mean()
-        elif isinstance(axiom, OWLClassAssertionAxiom):
-            x = x.unsqueeze(dim=1)
-            size = [1] * len(x.size())
-            size[1] = self.num_negs
-            neg_x = x.repeat(size)
-            neg_ents = th.randint(self.nentities, (x.shape[0], self.num_negs))
-            neg_x[:, :, 0] = neg_ents
-            x = th.cat([x, neg_x], dim=1)
-            cexpr = axiom.getClassExpression()
-            expr_type = cexpr.getClassExpressionType()
-            if expr_type == ClassExpressionType.OWL_CLASS:
-                # Plain concept assertion ``e : C`` — directly push the membership
-                # μ(C, e) towards 1 for the asserted individual and towards 0 for the
-                # corrupted negatives (cf. ``forward_abox_ec_created`` in the original
-                # FALCON implementation).
-                c_emb = self.c_embedding(x[:, 0, 1]).unsqueeze(dim=1)
-                ex_emb = self.e_embedding(x[:, :, 0])
-                dofm = self._mem(c_emb.expand_as(ex_emb), ex_emb).squeeze(dim=-1)
-                res = (- th.log(dofm[:, 0] + 1e-10).mean()
-                       - th.log(1 - dofm[:, 1:] + 1e-10).mean())
-                return res / 2
-            # Relational or complex assertion (e.g. ``e : ∃R.C``) — exist-based loss.
-            r = None
-            if expr_type == ClassExpressionType.OBJECT_SOME_VALUES_FROM:
-                r = cexpr.getProperty()
-                rx = x[:, :, 1]
-                cexpr = cexpr.getFiller()
-                cx = x[:, 0, 2:]
-            else:
-                cx = x[:, 0, 1:]
-            c_fs, _ = self.forward_fs(cexpr, cx, e_emb)
-            if r is not None:
-                r_emb = self.r_embedding(rx)
-            else:
-                r_emb = 0
-            ex = x[:, :, 0]
-            ex_emb = self.e_embedding(ex)
-            r_fs = self._get_c_fs_batch(
-                (ex_emb + r_emb).view(-1, ex_emb.shape[-1]), e_emb).view(
-                    ex_emb.shape[0], ex_emb.shape[1], -1)
-            c_fs = c_fs.unsqueeze(dim=1)
-            dofm = self._logical_exist(r_fs, c_fs)
-            res = (- th.log(dofm[:, 0] + 1e-10).mean() - th.log(1 - dofm[:, 1:] + 1e-10).mean())
-            return res / 2
-        elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):
-            x = x.unsqueeze(dim=1)
-            size = [1] * len(x.size())
-            size[1] = self.num_negs
-            neg_h = x.repeat(size)
-            neg_ents = self.sample_negatives(x[:, :, 2], x[:, :, 1], self.heads_dict)
-            neg_h[:, :, 0] = neg_ents
-            neg_t = x.repeat(size)
-            neg_ents = self.sample_negatives(x[:, :, 0], x[:, :, 1], self.tails_dict)
-            neg_t[:, :, 2] = neg_ents
-            x = th.cat([x, neg_h, neg_t], dim=1)
-            e_1_emb = self.e_embedding(x[:, :, 0])
-            r_emb = self.r_embedding(x[:, :, 1])
-            e_2_emb = self.e_embedding(x[:, :, 2])
-            if stage == 'train':
-                if self.loss_type == 'c':
-                    dofm = self._mem(e_1_emb + r_emb, e_2_emb)
-                    res = - th.log(dofm[:, 0] + 1e-10).mean() - \
-                        th.log(1 - dofm[:, 1:] + 1e-10).mean()
-                    return res / 2
-                elif self.loss_type == 'r':
-                    dofm = self._mem(e_1_emb + r_emb, e_2_emb).squeeze(dim=-1)
-                    diff = dofm[:, 0].unsqueeze(dim=-1) - dofm[:, 1:]
-                    return - th.nn.functional.logsigmoid(diff).mean()
-                else:
-                    raise NotImplementedError()
-            elif stage == 'test':
-                return self._mem(e_1_emb + r_emb, e_2_emb).flatten()
+        .. deprecated:: 2.2.0
+           The conflict of a class expression is the measure
+           :class:`~mowl.representation.library.logic_fuzzy.ConflictMeasure`."""
+        warnings.warn("FALCONModule.get_cc_loss is deprecated: use the measure "
+                      "ConflictMeasure (module.measure).", DeprecationWarning, stacklevel=2)
+        return ConflictMeasure(self.max_measure, stabiliser="add")._conflict(fs).squeeze(-1)
 
-        else:
-            raise NotImplementedError()
+    def forward(self, *args, stage='train', **kwargs):
+        """The loss of a batch of an axiom pattern (:meth:`ExpressionGeometry.forward`).
+        ``stage='test'`` for role assertions gives the degrees of the assertions and of
+        their corrupted assertions instead. As in the released module, ``stage`` may also be
+        given by position: ``forward(axiom, x, e_emb, 'test')``."""
+        if len(args) == 4 and isinstance(args[3], str) and not isinstance(args[1], str):
+            stage, args = args[3], args[:3]
+        if stage == 'test' and len(args) > 1 and not isinstance(args[1], str):
+            from mowl.owlapi import OWLObjectPropertyAssertionAxiom
+            if isinstance(args[0], OWLObjectPropertyAssertionAxiom):
+                e_emb = args[2] if len(args) > 2 else kwargs.get("e_emb")
+                domain = self._context(e_emb)
+                try:
+                    return self.objective.role_scores(self, args[1])
+                finally:
+                    if domain is not None:
+                        domain.context = None
+        elif stage != 'train':
+            raise ValueError("stage must be 'train' or 'test'.")
+        return super().forward(*args, **kwargs)

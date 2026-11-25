@@ -37,7 +37,7 @@ mOWL is a Python library. Furtheremore, it binds the OWLAPI, which is written in
 
 In order to use mOWL with all its functionalities, the Java Virtual Machine must be started. We can do that in the following way:
 
-.. code:: python
+.. testcode::
 
    import mowl
    mowl.init_jvm("2g")
@@ -105,6 +105,7 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    :glob:
 
    install/index
+   first_steps/index
    datasets/index
    ontology/index
    owlapi/index
@@ -114,6 +115,7 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    embedding_alc/index
    geometric/index
    methods/index
+   representation/index
    logic/index
    training/index
    evaluation/index

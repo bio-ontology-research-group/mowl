@@ -12,6 +12,24 @@ terms (concept and relation assertions), weighted by ``alpha`` and ``beta``
 (:math:`\mathcal{L} = \alpha\,\mathcal{L}_T + \beta\,\mathcal{L}_{A_1} +
 (1-\alpha-\beta)\,\mathcal{L}_{A_2}`).
 
+FALCON, DF-ALC (:class:`~mowl.models.DFALCModel`) and Al-cone
+(:class:`~mowl.models.ALConeModel`) are combinations of parts, as is any other model that
+:class:`~mowl.models.ComposedALC` puts together from a class model, a relation model, a
+measure and an objective that read axioms with class expressions of any depth (see
+:doc:`/representation/combine`).
+
+Embed2Reason (:class:`~mowl.models.E2R`) reads its axioms as rows of one kind per form of the
+quantum logic, not as class expressions of any depth, so it is trained by
+:class:`~mowl.models.ComposedSubspace`, the general model for axis-parallel subspace
+geometries; ``E2R`` is that model with ``method="e2r"``, and its parts (the measure, the
+individual model, extra regularisers) can be replaced like those of the other composed models.
+
+.. testcode::
+
+   from mowl.models import ComposedSubspace, E2R
+
+   assert issubclass(E2R, ComposedSubspace)
+
 Reproducing the Family experiment
 ---------------------------------
 
@@ -92,3 +110,64 @@ You can also access the learned embeddings:
 
    class_embeddings = model.class_embeddings
    object_property_embeddings = model.object_property_embeddings
+
+How the ALC models are trained
+------------------------------
+
+The ALC models have no training loop of their own: they run the shared loop of
+:mod:`mowl.training.loop` (one optimisation step per epoch over all batches of all axiom
+patterns, with validation and checkpointing every ``validate_every`` epochs), and what is
+particular to a method is a part:
+
+* the combination of the axiom losses is the objective part
+  :class:`~mowl.representation.library.logic_alc.AxiomKindWeighting`
+  (``model.module.objective.weighting``; ``alpha`` and ``beta`` are its weights of the
+  terminological axioms and the class assertions, the role assertions get
+  ``1 - alpha - beta``). Another weighting is a swap of the objective;
+* the anonymous entities of FALCON are drawn by
+  :class:`~mowl.representation.library.logic_alc.AnonymousElements`;
+* the annealed relaxation of Al-cone
+  (:class:`~mowl.representation.library.logic_alc.AnnealedRelaxation`) is a training regime
+  of the geometry, which the loop consults like any other regime. A regime that changes the
+  course of training (a learning-rate schedule, early stopping) can be assigned; one that
+  changes the loss or the negatives is refused, since the objective reads the axioms itself.
+
+.. testcode::
+
+   from mowl.models import ComposedALC
+   from mowl.representation.library.logic_alc import AxiomKindWeighting
+   from mowl.training import LinearDecay
+
+   assert model.module.objective.weighting.tbox == 0.5
+   tbox_only = ComposedALC(dataset, method="dfalc", embed_dim=10,
+                           objective_options={"weighting": AxiomKindWeighting(1.0, 0.0)})
+   tbox_only.training_regime = LinearDecay()
+   tbox_only.train(epochs=2)
+
+A combination of parts is checked when the model is built. A replaced part that cannot
+evaluate the axioms of the ontology, or that no axiom reads, is refused with the reason, for
+example the truth tables of DF-ALC as the classes of FALCON, whose relation network evaluates
+class expressions on the element vectors and sampled anonymous entities:
+
+.. testcode::
+
+   from mowl.representation import ConstructorUnavailable
+
+   try:
+       ComposedALC(dataset, method="falcon", embed_dim=10, anon_e=2,
+                   classes="fuzzy set (product)")
+   except ConstructorUnavailable as error:
+       print("refused")
+
+.. testoutput::
+
+   refused
+
+Three loops of mOWL are not the shared loop on purpose: the fit of the scoring head of
+vector-only models (:class:`~mowl.evaluation.model_scoring.PairClassifierHead`, an inner fit
+of the evaluation on fixed vectors) and the gradient solver of the solved methods
+(:class:`~mowl.representation.library.solved_solver.GradientFit`, which minimises one
+program) are inner solvers; the regimes of the canonical mixture
+(:mod:`mowl.representation.library.mixture_training`) are a training loop of their own that
+accumulates gradients chunk by chunk, which the shared loop cannot do yet, so that model
+refuses every training regime.

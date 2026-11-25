@@ -5,6 +5,7 @@ from mowl.catalog.regimes._benchmark_refs import MONDAL2021
 
 REGIME = RegimeCard(
     key="emelpp-subsumee-ranking",
+    assumption="closed world over stated axioms",
     task="subsumption-prediction",
     target="inductive prediction",
     name="Subsumee ranking by centre distance (EmEL++)",

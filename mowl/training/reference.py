@@ -139,7 +139,8 @@ class TransBoxCodeTraining(Box2ELCodeTraining):
 
     The per-axiom losses themselves are those of the code: for :class:`~mowl.models.TransBox`
     this regime requires ``formulation="reference"``
-    (:mod:`mowl.nn.el.transbox.code_losses`), whose negative loss is an overlap that the
+    (the ``reference`` formulation of :class:`~mowl.nn.TransBoxModule`), whose negative
+    loss is an overlap that the
     squared target loss pushes to ``neg_dist``.
 
     Deviations, not replicated: the code draws the negatives once before training and
@@ -186,10 +187,13 @@ class TransBoxCodeTraining(Box2ELCodeTraining):
 
     def loss(self, gci_name, pos_scores, neg_scores):
         if self.nf2_pairwise and gci_name == "gci1" and "gci1" in self._datasets:
-            from mowl.nn.el.transbox.code_losses import gci1_terms
+            # the two terms of the loss of C and D in E, as the module's parts give them: the
+            # emptiness penalty p of the intersection region, and the rest q = loss - p
             module = self.model.module
-            p, q = gci1_terms(self._datasets["gci1"][:], module.class_center,
-                              module.class_offset, module.margin)
+            rows = self._datasets["gci1"][:]
+            _, p = module.classes(rows[:, 0]).intersect(module.classes(rows[:, 1]))
+            p = p.reshape(-1)
+            q = module(rows, "gci1").reshape(-1) - p
             return ((p[:, None] + q[None, :]) ** 2).mean()
         return super().loss(gci_name, pos_scores, neg_scores)
 
@@ -269,7 +273,10 @@ class ELKEmCodeTraining(ComposedRegime):
     :class:`~mowl.models.elkem.model.ELKEm` with ``variant="reference"``.
 
     Only the TBox design of the ranking experiments; the ABox losses and the lexical
-    regulariser of the protein-function experiments stay with the model's own loop.
+    regulariser of the protein-function experiments are regimes of their own
+    (:class:`~mowl.training.elkem.AssertionCorruption`,
+    :class:`~mowl.training.elkem.LexicalRegularisation`) in the default regime of the method
+    (:class:`~mowl.training.elkem.ELKEmTraining`).
 
     Remaining differences from the authors' code (see the regime card
     'elkem-code-training'):
@@ -428,7 +435,7 @@ class EmELppCodeTraining(ComposedRegime):
     def attach(self, model):
         import numpy as np
         module = model.module
-        is_emelpp = any(c.__name__ == "EmELPPModule" for c in type(module).__mro__)
+        is_emelpp = hasattr(module, "intersection_radius_term")   # EmEL++'s option
         self._init.size_low = 0.0 if is_emelpp else -1.0
         # Replacement classes: the classes of the subsumption pairs (training and
         # validation), as the code's 'prot_ids'.
@@ -451,6 +458,8 @@ class EmELppCodeTraining(ComposedRegime):
             model.eval_gci_name = "gci0"
 
 
+# Reference code by definition: the RegD / ELBE / ELEm code initialises the parameters of
+# these two module kinds by name (``class_offset`` / ``class_rad``).
 def joint_unit_init(module):
     """Initialise the class regions as the RegD code (and the ELBE / ELEm code it
     adapts) does: one embedding row per class holding the centre *and* the size
@@ -520,7 +529,8 @@ class RegDCodeTraining(ComposedRegime):
 
     :param task: ``"inference"`` (evaluate on ``C ⊑ D``) or ``"prediction"``
         (evaluate on ``A ⊑ ∃r.B``).
-    :param design: ``"regd"`` or ``"baseline"``.
+    :param design: ``"energy"`` (the loss of the RegD code; ``"regd"``) or ``"pairs"`` (the
+        code of the ELBE / ELEm baselines; ``"baseline"``).
     :param batch_size: Axioms per normal form and step (512 in the code).
     :param num_negatives: Negatives per positive and column for the baselines (1, as in
         the code's ``sample_negatives``).
@@ -557,8 +567,12 @@ class RegDCodeTraining(ComposedRegime):
                  rectified=False):
         if task not in self._TASK_GCI:
             raise ValueError("task must be 'inference' or 'prediction'.")
-        if design not in ("regd", "baseline"):
-            raise ValueError("design must be 'regd' or 'baseline'.")
+        # the two designs by what they train: the energy of the model (the RegD code's loss),
+        # or pairs of scores (the code of the ELBE / ELEm baselines); the names of the codes
+        # are accepted
+        design = {"regd": "energy", "baseline": "pairs"}.get(design, design)
+        if design not in ("energy", "pairs"):
+            raise ValueError("design must be 'energy' ('regd') or 'pairs' ('baseline').")
         if host_loss not in ("mse", "mean"):
             raise ValueError("host_loss must be 'mse' or 'mean'.")
         if init not in ("joint", None):
@@ -566,7 +580,7 @@ class RegDCodeTraining(ComposedRegime):
         gci = self._TASK_GCI[task]
         parts = [PerNormalFormMiniBatches(batch_size=batch_size, order="random",
                                           seed=seed)]
-        if design == "regd":
+        if design == "energy":
             parts.append(SoftmaxEnergyContrastiveLoss(normal_forms=(gci,),
                                                       rectify_negatives=rectified))
             if host_loss == "mse":
@@ -590,7 +604,7 @@ class RegDCodeTraining(ComposedRegime):
         self.key = type(self).key
         self.task = task
         self.design = design
-        self.raw_energy = bool(raw_energy) and design == "regd" and not rectified
+        self.raw_energy = bool(raw_energy) and design == "energy" and not rectified
         self.init = init
 
     def attach(self, model):

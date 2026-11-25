@@ -36,6 +36,9 @@ BENCHMARKS = [
     Benchmark(
         key="dele-yeast-ppi", name="DELE PPI prediction (yeast)",
         task=Task.LINK_PREDICTION,
+        evaluation_regime="dele-evaluation",
+        completion_tasks=("existential-prediction",),
+        encodes=("link-prediction",),
         description=("Predict {P1} ⊑ ∃interacts_with.{P2}; candidates: yeast proteins. "
                      f"{_COMMON} Only non-filtered metrics are published (Table 4)."),
         dataset=_DS, dataset_kwargs={"task": "yeast_ppi"},
@@ -51,6 +54,9 @@ BENCHMARKS = [
     Benchmark(
         key="dele-human-ppi", name="DELE PPI prediction (human)",
         task=Task.LINK_PREDICTION,
+        evaluation_regime="dele-evaluation",
+        completion_tasks=("existential-prediction",),
+        encodes=("link-prediction",),
         description="The DELE PPI protocol applied to human proteins. " + _COMMON,
         dataset="mowl.datasets.builtin.ppi_yeast.PPIHumanDataset",
         protocol=_P,
@@ -62,6 +68,9 @@ BENCHMARKS = [
     Benchmark(
         key="dele-yeast-function", name="DELE protein function prediction (yeast)",
         task=Task.MEMBERSHIP_PREDICTION,
+        evaluation_regime="dele-evaluation",
+        completion_tasks=("existential-prediction",),
+        encodes=("type-prediction",),
         description=("Predict {P} ⊑ ∃has_function.{GO}; heads: yeast proteins, candidates: "
                      "every class that is not a protein, ⊤, ⊥ or a 'label' class (the GO "
                      "classes and the classes of the authors' normalisation, as in the "
@@ -76,6 +85,9 @@ BENCHMARKS = [
     Benchmark(
         key="dele-human-function", name="DELE protein function prediction (human)",
         task=Task.MEMBERSHIP_PREDICTION,
+        evaluation_regime="dele-evaluation",
+        completion_tasks=("existential-prediction",),
+        encodes=("type-prediction",),
         description=("The DELE function prediction protocol for human proteins. "
                      f"{_COMMON}{_FILTER}"),
         dataset=_DS, dataset_kwargs={"task": "human_function"},
@@ -89,6 +101,7 @@ BENCHMARKS = [
     Benchmark(
         key="dele-foodon-subsumption", name="DELE subsumption prediction (FoodOn)",
         task=Task.AXIOM_PREDICTION,
+        evaluation_regime="dele-evaluation",
         description=("Predict atomic subsumptions A ⊑ B; candidates: all classes. "
                      f"{_COMMON}{_FILTER} Table 5."),
         dataset=_DS, dataset_kwargs={"task": "foodon"},
@@ -101,6 +114,7 @@ BENCHMARKS = [
     Benchmark(
         key="dele-galen-subsumption", name="DELE subsumption prediction (GALEN)",
         task=Task.AXIOM_PREDICTION,
+        evaluation_regime="dele-evaluation",
         description=("Predict atomic subsumptions A ⊑ B on a random 90:5:5 split of GALEN; "
                      "candidates: all classes. " + _COMMON + _FILTER + " Table 6."),
         dataset=_DS, dataset_kwargs={"task": "galen"},

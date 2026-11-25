@@ -74,12 +74,12 @@ five-part progression:
    :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE`, prism
    embeddings :class:`~mowl.models.PrismEL`, and the faithful-by-construction
    canonical-element mixture model :class:`~mowl.models.CanonicalMixture`
-   (backed by :class:`~mowl.geometric.membership.MembershipStructure`).
+   (backed by :class:`~mowl.representation.library.membership_structure.MembershipStructure`).
 5. **Training objectives for multi-box and prism models:** soft component
    aggregation and log-space volume-overlap diversity regularisation in
-   :mod:`mowl.nn.el.softagg`, canonical-element point
+   :class:`~mowl.representation.library.multibox_parts.UnionMeasure` (``aggregation="soft"``), canonical-element point
    supervision in :mod:`mowl.datasets.el.points` and
-   :mod:`mowl.nn.el.pointloss`, available via
+   :mod:`mowl.representation.library.structural_points`, available via
    ``objective="point" | "mixed" | "hybrid"`` on :class:`~mowl.models.MultiBoxEL` and
    :class:`~mowl.models.MultiELBE`, and structural region algebra, compiled
    conjunction definition tables, and structural losses in
@@ -117,6 +117,10 @@ constructed model ever fails verification, construction raises
      - Full normalised :math:`\mathcal{EL}^{++}`
      - Exact model (:math:`\eta \models \mathcal{O}`), non-degenerate, and strongly faithful on concept names (`Lacerda et al., TGDK 2024, Def. 12`; `Federico et al., JOWO 2026, Thm. 3`).
      - :math:`1` (classes in :math:`\mathbb{R}`, roles in :math:`\mathbb{R}^2`)
+   * - :class:`~mowl.geometric.faithfulness.StronglyFaithfulModel`
+     - Normalised :math:`\mathcal{ELH}_\bot`; the TBox forms :math:`A \sqsubseteq B`, :math:`A \sqcap B \sqsubseteq C`, :math:`A \sqsubseteq \exists r.B`, :math:`\exists r.A \sqsubseteq B`, :math:`r \sqsubseteq s`
+     - Built on the canonical model of Lacerda et al. (Def. 26, with elements for conjunctions and existentials): an axiom of these forms holds iff it is entailed (`Lacerda et al., TGDK 2024, Thms. 16, 28, 32`), tested with :func:`~mowl.geometric.faithfulness.check_strong_faithfulness`. The smaller :class:`~mowl.geometric.completion.CanonicalModel` used by the two classes above is faithful on concept names (and :math:`A \sqsubseteq \exists r.B`) only.
+     - :math:`1` (intervals) or :math:`n - 1` (convex), with :math:`n` the size of the Definition 26 model
    * - :func:`~mowl.geometric.helly.helly_check`
      - Propositional :math:`\mathcal{EL}_\bot` (exact for strong reading when ``complete=True``); sound necessary condition with roles
      - Every :class:`~mowl.geometric.helly.HellyCertificate` is a sound proof that no box model realises its three pairwise conjunctions simultaneously (`Eckhoff, 1988`; `Leemhuis & Kutz, NeSy 2025, Props. 4, 5`). Non-degenerate certificates exclude every non-degenerate box model; strong certificates exclude *conjunction-faithful* box models (every satisfiable conjunction of names non-empty), not box models that are merely strongly faithful on names. ``box_representable_* = True`` means "no Helly obstruction of this kind was found", not that a box model exists. Re-saturates per candidate set; intended for small to medium ontologies.
@@ -151,19 +155,19 @@ constructed model ever fails verification, construction raises
      - :math:`2d - 1` scalar parameters per class in :math:`\mathbb{R}^d` (:math:`d \ge 3`)
    * - :class:`~mowl.models.CanonicalMixture` / :class:`~mowl.nn.CanonicalMixtureModule`
      - Normalised :math:`\mathcal{EL}^{++}` knowledge bases with individuals (ABox completion)
-     - Represents each individual :math:`a` as a masked softmax distribution :math:`p_a` over its admissible canonical support :math:`S_a \subseteq S` from :class:`~mowl.geometric.membership.MembershipStructure`. Guarantees hierarchy violation rate ``0``, exact score ``0.0`` on all training-entailed class assertions, and ``+inf`` score on all contradicted class assertions for all parameter values.
+     - Represents each individual :math:`a` as a masked softmax distribution :math:`p_a` over its admissible canonical support :math:`S_a \subseteq S` from :class:`~mowl.representation.library.membership_structure.MembershipStructure`. Guarantees hierarchy violation rate ``0``, exact score ``0.0`` on all training-entailed class assertions, and ``+inf`` score on all contradicted class assertions for all parameter values.
      - Low-rank factorisation :math:`r = \text{rank}` over :math:`|S|` canonical elements
-   * - Soft component aggregation (:mod:`mowl.nn.el.softagg`)
+   * - Soft component aggregation (:class:`~mowl.representation.library.multibox_parts.UnionMeasure` (``aggregation="soft"``))
      - :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE` (``component_aggregation="soft"``)
-     - Replaces hard :math:`\min` over target components by :math:`\text{softmin}_\tau(v) = -\tau(\log\sum_j e^{-v_j/\tau} - \log K)` (converging to :math:`\min` as :math:`\tau \to 0^+` and equal to the single slice at :math:`K = 1`), soft-argmin emptiness weights :math:`w_{ij} = \text{softmax}(-\text{empt}_{ij}/\tau)` with detached gate :math:`g_{ij} = \max(\text{non\_empty}_{ij}^{\text{det}}, w_{ij}^{\text{det}})` in ``gci1``, and dimension-independent log-space :func:`~mowl.nn.el.softagg.diversity_penalty` (``1.0`` on identical boxes at any :math:`d`).
+     - Replaces hard :math:`\min` over target components by :math:`\text{softmin}_\tau(v) = -\tau(\log\sum_j e^{-v_j/\tau} - \log K)` (converging to :math:`\min` as :math:`\tau \to 0^+` and equal to the single slice at :math:`K = 1`), soft-argmin emptiness weights :math:`w_{ij} = \text{softmax}(-\text{empt}_{ij}/\tau)` with detached gate :math:`g_{ij} = \max(\text{non\_empty}_{ij}^{\text{det}}, w_{ij}^{\text{det}})` in ``gci1``, and dimension-independent log-space :class:`~mowl.representation.library.multibox_objective.DiversityPenalty` (``1.0`` on identical boxes at any :math:`d`).
      - Temperature :math:`\tau` annealed geometrically from ``tau_start`` (``1.0``) to ``tau_end`` (``0.05``)
-   * - Canonical-element point supervision (:class:`~mowl.datasets.el.points.PointSupervision`, :mod:`mowl.nn.el.pointloss`)
+   * - Canonical-element point supervision (:class:`~mowl.datasets.el.points.PointSupervision`, :mod:`mowl.representation.library.structural_points`)
      - :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE` (``objective="point" | "mixed" | "hybrid"``)
      - Supervises class regions via soft coordinate-minimum box membership :math:`m(x) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` and noisy-OR union membership :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` over canonical elements of satisfiable named classes and individuals (aliasing individual elements to ``ind_embed``, with a virtual box of half-width ``ind_halfwidth`` defaulting to :math:`5\beta` around ``ind_embed`` for individual targets in role edges), plus ``volume_reg`` log-side-length regularisation. Under ``"point"`` and ``"mixed"``, ABox ``class_assertion`` is still trained in the main loop via :math:`-\log m_C(a)` while ``object_property_assertion`` is zeroed; ``"mixed"`` retains the backbone's :math:`\bot`-axiom losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``), and ``"hybrid"`` retains all GCI and ABox losses alongside the point losses. Class assertions are scored by :math:`-\log m_C(a)`.
      - :math:`|\text{elements}| \times d` point table ``elem_embed``
    * - Structural objective (:mod:`mowl.nn.el.structural`)
      - :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.PrismEL` (``objective="structural"``)
-     - Materialises regions with signed half-widths (:class:`~mowl.nn.el.structural.Regions` and :class:`~mowl.nn.el.prism.losses.PrismRegions`), compiles acyclic conjunction definitions :math:`A \equiv X \sqcap Y` (:class:`~mowl.nn.el.structural.DefinitionTable`), and supervises satisfiable classes and conjunction pairs via signed non-emptiness (:class:`~mowl.nn.el.structural.ExistenceTargets`, :func:`~mowl.nn.el.structural.existence_loss`) and single-coordinate separation in ``gci1_bot``. At margin :math:`0` with ``structural_definitions=True``, zero sum of the structural box losses and the existence term implies that the materialised regions form a geometric model of the box normal forms with every satisfiable class and listed conjunction non-empty; the converse holds when every active non-empty source slot (in ``gci0``) or pair slot (in ``gci1``) is covered by a single active target slot (see the Non-guarantees below; role normal forms inherit Box²EL/PrismEL guarantees, and an all-empty target makes a role score vacuously :math:`0`).
+     - Materialises regions with signed half-widths (:class:`~mowl.nn.el.structural.Regions` and :class:`~mowl.baselines.nn.el.prism.losses.PrismRegions`), compiles acyclic conjunction definitions :math:`A \equiv X \sqcap Y` (:class:`~mowl.nn.el.structural.DefinitionTable`), and supervises satisfiable classes and conjunction pairs via signed non-emptiness (:class:`~mowl.nn.el.structural.ExistenceTargets`, :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`) and single-coordinate separation in ``gci1_bot``. At margin :math:`0` with ``structural_definitions=True``, zero sum of the structural box losses and the existence term implies that the materialised regions form a geometric model of the box normal forms with every satisfiable class and listed conjunction non-empty; the converse holds when every active non-empty source slot (in ``gci0``) or pair slot (in ``gci1``) is covered by a single active target slot (see the Non-guarantees below; role normal forms inherit Box²EL/PrismEL guarantees, and an all-empty target makes a role score vacuously :math:`0`).
      - :math:`K = \text{max\_components}` slots in :math:`\mathbb{R}^d` (:class:`~mowl.models.MultiBoxEL`, default :math:`k^2`) or single prisms in :math:`\mathbb{R}^2 \times \mathbb{R}^{d-2}` (:class:`~mowl.models.PrismEL`)
 
 
@@ -185,7 +189,7 @@ Limitations and caveats
      **without** nominals (``ObjectOneOf``), functionality
      (``FunctionalObjectProperty``), and range (``ObjectPropertyRange``) axioms.
    * *Separation of ``concept_names`` and ``names``:* :attr:`~mowl.geometric.completion.CanonicalModel.concept_names`
-     excludes nominal names :math:`N_a`, whereas :attr:`~mowl.geometric.completion.CanonicalModel.names`
+     excludes nominal names :math:`N_a`, whereas ``CanonicalModel.names``
      keeps all satisfiable concept and nominal names so that constructive region
      builders assign every satisfiable individual a non-empty region.
    * *Inconsistent individuals and unsupported ABox axioms:* If completion
@@ -367,14 +371,14 @@ Limitations and caveats
      gradient-based training is not guaranteed to converge to a global optimum
      from arbitrary random initialisations.
 
-9. **Soft component aggregation (:mod:`mowl.nn.el.softagg`) and canonical-element point supervision (:mod:`mowl.nn.el.pointloss`)**
+9. **Soft component aggregation (:class:`~mowl.representation.library.multibox_parts.UnionMeasure` (``aggregation="soft"``)) and canonical-element point supervision (:mod:`mowl.representation.library.structural_points`)**
 
    * *Finite-temperature collapse pressure under soft aggregation and ``tau_end=0.05`` floor:*
-     At finite :math:`\tau > 0`, :func:`~mowl.nn.el.softagg.softmin` satisfies
+     At finite :math:`\tau > 0`, :func:`~mowl.representation.library.multibox_parts.soft_minimum` satisfies
      :math:`\min_j v_j \le \text{softmin}_\tau(v) \le \text{mean}_j v_j` and is
      strictly positive at a hard model whenever non-nearest target components have
      positive inclusion scores, pulling all target components together unless
-     counteracted by ``diversity_reg > 0`` (:func:`~mowl.nn.el.softagg.diversity_penalty`).
+     counteracted by ``diversity_reg > 0`` (:class:`~mowl.representation.library.multibox_objective.DiversityPenalty`).
      In ``float32``, softmax weights :math:`\exp(-\Delta/\tau)` underflow to
      exact ``0.0`` once the score gap :math:`\Delta` exceeds :math:`\approx 100\tau`;
      ``tau_end`` therefore defaults to ``0.05`` rather than ``0.01`` so
@@ -383,7 +387,7 @@ Limitations and caveats
      ``state_dict()``, the geometric annealing schedule in ``on_epoch_start``
      restarts from ``tau_start`` at each :meth:`~mowl.models.MultiBoxEL.train` call.
    * *Strict positivity of BCE and region vs. point model-ness under point supervision:*
-     Because :func:`~mowl.nn.el.pointloss.soft_box_membership` takes the minimum
+     Because :func:`~mowl.baselines.nn.el.multiboxel.pointloss.soft_box_membership` takes the minimum
      over :math:`d` coordinate sigmoids
      :math:`m(x) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` (which is
      dimension-free, avoiding the :math:`\sigma(|o|/\beta)^d` decay of a
@@ -393,8 +397,8 @@ Limitations and caveats
      every coordinate sigmoid is strictly in :math:`(0, 1)`, so
      :math:`0 < m(x) < 1` strictly (and is clamped to
      :math:`[\varepsilon, 1 - \varepsilon]` in
-     :func:`~mowl.nn.el.pointloss.membership_bce`) and
-     :func:`~mowl.nn.el.pointloss.membership_bce` never reaches exact zero.
+     :func:`~mowl.baselines.nn.el.multiboxel.pointloss.membership_bce`) and
+     :func:`~mowl.baselines.nn.el.multiboxel.pointloss.membership_bce` never reaches exact zero.
      Under ``objective="point"``, all TBox GCI losses and ABox
      ``object_property_assertion`` are zeroed (while ABox ``class_assertion`` is
      still trained in the main loop via :math:`-\log m_C(a)`) because finite point
@@ -429,7 +433,7 @@ pairwise-intersecting spanning boxes always share a point by Helly's theorem).
 
 The opt-in ``objective="structural"`` mode (implemented in
 :mod:`mowl.nn.el.structural`, :mod:`mowl.nn.el.multiboxel`, and
-:mod:`mowl.nn.el.prism`) addresses all three defects for
+:mod:`mowl.baselines.nn.el.prism`) addresses all three defects for
 :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.PrismEL`. The
 guarantee concerns the zero set of the loss, not convergence of the optimiser;
 as measured on the :math:`T_3` fixture in the slow tests (empirical measurements,
@@ -454,7 +458,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
    * *Primitive class:* slots ``0 .. k - 1`` hold the raw embedding rows
      (:math:`w = |o| \ge 0`, ``active = True``); slots ``k .. K - 1`` are
      inactive (``cen = 0``, ``w = -1``).
-   * *Defined class* :math:`A := X \sqcap Y`: :func:`~mowl.nn.el.structural.pair_slots`
+   * *Defined class* :math:`A := X \sqcap Y`: :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.pair_slots`
      forms all pairs :math:`(X_i, Y_j)` of parent slots with
      :math:`\text{lower} = \max(c_X - w_X, c_Y - w_Y)`,
      :math:`\text{upper} = \min(c_X + w_X, c_Y + w_Y)`,
@@ -466,21 +470,21 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      (``cen = 0``, ``w = -1``).
    * *Derived differentiable quantities:*
 
-     - :func:`~mowl.nn.el.structural.nonempty_measure`:
+     - :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.nonempty_measure`:
        :math:`\text{ne}(a) = \min_m 2 w_{a,m}` — minimum signed width; slot
        :math:`a` is non-empty iff :math:`\text{ne}(a) > 0`.
-     - :func:`~mowl.nn.el.structural.signed_overlap`:
+     - :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.signed_overlap`:
        :math:`\text{sov}_m(a, b) = \min(c_a + w_a, c_b + w_b)_m - \max(c_a - w_a, c_b - w_b)_m`
        — signed overlap per coordinate, with
        :math:`\text{ne}(a \cap b) = \min_m \text{sov}_m(a, b)`.
-     - :func:`~mowl.nn.el.structural.region_size` and
-       :func:`~mowl.nn.el.structural.pair_size`:
+     - :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.region_size` and
+       :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.pair_size`:
        :math:`\text{NE}(C) = \max_{i \text{ active}} \text{ne}(C_i)` and
        :math:`\text{NE}(C \sqcap D) = \max_{(i,j) \text{ active}} \text{ne}(C_i \cap D_j)`.
        The maximum selects the nearest active pair even when all pairs are
        separated (negative values), routing gradient to pull separated
        components together.
-     - :func:`~mowl.nn.el.structural.inclusion_tight`:
+     - :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.inclusion_tight`:
        :math:`\text{incl}_m(a, b) = \|\operatorname{relu}(|c_a - c_b| + w_a - w_b + m)\|_2`
        — tight inclusion with margin :math:`m \ge 0` (positive :math:`m`
        tightens, ELBE convention), equal to :math:`0` at :math:`m = 0` iff
@@ -575,23 +579,23 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 
       * - Normal form
         - Structural loss (per row)
-      * - :math:`C \sqsubseteq D` (``gci0``, :func:`~mowl.nn.el.structural.gci0_structural`)
+      * - :math:`C \sqsubseteq D` (``gci0``, :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci0_structural`)
         - :math:`\operatorname{mean}_{i:\,\text{active},\,\text{ne}(C_i)>0}^{\text{det}} \min_{j \text{ active}} \text{incl}_m(C_i, D_j)^2`; ``0`` if no active non-empty :math:`C_i` or if the row is masked
-      * - :math:`C \sqsubseteq \bot` (``gci0_bot``, :func:`~mowl.nn.el.structural.gci0_bot_structural`)
+      * - :math:`C \sqsubseteq \bot` (``gci0_bot``, :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci0_bot_structural`)
         - :math:`\operatorname{mean}_{i \text{ active}} \operatorname{relu}(\text{ne}(C_i))^2` (no margin: primitive widths satisfy :math:`w = |o| \ge 0`, so a positive margin would impose a floor on the loss)
-      * - :math:`C \sqcap D \sqsubseteq E` (``gci1``, :func:`~mowl.nn.el.structural.gci1_structural`)
+      * - :math:`C \sqcap D \sqsubseteq E` (``gci1``, :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_structural`)
         - :math:`\operatorname{mean}_{(i,j):\,\text{active},\,\text{ne}(C_i \cap D_j)>0}^{\text{det}} \min_{l \text{ active}} \text{incl}_m(I_{ij}, E_l)^2` with :math:`I_{ij}` the pair slot; ``0`` if no pair is non-empty (vacuous; no emptiness penalty) or the row is masked
-      * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.nn.el.structural.gci1_bot_structural`)
+      * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural`)
         - :math:`\operatorname{agg}_{(i,j) \text{ active}} \operatorname{relu}(\text{ne}(C_i \cap D_j) + m)^2` with ``agg`` = ``bot_agg`` :math:`\in \{\text{"mean"}, \text{"sum"}\}` (default ``"mean"``; ``"sum"`` sums over active pairs instead of dividing by the active-pair count, with module slots gated to active non-empty components :math:`\text{ne} > 0`: identical zero set at :math:`m = 0`, deviating from gating on ``active`` alone only at :math:`m > 0`) — separation by :math:`m` in **at least one** coordinate
       * - :math:`C \sqsubseteq \exists r.D`, :math:`\exists r.C \sqsubseteq D`, :math:`\exists r.C \sqsubseteq \bot`, and ABox assertions (``gci2``, ``gci3``, ``gci3_bot``, ``class_assertion``, ``object_property_assertion``)
-        - Existing Box²EL multibox scores (hard aggregation, with ``gci3`` and ``gci3_bot`` squared) evaluated on the materialised slots :math:`(c, |w|)` with inactive or empty slots (:math:`\neg\text{active} \vee \text{ne}(w) \le 0`) masked out (source slots excluded from means, target slots excluded from minima); because Box²EL ``gamma`` loosens inclusions (:math:`\operatorname{relu}(\text{dist} + 2o - \gamma)`), positive role and assertion scores pass ``gamma = -m`` (tightening inclusion by :math:`m`), whereas negative scores (:func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` and negative ``object_property_assertion``) keep Box²EL's convention (``gamma = +margin``, which relaxes them by the margin), so the negative-sampling term is unchanged between the axiom and structural objectives; class bumps remain per-class embedding rows
+        - Existing Box²EL multibox scores (hard aggregation, with ``gci3`` and ``gci3_bot`` squared) evaluated on the materialised slots :math:`(c, |w|)` with inactive or empty slots (:math:`\neg\text{active} \vee \text{ne}(w) \le 0`) masked out (source slots excluded from means, target slots excluded from minima); because Box²EL ``gamma`` loosens inclusions (:math:`\operatorname{relu}(\text{dist} + 2o - \gamma)`), positive role and assertion scores pass ``gamma = -m`` (tightening inclusion by :math:`m`), whereas negative scores (:func:`~mowl.baselines.nn.el.multiboxel.losses.gci2_score_neg` and negative ``object_property_assertion``) keep Box²EL's convention (``gamma = +margin``, which relaxes them by the margin), so the negative-sampling term is unchanged between the axiom and structural objectives; class bumps remain per-class embedding rows
 
-   Additional per-epoch terms returned by
-   :meth:`~mowl.models.MultiBoxEL.additional_training_loss` via
-   :meth:`~mowl.nn.MultiBoxELModule.structural_extra_loss`:
+   Additional per-step terms, added by the regime
+   :class:`~mowl.training.structural.ExtraPenalties` of the reading (the penalties of
+   :meth:`~mowl.nn.MultiBoxELModule.structural_extra_loss`):
 
    * *Existence* (weight ``existence_weight``, default ``1.0``,
-     :func:`~mowl.nn.el.structural.existence_loss`):
+     :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`):
 
      .. math::
 
@@ -621,7 +625,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      defined classes), keeping spare components small so they can be relocated
      and discouraging single spanning boxes.
    * *Witness points* (weight ``witness_weight``, default ``0.0``,
-     :func:`~mowl.nn.el.structural.witness_loss`): when ``witness_weight > 0``,
+     :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.witness_loss`): when ``witness_weight > 0``,
      allocates ``module.witness_embed`` with one learnable witness point
      :math:`w_C \in \mathbb{R}^d` per satisfiable class
      :math:`C \in \text{targets.witness.classes}` (:class:`~mowl.nn.el.structural.WitnessTargets`)
@@ -660,14 +664,14 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      to ``0.0`` and renders the role or assertion score (or the target half of
      ``gci2``) vacuously ``0`` unless the existence term forces :math:`D` to be
      non-empty; similarly, in the negative score
-     :func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg`, an all-masked (empty)
+     :func:`~mowl.baselines.nn.el.multiboxel.losses.gci2_score_neg`, an all-masked (empty)
      source :math:`C` makes the source half return ``0.0`` rather than
      :math:`\delta^2` (and ``0.0`` overall when both source and target are
      all-masked). Because :math:`\top` (``owl:Thing``) is excluded from
      :class:`~mowl.nn.el.structural.ExistenceTargets`, axioms with :math:`\top`
      on the left-hand side are vacuous if :math:`\top` collapses to an empty
-     region. Furthermore, :func:`~mowl.nn.el.structural.region_size` and
-     :func:`~mowl.nn.el.structural.pair_size` route gradient only through the
+     region. Furthermore, :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.region_size` and
+     :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.pair_size` route gradient only through the
      argmax active slot or pair, and each non-empty source slot :math:`C_i` in
      ``gci0`` or pair slot :math:`C_i \cap D_j` in ``gci1`` must be covered by a
      single active target slot rather than a union of several target slots.
@@ -713,7 +717,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
         uses component :math:`c` of :math:`X`, where the slot-to-component map
         (:func:`~mowl.nn.el.structural.slot_components`) follows the recursion
         of :meth:`~mowl.nn.MultiBoxELModule.class_regions` /
-        :func:`~mowl.nn.el.structural.pair_slots` (a slot of
+        :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.pair_slots` (a slot of
         :math:`A \to (X, Y)` is a pair of a slot of :math:`X` and a slot of
         :math:`Y`, recursing to primitives).
      3. Process dead defined classes in a seeded random order
@@ -735,16 +739,16 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 5. **Prisms (:class:`~mowl.models.PrismEL`, :class:`~mowl.nn.PrismModule`):**
    Under ``PrismEL(..., margin=0.1, objective="structural", max_depth=8, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``,
    each class is materialised as a single prism
-   :class:`~mowl.nn.el.prism.losses.PrismRegions` ``(h, cen, w)`` with support
+   :class:`~mowl.baselines.nn.el.prism.losses.PrismRegions` ``(h, cen, w)`` with support
    vector :math:`h \in \mathbb{R}^3`, box centre :math:`\text{cen} \in \mathbb{R}^{d-2}`,
    and signed box half-width :math:`w \in \mathbb{R}^{d-2}`. Non-emptiness is
-   measured by :func:`~mowl.nn.el.prism.losses.prism_nonempty_measure`:
+   measured by :func:`~mowl.baselines.nn.el.prism.losses.prism_nonempty_measure`:
    :math:`\text{ne}(P) = \min(\sum_{k=1}^3 h_k,\; \min_m 2 w_m)` (strictly
    positive iff non-empty; :math:`\sum_{k=1}^3 h_k = 3|\rho| \ge 0` for
    primitive prisms). Definitions are evaluated recursively with
-   :func:`~mowl.nn.el.prism.losses.prism_regions_intersection`
+   :func:`~mowl.baselines.nn.el.prism.losses.prism_regions_intersection`
    (:math:`h = \min(h_X, h_Y)` and signed box half-widths from
-   :func:`~mowl.nn.el.prism.losses.prism_intersection`); because intersecting
+   :func:`~mowl.baselines.nn.el.prism.losses.prism_intersection`); because intersecting
    two prisms yields a single prism, there is no slot blow-up (:math:`k = 1`)
    and acceptance only requires acyclicity and :math:`\text{level} \le \text{max\_depth}`.
 
@@ -754,16 +758,16 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 
       * - Normal form
         - Structural prism loss (per row)
-      * - :math:`C \sqsubseteq D` (``gci0``, :func:`~mowl.nn.el.prism.losses.gci0_structural`)
+      * - :math:`C \sqsubseteq D` (``gci0``, :func:`~mowl.baselines.nn.el.prism.losses.gci0_structural`)
         - :math:`[\text{ne}(C) > 0]^{\text{det}} \bigl(\|\operatorname{relu}(h_C - h_D + m)\|_2^2 + \|\operatorname{relu}(|\text{cen}_C - \text{cen}_D| + w_C - w_D + m)\|_2^2\bigr)` on signed widths :math:`w_C, w_D` (equivalent to :math:`\text{prism\_inclusion\_score}(C, D, m)^2` for non-negative widths; masked rows ``0``)
-      * - :math:`C \sqsubseteq \bot` (``gci0_bot``, :func:`~mowl.nn.el.prism.losses.gci0_bot_structural`)
+      * - :math:`C \sqsubseteq \bot` (``gci0_bot``, :func:`~mowl.baselines.nn.el.prism.losses.gci0_bot_structural`)
         - :math:`\operatorname{relu}(\text{ne}(C))^2`
-      * - :math:`C \sqcap D \sqsubseteq E` (``gci1``, :func:`~mowl.nn.el.prism.losses.gci1_structural`)
+      * - :math:`C \sqcap D \sqsubseteq E` (``gci1``, :func:`~mowl.baselines.nn.el.prism.losses.gci1_structural`)
         - :math:`[\text{ne}(I) > 0]^{\text{det}} \bigl(\|\operatorname{relu}(h_I - h_E + m)\|_2^2 + \|\operatorname{relu}(|\text{cen}_I - \text{cen}_E| + w_I - w_E + m)\|_2^2\bigr)` with :math:`I = C \cap D` on signed widths :math:`w_I, w_E` (equivalent to :math:`\text{prism\_inclusion\_score}(C \cap D, E, m)^2` for non-negative widths), masked rows ``0``, and **no** emptiness penalties on :math:`C \cap D` (the existence term owns them)
-      * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.nn.el.prism.losses.gci1_bot_structural`)
+      * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.baselines.nn.el.prism.losses.gci1_bot_structural`)
         - :math:`\operatorname{relu}(\text{ne}(C \cap D) + m)^2`
       * - ``gci2``, ``gci3``, ``gci3_bot``, and assertions
-        - Existing prism scores (:func:`~mowl.nn.el.prism.losses.gci2_score_prisms`, :func:`~mowl.nn.el.prism.losses.gci2_score_neg_prisms`, :func:`~mowl.nn.el.prism.losses.gci3_score_prisms`, :func:`~mowl.nn.el.prism.losses.gci3_bot_score_prisms`, :func:`~mowl.nn.el.prism.losses.class_assertion_score_prisms`, :func:`~mowl.nn.el.prism.losses.object_property_assertion_loss`) on materialised prisms with ``|w|`` (unsquared norms/hinges)
+        - Existing prism scores (:func:`~mowl.baselines.nn.el.prism.losses.gci2_score_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.gci2_score_neg_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.gci3_score_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.gci3_bot_score_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.class_assertion_score_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.object_property_assertion_loss`) on materialised prisms with ``|w|`` (unsquared norms/hinges)
 
    The existence term uses :math:`\text{NE}(C) = \text{ne}(C)` and
    :math:`\text{NE}(C \sqcap D) = \text{ne}(C \cap D)`, and the size term
@@ -782,7 +786,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      only in its box part (:math:`w_m < 0` in some coordinate while
      :math:`\sum_k h_k > 0`) becomes a phantom non-empty box of half-width
      :math:`|w_m| > 0` in ``gci2``, ``gci3``, and ``class_assertion``. In
-     addition, :func:`~mowl.nn.el.prism.losses.gci3_bot_score_prisms`
+     addition, :func:`~mowl.baselines.nn.el.prism.losses.gci3_bot_score_prisms`
      (:math:`\operatorname{relu}(\sum_k h_{C,k} + m)`) shrinks :math:`C` itself,
      which conflicts with the existence term whenever :math:`C` is satisfiable.
 
@@ -802,7 +806,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      and :meth:`MultiBoxELModule.all_class_regions() <mowl.nn.MultiBoxELModule.all_class_regions>`
      (detached on CPU);
      :meth:`PrismModule.class_regions(idx) <mowl.nn.PrismModule.class_regions>`
-     :math:`\to` :class:`~mowl.nn.el.prism.losses.PrismRegions` ``(h (B, 3), cen (B, d - 2), w (B, d - 2))``
+     :math:`\to` :class:`~mowl.baselines.nn.el.prism.losses.PrismRegions` ``(h (B, 3), cen (B, d - 2), w (B, d - 2))``
      and :meth:`PrismModule.all_class_regions() <mowl.nn.PrismModule.all_class_regions>`
      (detached on CPU); ``module.definition_table``
      (:class:`~mowl.nn.el.structural.DefinitionTable`),
@@ -821,7 +825,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
    **Recommended settings for learning from random initialisation (witness-point recipe):**
    On deep conjunction chains such as the Helly-obstruction family :math:`T_k`
    (:math:`A_i \equiv \sqcap_{j \neq i} X_j` with :math:`A_i \sqcap A_j \sqsubseteq \bot`),
-   the round-4 defaults (``bot_agg="mean", witness_weight=0.0, reseed_every=0, reseed_mode="dead", size_reg=1e-3``)
+   the default settings (``bot_agg="mean", witness_weight=0.0, reseed_every=0, reseed_mode="dead", size_reg=1e-3``)
    can fall into a *component-assignment Helly trap*: every live defined class
    selects the same component of each shared primitive :math:`X_j` (reducing each
    :math:`A_i` to a single box while spare components stay idle), and averaging

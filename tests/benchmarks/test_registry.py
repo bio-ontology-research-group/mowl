@@ -147,5 +147,78 @@ def test_elem_recipes_use_the_released_loss():
     recipes = [r for r in list_recipes() if r.method in ("elem", "regd_elem")]
     assert recipes
     for recipe in recipes:
+        if recipe.source.key == "mowl-common" and not recipe.locator.startswith("recipe of"):
+            # mOWL's own defaults reproduce no reference code: the corrected loss.
+            assert "gci1_radius_term" not in recipe.model_kwargs
+            continue
         assert recipe.model_kwargs.get("gci1_radius_term") is False, (
             recipe.benchmark, recipe.method)
+
+
+# --- benchmarks are linked to the tasks of mowl.logic ----------------------------------
+
+#: Evaluation regimes that rank the missing class of any axiom form; their card names the
+#: general task, the benchmark the form it uses.
+GENERAL_REGIMES = {"cate-filtered-ranking", "dele-evaluation", "common-filtered-ranking",
+                   "triple-classification-thresholds"}
+
+
+def test_every_benchmark_is_linked_to_tasks_and_a_regime_card():
+    from mowl.catalog import get_regime
+    from mowl.logic import COMPLETION_TASKS, TASKS, Target
+    for b in list_benchmarks():
+        assert b.inference_tasks, b.key
+        assert set(b.inference_tasks) <= set(TASKS), b.key
+        assert set(b.completion_tasks) | set(b.encodes) <= set(COMPLETION_TASKS), b.key
+        assert isinstance(b.target, Target), b.key
+        assert b.evaluation_regime, f"{b.key} names no evaluation regime card"
+        card = get_regime(b.evaluation_regime)
+        assert card.kind.value == "evaluation", b.key
+        if card.target:
+            assert card.target == b.target.value, (b.key, card.key, card.target)
+        if card.task and card.key not in GENERAL_REGIMES:
+            assert b.measures(card.task), (b.key, card.key, card.task)
+
+
+def test_filter_by_logic_task_and_target():
+    from mowl.logic import Target
+    links = {b.key for b in list_benchmarks(completion_task="link-prediction")}
+    # ABox links, and interactions posed as C ⊑ ∃r.D with proteins as classes.
+    assert {"boxlite-family-v1", "box2el-yeast-ppi", "dele-human-ppi"} <= links
+    assert "box2el-go-prediction" not in links
+    assert get_benchmark("box2el-yeast-ppi").completion_tasks == ("existential-prediction",)
+    assert get_benchmark("box2el-yeast-ppi").inference_tasks == ("subsumption",)
+    assert get_benchmark("boxlite-family-v1").inference_tasks == ("role-assertion",)
+    # The same argument accepts groups, completion tasks and inference tasks.
+    assert {b.key for b in list_benchmarks(task="link-prediction")} == links
+    instance = {b.key for b in list_benchmarks(task="instance-checking")}
+    assert "cate-ore1-membership" in instance and "dele-yeast-function" in instance
+    entailed = list_benchmarks(target=Target.ENTAILED)
+    assert entailed and all(b.target is Target.ENTAILED for b in entailed)
+    assert {b.key for b in list_benchmarks(target="deductive inference")} == {
+        b.key for b in entailed}
+    with pytest.raises(ValueError):
+        list_benchmarks(task="no-such-task")
+
+
+def test_methods_and_benchmarks_are_matched_by_task_and_expressivity():
+    from mowl.benchmarks import benchmarks_for, methods_for, missing_support, supports
+    # A taxonomy method answers subsumption between names, not C ⊑ ∃r.?.
+    assert supports("bcbox", "box2el-go-inference")
+    assert not supports("bcbox", "box2el-yeast-ppi")
+    assert any("∃r.C" in reason for reason in missing_support("bcbox", "box2el-yeast-ppi"))
+    # A TBox-only method cannot rank role assertions.
+    assert not supports("mcmultibox", "boxlite-family-v1")
+    assert supports("elem", "boxlite-family-v1")
+    keys = {m.key for m in methods_for("box2el-go-inference")}
+    assert {"elem", "box2el", "cate", "bcbox", "ont"} <= keys
+    assert all(m.implemented for m in methods_for("box2el-go-inference"))
+    mine = {b.key for b in benchmarks_for("bcbox")}
+    assert "box2el-go-inference" in mine and "box2el-yeast-ppi" not in mine
+    # Methods that only produce vectors reach a task through a scoring head ...
+    from mowl.catalog import get_method
+    assert get_method("owl2vec_star").tasks == ()
+    assert get_method("owl2vec_star").head_tasks == ("subsumption",)
+    assert supports("owl2vec_star", "box2el-go-inference")
+    # ... and a method without any declared task matches no benchmark.
+    assert missing_support("gda_projection", "box2el-go-inference")

@@ -1,0 +1,152 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "auxiliary_classes": 1,
+  "class_assertion": {
+   "named": [
+    [
+     "http://mowl.borg/compat/rich#Dog",
+     "http://mowl.borg/compat/rich#rex"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Man",
+     "http://mowl.borg/compat/rich#bob"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Person",
+     "http://mowl.borg/compat/rich#carl"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Woman",
+     "http://mowl.borg/compat/rich#anna"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci0": {
+   "named": [
+    [
+     "http://mowl.borg/compat/rich#Father",
+     "http://mowl.borg/compat/rich#Man"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Father",
+     "http://mowl.borg/compat/rich#Parent"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Man",
+     "http://mowl.borg/compat/rich#Person"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Mother",
+     "http://mowl.borg/compat/rich#Parent"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Mother",
+     "http://mowl.borg/compat/rich#Woman"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Parent",
+     "http://mowl.borg/compat/rich#Person"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Woman",
+     "http://mowl.borg/compat/rich#Person"
+    ],
+    [
+     "http://purl.obolibrary.org/obo/GO_0000002",
+     "http://purl.obolibrary.org/obo/GO_0000001"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci0_bot": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci1": {
+   "named": [
+    [
+     "http://mowl.borg/compat/rich#Man",
+     "http://mowl.borg/compat/rich#Parent",
+     "http://mowl.borg/compat/rich#Father"
+    ],
+    [
+     "http://mowl.borg/compat/rich#Parent",
+     "http://mowl.borg/compat/rich#Woman",
+     "http://mowl.borg/compat/rich#Mother"
+    ]
+   ],
+   "with_auxiliary": 1
+  },
+  "gci1_bot": {
+   "named": [
+    [
+     "http://mowl.borg/compat/rich#Man",
+     "http://mowl.borg/compat/rich#Woman",
+     "http://www.w3.org/2002/07/owl#Nothing"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci2": {
+   "named": [
+    [
+     "http://mowl.borg/compat/rich#Parent",
+     "http://mowl.borg/compat/rich#hasChild",
+     "http://mowl.borg/compat/rich#Person"
+    ],
+    [
+     "http://mowl.borg/compat/rich#PetOwner",
+     "http://mowl.borg/compat/rich#hasPet",
+     "http://mowl.borg/compat/rich#Pet"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci3": {
+   "named": [
+    [
+     "http://mowl.borg/compat/rich#hasPet",
+     "http://mowl.borg/compat/rich#Pet",
+     "http://mowl.borg/compat/rich#PetOwner"
+    ],
+    [
+     "http://mowl.borg/compat/rich#hasPet",
+     "http://www.w3.org/2002/07/owl#Thing",
+     "http://mowl.borg/compat/rich#Person"
+    ]
+   ],
+   "with_auxiliary": 1
+  },
+  "gci3_bot": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "object_property_assertion": {
+   "named": [
+    [
+     "http://mowl.borg/compat/rich#anna",
+     "http://mowl.borg/compat/rich#hasChild",
+     "http://mowl.borg/compat/rich#carl"
+    ],
+    [
+     "http://mowl.borg/compat/rich#anna",
+     "http://mowl.borg/compat/rich#hasSpouse",
+     "http://mowl.borg/compat/rich#bob"
+    ],
+    [
+     "http://mowl.borg/compat/rich#bob",
+     "http://mowl.borg/compat/rich#hasChild",
+     "http://mowl.borg/compat/rich#carl"
+    ],
+    [
+     "http://mowl.borg/compat/rich#carl",
+     "http://mowl.borg/compat/rich#hasPet",
+     "http://mowl.borg/compat/rich#rex"
+    ]
+   ],
+   "with_auxiliary": 0
+  }
+ }
+}

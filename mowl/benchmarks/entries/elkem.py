@@ -42,6 +42,7 @@ BENCHMARKS = [
         key=f"elkem-{name}-subsumption",
         name=f"ELK-Em approximating deductive reasoning ({label})",
         task=Task.DEDUCTIVE_INFERENCE,
+        evaluation_regime="elkem-subsumption-ranking",
         description=_DESCRIPTION,
         dataset="mowl.datasets.builtin.jackermeier2024_reference."
                 "Jackermeier2024InferencesDataset",

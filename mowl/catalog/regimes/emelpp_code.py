@@ -58,6 +58,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="emelpp-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the EmEL++ code",
         kind=RegimeKind.TRAINING,
         summary=(

@@ -7,6 +7,8 @@ The regimes themselves are in :mod:`mowl.evaluation.normal_form_ranking` and
 """
 
 import logging
+import sys
+import time
 
 import numpy as np
 import torch as th
@@ -22,6 +24,7 @@ COLUMNS = {
     "gci2": ("C", "r", "D"),
     "gci3": ("r", "C", "D"),
     "class_assertion": ("a", "C"),
+    "object_property_assertion": ("a", "r", "b"),
 }
 
 
@@ -81,8 +84,16 @@ def build_filter(rows, target_col):
     return out
 
 
+def _progress_line(gci_name, done, total, num_c, started):
+    spent = time.time() - started
+    left = spent * (total - done) / max(done, 1)
+    print(f"ranking {gci_name}: {done} of {total} queries ({num_c} candidates each) in "
+          f"{spent:.0f} s, about {left:.0f} s left", file=sys.stderr, flush=True)
+
+
 def rank_queries(model, gci_name, rows, target_col, candidates, scorer, ties="ordinal",
-                 exclude_cols=(), filters=None, max_rows=2 ** 22, device=None):
+                 exclude_cols=(), filters=None, max_rows=2 ** 22, device=None,
+                 progress=60.0):
     """Rank the true target of every query among the candidates.
 
     For every row, the column ``target_col`` is replaced by every candidate class, the
@@ -103,6 +114,9 @@ def rank_queries(model, gci_name, rows, target_col, candidates, scorer, ties="or
     :return: ``(raw_ranks, filtered_ranks, kept)``: float tensors of ranks (filtered is
         ``None`` without filters) and a boolean mask of the rows whose target is a
         candidate (only those are ranked).
+    :param progress: Seconds between progress lines on standard error (queries done,
+        time spent, time left); the first comes after this long, so a short ranking prints
+        nothing. ``None`` or 0: none.
     """
     device = device or getattr(model, "device", "cpu")
     num_c = len(candidates)
@@ -119,13 +133,28 @@ def rank_queries(model, gci_name, rows, target_col, candidates, scorer, ties="or
     was_training = module.training if module is not None else False
     if module is not None:
         module.eval()
+    started = last = time.time()
     with th.no_grad():
-        for start in range(0, len(rows), batch):
+        start = 0
+        while start < len(rows):
             b = rows[start:start + batch].to(device)
             n = len(b)
-            expanded = b.repeat_interleave(num_c, dim=0)
-            expanded[:, target_col] = cand_dev.repeat(n)
-            scores = scorer(model, gci_name, expanded).reshape(n, num_c).float()
+            try:
+                expanded = b.repeat_interleave(num_c, dim=0)
+                expanded[:, target_col] = cand_dev.repeat(n)
+                scores = scorer(model, gci_name, expanded).reshape(n, num_c).float()
+            except th.OutOfMemoryError:
+                # Some scorers need far more memory per candidate than others (and the
+                # device may be shared): retry with half the queries per pass.
+                if batch == 1:
+                    raise
+                del b
+                expanded = None
+                th.cuda.empty_cache()
+                batch = max(1, batch // 2)
+                logger.warning("Out of memory while ranking; %d queries per pass.", batch)
+                continue
+            start += n
             targets = th.tensor([position[int(t)] for t in b[:, target_col].tolist()],
                                 device=scores.device)
             for col in exclude_cols:
@@ -143,6 +172,11 @@ def rank_queries(model, gci_name, rows, target_col, candidates, scorer, ties="or
                         if p is not None and p != int(targets[i]):
                             fscores[i, p] = float("inf")
                 filt.append(compute_ranks(fscores, targets, ties=ties).double().cpu())
+            if progress and time.time() - last >= progress and start < len(rows):
+                last = time.time()
+                _progress_line(gci_name, start, len(rows), num_c, started)
+    if progress and last > started:
+        _progress_line(gci_name, len(rows), len(rows), num_c, started)
     if module is not None and was_training:
         module.train()
     raw = th.cat(raw)
@@ -263,7 +297,3 @@ def closure_rows(model, dataset, gci_name, closure="auto"):
     if closure in ("auto", "elk"):
         return elk_closure_rows(model, dataset, gci_name)
     raise ValueError(f"Unknown closure {closure!r}.")
-
-
-def as_numpy(ranks):
-    return np.asarray(ranks.tolist() if hasattr(ranks, "tolist") else ranks, dtype=float)

@@ -65,6 +65,12 @@ class BenchmarkResult:
     :param wall_time: Seconds, split into ``load``, ``train``, ``evaluate``, ``total``.
     :param environment: Package version, git commit, Python/PyTorch versions, host.
     :param created: UTC timestamp.
+    :param implementation: Which implementation of the method ran
+        (:mod:`mowl.benchmarks.implementations`): ``{"name": "parts", "model_class": ...}``.
+    :param recipe: The recipe used, ``{"source", "name", "epochs", "training_regime",
+        "regime_kwargs", "validate_every"}``, or ``None``.
+    :param options: Every argument of the run (model, dataset, protocol and regime
+        arguments, epochs, seed, validation interval, model selection, determinism).
     """
 
     benchmark: str
@@ -82,6 +88,9 @@ class BenchmarkResult:
     wall_time: dict = field(default_factory=dict)
     environment: dict = field(default_factory=dict)
     created: str = ""
+    implementation: dict = field(default_factory=lambda: {"name": "parts"})
+    recipe: object = None
+    options: dict = field(default_factory=dict)
 
     def to_dict(self):
         return _jsonable(asdict(self))
@@ -203,17 +212,20 @@ class ELFamily(ModelFamily):
                     "selection_value": selection.best_value, "eval_gci_name": eval_gci}
         if select_best and validated and os.path.exists(model.model_filepath):
             model.load_best_model()
-        return {"selected": "best validation loss" if (select_best and validated)
+        criterion = getattr(model, "validation_criterion", "loss")
+        return {"selected": f"best validation {criterion}" if (select_best and validated)
                 else "last epoch", "eval_gci_name": eval_gci}
 
     @staticmethod
     def _selection_regime(model):
         """The model selection regime attached to the model, if any."""
         from mowl.training.selection import ValidationSelection
-        regime = getattr(model, "training_regime", None)
-        for part in getattr(regime, "regimes", None) or [regime]:
+        stack = [getattr(model, "training_regime", None)]
+        while stack:
+            part = stack.pop(0)
             if isinstance(part, ValidationSelection):
                 return part
+            stack.extend(getattr(part, "regimes", None) or ())
         return None
 
 
@@ -242,19 +254,6 @@ class _UnsupportedFamily(ModelFamily):
 
 _FAMILIES = [
     ELFamily(),
-    _UnsupportedFamily(
-        "graph", "mowl.base_models.graph_model.GraphModel",
-        "The benchmark protocols score candidate axioms through an EL++ module "
-        "(model.module(rows, gci_name)); graph-projection models need a projection-"
-        "specific scorer, which the benchmark set does not provide yet."),
-    _UnsupportedFamily(
-        "syntactic", "mowl.base_models.syntactic_model.SyntacticModel",
-        "Syntactic (corpus) models produce word vectors, not axiom scores; the benchmark "
-        "protocols need an axiom scorer."),
-    _UnsupportedFamily(
-        "ALC", "mowl.base_models.alcmodel.EmbeddingALCModel",
-        "ALC models (e.g. FALCON) do not expose the per-normal-form EL++ scores the "
-        "protocols rank with."),
 ]
 
 
@@ -284,6 +283,11 @@ _FAMILIES.insert(0, _LazyFamily("mowl.benchmarks.protocols.ont.LanguageModelFami
 _FAMILIES.insert(0, _LazyFamily("mowl.benchmarks.protocols.boxlite.SolverModelFamily"))
 
 
+#: Every other model that declares how it scores axioms (ALC, quantum logic, graph and
+#: corpus models); tried after the families above.
+_FAMILIES.append(_LazyFamily("mowl.benchmarks.families.ScoredModelFamily"))
+
+
 def register_family(family, first=True):
     """Add a :class:`ModelFamily` handler (before the built-in ones by default)."""
     if first:
@@ -301,8 +305,10 @@ def family_for(cls):
         if fam.matches(cls):
             return fam
     raise UnsupportedModelError(
-        f"No benchmark runner support for {getattr(cls, '__name__', cls)!r}: it is not an "
-        f"EmbeddingELModel subclass. Register a ModelFamily or pass a model_factory.")
+        f"No benchmark runner support for {getattr(cls, '__name__', cls)!r}: it is neither "
+        f"an EmbeddingELModel subclass nor a Model that declares how it scores axioms "
+        f"(class attribute 'axiom_scoring', see mowl.evaluation.model_scoring). Register a "
+        f"ModelFamily or pass a model_factory.")
 
 
 # ---------------------------------------------------------------------------------------
@@ -310,7 +316,12 @@ def family_for(cls):
 # ---------------------------------------------------------------------------------------
 
 def set_seed(seed, deterministic=True):
-    """Seed Python, NumPy and PyTorch (CPU and CUDA)."""
+    """Seed Python, NumPy and PyTorch (CPU and CUDA).
+
+    Python's string hashes are randomised per process unless ``PYTHONHASHSEED`` is set
+    before the interpreter starts; code that seeds from ``hash`` (gensim's default
+    ``hashfxn``) then differs between processes. That cannot be changed from inside the
+    process; :func:`environment` records the variable."""
     import numpy as np
     import torch as th
     random.seed(seed)
@@ -328,7 +339,8 @@ def set_seed(seed, deterministic=True):
 
 def environment():
     """Package version, git commit and versions of the main dependencies."""
-    info = {"python": platform.python_version(), "host": platform.node()}
+    info = {"python": platform.python_version(), "host": platform.node(),
+            "pythonhashseed": os.environ.get("PYTHONHASHSEED")}
     try:
         from importlib.metadata import version, PackageNotFoundError
         for dist in ("mowl-borg", "mowl"):
@@ -366,9 +378,17 @@ def _ensure_jvm(memory):
         mowl.init_jvm(memory)
 
 
-def resolve_training_regime(regime):
+def resolve_training_regime(regime, seed=None, implementation=None):
     """An instance of :class:`mowl.training.TrainingRegime` from an instance, a class, a
     catalogue key, a ``(key, kwargs)`` pair, or a list of these.
+
+    With ``implementation`` (an :class:`~mowl.benchmarks.implementations.Implementation`), a
+    regime class is passed through its ``regime_class`` before it is built, so that an
+    implementation whose models cannot take the library's class uses its own.
+
+    With ``seed``, a regime built here whose constructor takes ``seed`` gets it unless
+    its arguments set one (its samplers would otherwise draw from fresh entropy, see
+    :func:`mowl.benchmarks.implementations.with_run_seed`); instances are left alone.
 
     A list is combined with :class:`mowl.training.ComposedRegime`, in the order given
     (for negatives, loss and optimizer the first regime that implements the hook
@@ -378,7 +398,7 @@ def resolve_training_regime(regime):
     if regime is None:
         return None
     if isinstance(regime, list):
-        parts = [resolve_training_regime(r) for r in regime]
+        parts = [resolve_training_regime(r, seed, implementation) for r in regime]
         parts = [r for r in parts if r is not None]
         if not parts:
             return None
@@ -401,7 +421,13 @@ def resolve_training_regime(regime):
             raise ValueError(f"Regime {regime!r} is an {card.kind.value} regime, not a "
                              f"training regime.")
         regime = card.load()
+    if isinstance(regime, type) and implementation is not None:
+        # An implementation may train with a regime class of its own for the same name.
+        regime = implementation.regime_class(regime)
     if isinstance(regime, type):
+        if seed is not None:
+            from mowl.benchmarks.implementations import with_run_seed
+            kwargs = with_run_seed(regime, kwargs, seed)
         regime = regime(**kwargs)
     elif kwargs:
         raise ValueError("Constructor arguments were given for a regime instance.")
@@ -421,7 +447,7 @@ def _regime_key(regime):
 def _read_settings(model, model_kwargs):
     settings = dict(model_kwargs)
     for name in ("embed_dim", "learning_rate", "margin", "batch_size", "reg_norm",
-                 "reg_factor", "delta", "gamma", "n_components"):
+                 "reg_factor", "delta", "gamma", "n_components", "seed"):
         value = getattr(model, name, None)
         if isinstance(value, (int, float, str, bool)) and name not in settings:
             settings[name] = value
@@ -451,7 +477,7 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
                   epochs=None, seed=0, device="cpu", training_regime=None, dataset=None,
                   dataset_kwargs=None, protocol_kwargs=None, validate_every=None,
                   select_best=True, workdir=None, jvm_memory="8g", deterministic=True,
-                  recipe=None):
+                  recipe=None, implementation="parts"):
     """Train a method on a benchmark and evaluate it with the benchmark's protocol.
 
     :param benchmark: A :class:`~mowl.benchmarks.Benchmark` or its key.
@@ -469,7 +495,8 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     :param dataset_kwargs: Overrides of the benchmark's dataset arguments.
     :param protocol_kwargs: Overrides of the benchmark's protocol arguments.
     :param validate_every: Passed to ``model.train`` when supported.
-    :param select_best: Reload the parameters with the best validation loss after
+    :param select_best: Reload the parameters with the best validation value (by
+        ``validation_criterion`` of the model; ``model_kwargs`` may set it) after
         training (EL models with a validation set).
     :param workdir: Directory for model checkpoints (default: a new directory under
         the system temporary directory, which honours ``$TMPDIR``).
@@ -482,9 +509,45 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
         :class:`~mowl.benchmarks.recipes.Recipe`. The recipe supplies model arguments,
         training regime, epochs and validation interval; arguments given explicitly
         take precedence (``model_kwargs`` are merged).
+    :param implementation: Which implementation of ``method`` to run: ``"parts"`` (the
+        default, what users get) or the name of another registered
+        :class:`~mowl.benchmarks.implementations.Implementation` (``"baseline"`` once
+        :mod:`mowl.baselines.benchmarks` is imported).
     :rtype: :class:`BenchmarkResult`
     """
+    return run_benchmark_with_model(
+        benchmark, method=method, model_factory=model_factory, model_kwargs=model_kwargs,
+        epochs=epochs, seed=seed, device=device, training_regime=training_regime,
+        dataset=dataset, dataset_kwargs=dataset_kwargs, protocol_kwargs=protocol_kwargs,
+        validate_every=validate_every, select_best=select_best, workdir=workdir,
+        jvm_memory=jvm_memory, deterministic=deterministic, recipe=recipe,
+        implementation=implementation)[0]
+
+
+def run_benchmark_with_model(benchmark, method=None, model_factory=None, model_kwargs=None,
+                             epochs=None, seed=0, device="cpu", training_regime=None,
+                             dataset=None, dataset_kwargs=None, protocol_kwargs=None,
+                             validate_every=None, select_best=True, workdir=None,
+                             jvm_memory="8g", deterministic=True, recipe=None,
+                             implementation="parts", train=True, evaluate=True):
+    """:func:`run_benchmark`, returning the trained model and the dataset as well.
+
+    :param train: ``False`` builds the model and does not train it (to load saved
+        parameters into it).
+    :param evaluate: ``False`` skips the evaluation; the result has no metrics.
+    :return: ``(result, model, dataset)``: the :class:`BenchmarkResult`, the trained model
+        and the dataset it was trained on (as prepared by the benchmark's protocol).
+    """
+    from mowl.benchmarks.implementations import get_implementation
     t0 = time.time()
+    impl = get_implementation(implementation)
+    if model_factory is not None and impl.name != "parts":
+        raise ValueError("A model_factory replaces the implementation; give one or the "
+                         "other.")
+    if method is not None and model_factory is None and not impl.supports(method):
+        raise UnsupportedModelError(impl.unsupported_reason(method))
+    given = {"model_kwargs": dict(model_kwargs or {}), "epochs": epochs,
+             "training_regime": training_regime, "validate_every": validate_every}
     if not isinstance(benchmark, Benchmark):
         benchmark = get_benchmark(benchmark)
     if method is None and model_factory is None:
@@ -499,8 +562,14 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
             epochs = recipe.epochs
         if validate_every is None:
             validate_every = recipe.validate_every
+        recipe_info = {"source": recipe.source.key, "name": recipe.name,
+                       "epochs": recipe.epochs, "training_regime": recipe.training_regime,
+                       "regime_kwargs": dict(recipe.regime_kwargs),
+                       "validate_every": recipe.validate_every,
+                       "model_kwargs": dict(recipe.model_kwargs)}
     else:
         recipe = None
+        recipe_info = None
     if epochs is None:
         epochs = 100
     _ensure_jvm(jvm_memory)
@@ -524,35 +593,45 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     os.makedirs(workdir, exist_ok=True)
     model_filepath = os.path.join(workdir, f"model_seed{seed}.pt")
 
+    # (not a constructor argument: what the built-in validation keeps the best state by)
+    validation_criterion = model_kwargs.pop("validation_criterion", None)
     set_seed(seed, deterministic)
     if model_factory is not None:
         model = model_factory(dataset)
         family = family_for(type(model))
     else:
         from mowl.catalog import get_method
-        cls = get_method(method).load()
-        family = family_for(cls)
-        model = family.build(cls, dataset, model_kwargs, device, model_filepath)
+        card = get_method(method)
+        model, family = impl.build(card, dataset, model_kwargs, device, model_filepath,
+                                   seed=seed)
 
-    regime = resolve_training_regime(training_regime)
+    if validation_criterion is not None:
+        if not hasattr(model, "validation_criterion"):
+            raise ValueError(f"{type(model).__name__} has no built-in validation to choose a "
+                             f"criterion for.")
+        model.validation_criterion = validation_criterion
+    regime = resolve_training_regime(training_regime, seed=seed, implementation=impl)
     if regime is not None:
-        if not hasattr(type(model), "training_regime"):
-            raise UnsupportedModelError(
-                f"{type(model).__name__} has no 'training_regime' attribute; training "
-                f"regimes can only be attached to models that support them.")
-        model.training_regime = regime
+        impl.attach_regime(model, regime)
     elif getattr(model, "training_regime", None) is not None:
         regime = model.training_regime
 
-    train_info = family.train(model, epochs, protocol, validate_every=validate_every,
-                              select_best=select_best)
+    initialise = getattr(protocol, "initialise_model", None)
+    if initialise is not None:
+        initialise(model, dataset)
+
+    if train:
+        train_info = family.train(model, epochs, protocol, validate_every=validate_every,
+                                  select_best=select_best)
+    else:
+        train_info = {"selected": "not trained"}
     t_train = time.time()
-    metrics = protocol.evaluate(model, dataset)
+    metrics = protocol.evaluate(model, dataset) if evaluate else {}
     t_eval = time.time()
 
     info = dict(getattr(protocol, "info", {}) or {})
     info["training"] = train_info
-    return BenchmarkResult(
+    result = BenchmarkResult(
         benchmark=benchmark.key, method=method, metrics=_jsonable(metrics),
         settings=_jsonable(_read_settings(model, model_kwargs)), epochs=epochs, seed=seed,
         device=device, evaluation_regime=getattr(protocol, "key", ""),
@@ -561,7 +640,16 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
         wall_time={"load": t_load - t0, "train": t_train - t_load,
                    "evaluate": t_eval - t_train, "total": t_eval - t0},
         environment=environment(),
-        created=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"))
+        created=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        implementation=_jsonable(impl.describe(model)), recipe=_jsonable(recipe_info),
+        options=_jsonable({
+            "given": given, "model_kwargs": model_kwargs, "epochs": epochs,
+            "seed": seed, "device": device, "training_regime": training_regime,
+            "validate_every": validate_every, "select_best": select_best,
+            "deterministic": deterministic, "dataset_kwargs": d_kwargs,
+            "protocol_kwargs": p_kwargs, "jvm_memory": jvm_memory, "workdir": workdir,
+            "model_factory": None if model_factory is None else repr(model_factory)}))
+    return result, model, dataset
 
 
 # ---------------------------------------------------------------------------------------

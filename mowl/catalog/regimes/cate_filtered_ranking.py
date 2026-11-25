@@ -6,6 +6,7 @@ from mowl.catalog.regimes._benchmark_refs import ZHAPA2023
 REGIMES = (
     RegimeCard(
         key="cate-filtered-ranking",
+        assumption="closed world over stated axioms",
         task="subsumption-prediction",
         target="inductive prediction",
         name="Filtered ranking of memberships and subsumptions (CatE)",
@@ -47,6 +48,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="cate-ppi-ranking",
+        assumption="closed world over stated axioms",
         task="link-prediction",
         target="inductive prediction",
         name="Both-direction filtered PPI ranking (CatE)",

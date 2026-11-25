@@ -39,6 +39,8 @@ _PREDICTION = [
         key=f"ont-{name}-prediction",
         name=f"OnT axiom prediction ({label})",
         task=Task.AXIOM_PREDICTION,
+        evaluation_regime="ont-normal-form-ranking",
+        completion_tasks=("subsumption-prediction", "existential-prediction"),
         description=(
             "Random 80/10/10 split of the normalised axioms (Section 5.1, Table 1). For "
             "every test axiom one concept is ranked among all concepts of the normalised "
@@ -65,6 +67,7 @@ _INFERENCE = [
         key=f"ont-{name}-inference",
         name=f"OnT axiom inference ({label})",
         task=Task.DEDUCTIVE_INFERENCE,
+        evaluation_regime="ont-inferred-subsumption-ranking",
         description=(
             "Train on the whole normalised ontology; rank the superclass of every "
             "inferred atomic subsumption C ⊑ D (NF1) among all concepts, as NF1 of the "

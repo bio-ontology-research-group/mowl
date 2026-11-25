@@ -1,39 +1,105 @@
+"""RegD on ELBE and on ELEmbeddings as combinations of parts.
+
+:class:`RegDELBEModule` and :class:`RegDELEmModule` are the geometries that the methods
+``"regd"`` and ``"regd_elem"`` of :mod:`mowl.representation.library.ballfam_parts` build
+(the ``boundary and depth`` measure, the RegD objective with ELBE's or ELEmbeddings' reading
+of the other forms), wrapped in the interface of the earlier modules. The direct,
+hand-written modules are kept for comparison in :mod:`mowl.baselines.nn.el.regd`.
+"""
 from contextlib import contextmanager
 
-import torch as th
+from mowl.nn.el.elem.module import ELEmModule, _PartBuiltModule
+from mowl.representation.methods import METHODS
+from mowl.representation.regions import Ball, Box
 
-import mowl.nn.el.regd.dissimilarity as D
-from mowl.nn.el.elbe.module import ELBEModule
-from mowl.nn.el.elem.module import ELEmModule
+__all__ = ["RegDELBEModule", "RegDELEmModule"]
 
 
-class _RegDMixin:
-    """Behaviour shared by :class:`RegDELBEModule` and :class:`RegDELEmModule`.
-
-    A subclass provides ``_region(index)`` (centre and size of the regions of the given
-    classes), ``_energy``, ``_boundary`` and the set ``regd_gcis`` of the normal forms whose
-    inclusion energy RegD replaces.
-    """
+class _RegDInterface:
+    """What the two RegD modules share: the options of the RegD measure and objective under
+    the names of the earlier modules, and the scoring context (raw energies)."""
 
     #: Normal forms with a RegD contrastive loss (the others use the host model's loss).
     contrastive_gcis = frozenset({"gci0", "gci2"})
     neg_capable_gcis = frozenset({"gci0", "gci2", "object_property_assertion"})
 
-    def _init_regd(self, lamda, p, gamma1, gamma2, eps, depth_on_containment,
-                   flip_gci2=False):
-        if lamda < 0:
-            raise ValueError("lamda must be non-negative.")
-        if eps <= 0:
-            raise ValueError("eps must be positive.")
-        self.lamda = lamda
-        self.p = p
-        self.gamma1 = gamma1
-        self.gamma2 = gamma2
-        self.eps = eps
-        self.depth_on_containment = depth_on_containment
-        self.flip_gci2 = bool(flip_gci2)
-        self.energy_mode = False
-        self.last_gci_name = None
+    # -- the options of the measure ------------------------------------------------------
+
+    @property
+    def lamda(self):
+        """Weight :math:`\\lambda` of the depth dissimilarity."""
+        return self.measure.lamda
+
+    @lamda.setter
+    def lamda(self, value):
+        self.measure.lamda = value
+
+    @property
+    def p(self):
+        """Exponent of the :math:`L_p` norm of the depth dissimilarity."""
+        return self.measure.p
+
+    @p.setter
+    def p(self, value):
+        self.measure.p = value
+
+    @property
+    def gamma1(self):
+        """Margin :math:`\\gamma_1` of the positive term."""
+        return self.measure.gamma1
+
+    @gamma1.setter
+    def gamma1(self, value):
+        self.measure.gamma1 = value
+
+    @property
+    def gamma2(self):
+        """Margin :math:`\\gamma_2` of the negative term."""
+        return self.measure.gamma2
+
+    @gamma2.setter
+    def gamma2(self, value):
+        self.measure.gamma2 = value
+
+    @property
+    def eps(self):
+        """Lower bound of the sizes of the regions."""
+        return self.measure.eps
+
+    @eps.setter
+    def eps(self, value):
+        self.measure.eps = value
+
+    @property
+    def depth_on_containment(self):
+        """Whether the depth term is also added to contained pairs."""
+        return self.measure.depth_on_containment
+
+    @depth_on_containment.setter
+    def depth_on_containment(self, value):
+        self.measure.depth_on_containment = value
+
+    @property
+    def flip_gci2(self):
+        """Whether the reverse inclusion is trained for ``gci2`` (the objective's
+        ``flip_gci2``)."""
+        return self.objective.flip_gci2
+
+    @flip_gci2.setter
+    def flip_gci2(self, value):
+        self.objective.flip_gci2 = bool(value)
+
+    # -- scoring -------------------------------------------------------------------------
+
+    @property
+    def energy_mode(self):
+        """Whether the loss of a RegD normal form returns the raw energy (the measure's
+        ``raw``) instead of :math:`\\max\\{E, \\gamma_1\\}`."""
+        return self.measure.raw
+
+    @energy_mode.setter
+    def energy_mode(self, value):
+        self.measure.raw = bool(value)
 
     @contextmanager
     def scoring(self):
@@ -47,88 +113,44 @@ class _RegDMixin:
         finally:
             self.energy_mode = previous
 
-    def forward(self, gci, gci_name, neg=False):
-        self.last_gci_name = gci_name
-        return super().forward(gci, gci_name, neg=neg)
+    @property
+    def last_gci_name(self):
+        """The normal form of the last call of the module."""
+        return getattr(self, "last_form", None)
+
+    def _region(self, index):
+        """Centre and size (at least ``eps``) of the regions of the classes ``index``."""
+        region = self.measure.regularise(self.classes(index))
+        if hasattr(region, "offset"):
+            return region.centre, region.offset
+        return region.centre, region.radius.squeeze(-1)
+
+    def _regions(self, parent_center, parent_size, child_center, child_size):
+        """The child and the parent as regions of the kind of this module."""
+        if self._region_class is Ball:
+            return (Ball(child_center, child_size.unsqueeze(-1)),
+                    Ball(parent_center, parent_size.unsqueeze(-1)))
+        return Box(child_center, child_size), Box(parent_center, parent_size)
 
     def energy(self, parent_center, parent_size, child_center, child_size):
-        """RegD energy of child regions inside parent regions, shape ``(n, 1)``."""
-        return self._energy(parent_center, parent_size, child_center, child_size,
-                            lamda=self.lamda, p=self.p,
-                            depth_on_containment=self.depth_on_containment).unsqueeze(-1)
+        """RegD energy of child regions inside parent regions, shape ``(n, 1)``: the
+        :meth:`~mowl.representation.library.ballfam_parts.BoundaryDepth.energy` of the measure."""
+        child, parent = self._regions(parent_center, parent_size, child_center, child_size)
+        return self.measure.energy(child, parent)
 
     def boundary(self, parent_center, parent_size, child_center, child_size):
-        """Boundary dissimilarity of child regions in parent regions, shape ``(n, 1)``."""
-        return self._boundary(parent_center, parent_size, child_center,
-                              child_size).unsqueeze(-1)
-
-    def _finish(self, energy, boundary, neg, extra=None):
-        """Turn an energy (and its boundary dissimilarity) into the value a loss returns."""
-        if neg:
-            return D.negative_hinge(boundary, self.gamma2)
-        if self.energy_mode:
-            return energy if extra is None else energy + extra
-        loss = th.clamp(energy, min=self.gamma1)
-        return loss if extra is None else loss + extra
-
-    def _gci0_regions(self, data):
-        child = self._region(data[:, 0])
-        parent = self._region(data[:, 1])
-        return parent, child
-
-    def _gci2_regions(self, data):
-        if self.flip_gci2:
-            # The authors' prediction-task code (nf3Loss_ours) constrains the *reverse*
-            # inclusion: box(D) + R inside box(C) (with the sign of R flipped relative to
-            # the evaluation, which scores box(D) - R inside the candidates).
-            parent = self._region(data[:, 0])
-            child_center, child_size = self._region(data[:, 2])
-            child_center = child_center + self.rel_embed(data[:, 1])
-            return parent, (child_center, child_size)
-        child_center, child_size = self._region(data[:, 0])
-        parent = self._region(data[:, 2])
-        child_center = child_center + self.rel_embed(data[:, 1])
-        return parent, (child_center, child_size)
-
-    def _gci3_regions(self, data):
-        child_center, child_size = self._region(data[:, 1])
-        parent = self._region(data[:, 2])
-        child_center = child_center - self.rel_embed(data[:, 0])
-        return parent, (child_center, child_size)
-
-    def _regd_loss(self, parent, child, neg, extra=None):
-        energy = self.energy(*parent, *child)
-        boundary = self.boundary(*parent, *child) if neg else None
-        return self._finish(energy, boundary, neg, extra)
-
-    def gci0_loss(self, data, neg=False):
-        """:math:`C \\sqsubseteq D`: the region of :math:`C` inside the region of :math:`D`."""
-        parent, child = self._gci0_regions(data)
-        return self._regd_loss(parent, child, neg)
-
-    def gci2_loss(self, data, neg=False, idxs_for_negs=None):
-        """:math:`C \\sqsubseteq \\exists R.D`: the region of :math:`C` translated by
-        :math:`R` inside the region of :math:`D`."""
-        parent, child = self._gci2_regions(data)
-        return self._regd_loss(parent, child, neg)
-
-    def gci3_loss(self, data, neg=False):
-        """:math:`\\exists R.C \\sqsubseteq D`: the region of :math:`C` translated by
-        :math:`-R` inside the region of :math:`D`."""
-        parent, child = self._gci3_regions(data)
-        return self._regd_loss(parent, child, False)
-
-    def gci2_score(self, data):
-        with self.scoring():
-            return self.gci2_loss(data)
+        """Boundary dissimilarity of child regions in parent regions, shape ``(n, 1)``: the
+        :meth:`~mowl.representation.library.ballfam_parts.BoundaryDepth.boundary` of the
+        measure."""
+        child, parent = self._regions(parent_center, parent_size, child_center, child_size)
+        return self.measure.boundary(child, parent)
 
 
-class RegDELBEModule(_RegDMixin, ELBEModule):
+class RegDELBEModule(_RegDInterface, _PartBuiltModule):
     r"""ELBE ([peng2020]_) with the inclusion energy replaced by RegD ([yang2025regd]_).
 
-    Concepts are boxes (centre ``class_embed``, offset ``|class_offset|``) and roles are
-    translations, as in :class:`~mowl.nn.ELBEModule`. RegD replaces the inclusion energy
-    of the normal forms
+    Concepts are boxes and roles are translations, as in ELBE. RegD replaces the inclusion
+    energy of the normal forms
 
     * ``gci0`` :math:`C \sqsubseteq D`: :math:`E(\mathrm{box}(D), \mathrm{box}(C))`,
     * ``gci1`` :math:`C_1 \sqcap C_2 \sqsubseteq D`: :math:`E(\mathrm{box}(D), \mathrm{box}(C_1)
@@ -138,9 +160,12 @@ class RegDELBEModule(_RegDMixin, ELBEModule):
     * ``gci3`` :math:`\exists R.C \sqsubseteq D`:
       :math:`E(\mathrm{box}(D), \mathrm{box}(C) - v_R)`,
 
-    where :math:`E = d_{bd} + \lambda d_{dep}` (:mod:`mowl.nn.el.regd.dissimilarity`).
-    ``gci0`` and ``gci2`` are trained with the contrastive loss of Section 3.3 (see
-    :class:`~mowl.models.regd.RegDELBE`); the other forms use :math:`\max\{E, \gamma_1\}`.
+    where :math:`E = d_{bd} + \lambda d_{dep}`
+    (:class:`~mowl.representation.library.ballfam_parts.BoundaryDepth`). The module is the
+    geometry of the method ``"regd"``: box classes, translations, the ``boundary and depth``
+    measure and :class:`~mowl.representation.library.ballfam_parts.RegDObjective` over ELBE's
+    objective. ``gci0`` and ``gci2`` are trained with the contrastive loss of Section 3.3
+    (see :class:`~mowl.models.RegDELBE`); the other forms use :math:`\max\{E, \gamma_1\}`.
     The bottom forms (``gci0_bot``, ``gci1_bot``, ``gci3_bot``) and the assertions keep ELBE's
     losses.
 
@@ -150,50 +175,54 @@ class RegDELBEModule(_RegDMixin, ELBEModule):
     :param gamma1: Margin of the positive term. Defaults to 0.
     :param gamma2: Margin of the negative term. Defaults to 0.
     :param eps: Lower bound of the offsets, which are divided by in the depth dissimilarity.
-    :param depth_on_containment: See :func:`~mowl.nn.el.regd.dissimilarity.box_energy`.
+    :param depth_on_containment: See
+        :class:`~mowl.representation.library.ballfam_parts.BoundaryDepth`.
     :param flip_gci2: Train the *reverse* inclusion for ``gci2`` (box(D) + R inside
         box(C)), as the authors' prediction-task code (``nf3Loss_ours``) does. Defaults
         to ``False`` (the normal form's own direction).
     """
 
+    #: What the joint initialisation of the reference code normalises together
+    #: (:class:`~mowl.training.JointNormalisedInitialisation`).
+    joint_init = "box"
+    joint_init_roles = "rel_embed"
+
     regd_gcis = frozenset({"gci0", "gci1", "gci2", "gci3"})
-    _energy = staticmethod(D.box_energy)
-    _boundary = staticmethod(D.box_boundary_dissimilarity)
+    margin_semantics = "strict"
+    _region_class = Box
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  lamda=1.0, p=1, gamma1=0.0, gamma2=0.0, eps=1e-4,
                  depth_on_containment=True, flip_gci2=False):
-        super().__init__(nb_ont_classes, nb_rels, nb_inds=nb_inds, embed_dim=embed_dim,
-                         margin=margin)
-        self._init_regd(lamda, p, gamma1, gamma2, eps, depth_on_containment,
-                        flip_gci2=flip_gci2)
+        geometry = METHODS["regd"](nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim,
+                                   margin=margin, lamda=lamda, p=p, gamma1=gamma1,
+                                   gamma2=gamma2, eps=eps,
+                                   depth_on_containment=depth_on_containment,
+                                   flip_gci2=flip_gci2)
+        self._assemble(geometry, nb_ont_classes, nb_rels, nb_inds, embed_dim)
+        self.class_offset = self.class_model.offsets
+        self.ind_offset = getattr(self.individual_model, "offsets", None)
 
-    def _region(self, index):
-        center = self.class_embed(index)
-        offset = th.abs(self.class_offset(index)).clamp_min(self.eps)
-        return center, offset
+    # ELBE's bottom losses were flat vectors before the losses became columns
+    # (``per_axiom_column = False`` gives that shape back)
+    def gci0_bot_loss(self, data, neg=False):
+        out = super().gci0_bot_loss(data, neg)
+        return out if self.per_axiom_column else out.reshape(-1)
 
-    def gci1_loss(self, data, neg=False):
-        center_c, offset_c = self._region(data[:, 0])
-        center_d, offset_d = self._region(data[:, 1])
-        parent = self._region(data[:, 2])
-
-        start = th.maximum(center_c - offset_c, center_d - offset_d)
-        end = th.minimum(center_c + offset_c, center_d + offset_d)
-        child = ((start + end) / 2, (th.abs(start - end) / 2).clamp_min(self.eps))
-        non_empty = th.linalg.norm(th.relu(start - end), dim=1, keepdim=True)
-        return self._regd_loss(parent, child, False, extra=non_empty)
+    def gci3_bot_loss(self, data, neg=False):
+        out = super().gci3_bot_loss(data, neg)
+        return out if self.per_axiom_column else out.reshape(-1)
 
 
-class RegDELEmModule(_RegDMixin, ELEmModule):
+class RegDELEmModule(_RegDInterface, ELEmModule):
     r"""ELEm ([kulmanov2019]_) with the inclusion energy replaced by RegD ([yang2025regd]_).
 
-    Concepts are balls (centre ``class_embed``, radius ``|class_rad|``) and roles are
-    translations, as in :class:`~mowl.nn.ELEmModule`. RegD replaces the inclusion energy of
-    the normal forms ``gci0``, ``gci2`` and ``gci3`` by :math:`E = d_{bd} + \lambda d_{dep}`
-    of the (translated) child ball inside the parent ball, as in :class:`RegDELBEModule`.
-    ``gci1`` (the intersection of two balls is not a ball), the bottom forms and the
-    assertions keep ELEm's losses, and so does the centre-norm regularisation.
+    Concepts are balls and roles are translations, as in :class:`~mowl.nn.ELEmModule`. RegD
+    replaces the inclusion energy of the normal forms ``gci0``, ``gci2`` and ``gci3`` by
+    :math:`E = d_{bd} + \lambda d_{dep}` of the (translated) child ball inside the parent
+    ball, as in :class:`RegDELBEModule`. ``gci1`` (the intersection of two balls is not a
+    ball), the bottom forms and the assertions keep ELEm's losses, and so does the
+    centre-norm regularisation. The module is the geometry of the method ``"regd_elem"``.
 
     :param lamda: Weight of the depth dissimilarity (:math:`\lambda`). Defaults to 1.
     :param p: Exponent of the :math:`L_p` norm of the depth dissimilarity. Defaults to 2, which
@@ -201,7 +230,8 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
     :param gamma1: Margin of the positive term. Defaults to 0.
     :param gamma2: Margin of the negative term. Defaults to 0.
     :param eps: Lower bound of the radii, which are divided by in the depth dissimilarity.
-    :param depth_on_containment: See :func:`~mowl.nn.el.regd.dissimilarity.ball_energy`.
+    :param depth_on_containment: See
+        :class:`~mowl.representation.library.ballfam_parts.BoundaryDepth`.
     :param flip_gci2: See :class:`RegDELBEModule`.
     :param radius: ``"abs"`` (default, as mOWL's ELEm: the radius is ``|class_rad|``) or
         ``"softplus"`` (the radius is ``softplus(class_rad)``, as the training code of
@@ -209,57 +239,51 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
         ``gci1_bot`` use the softplus radii too). Note that the RegD code *evaluates*
         with ``|class_rad|`` whatever the training used; the evaluation regime
         ``regd-sampled-f1`` does the same.
+    :param consistent_radius: With ``radius="softplus"``: ``True`` (default) makes every
+        normal form that reads a class radius use the softplus radius (``gci0_bot``,
+        ``gci3_bot``, class assertions, and ``gci1`` / ``gci1_bot`` including their
+        negatives), so a class has one radius. ``False`` is the earlier behaviour, in which
+        only the positive ``gci0``-``gci3`` and ``gci1_bot`` used softplus and the other
+        forms still read ``|class_rad|`` (one class, two radii). The RegD code uses softplus
+        in every form. Individuals keep their own ``|ind_rad|`` radius. No effect with
+        ``radius="abs"``.
     :param gci1_radius_term: See :class:`~mowl.nn.ELEmModule`. The RegD code's ``Elem``
         has the term commented out (``False``).
     """
 
     regd_gcis = frozenset({"gci0", "gci2", "gci3"})
-    _energy = staticmethod(D.ball_energy)
-    _boundary = staticmethod(D.ball_boundary_dissimilarity)
+    _region_class = Ball
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  reg_norm=1, lamda=1.0, p=2, gamma1=0.0, gamma2=0.0, eps=1e-4,
                  depth_on_containment=True, flip_gci2=False, radius="abs",
-                 gci1_radius_term=True):
-        super().__init__(nb_ont_classes, nb_rels, nb_inds, embed_dim=embed_dim, margin=margin,
-                         reg_norm=reg_norm, gci1_radius_term=gci1_radius_term)
-        self._init_regd(lamda, p, gamma1, gamma2, eps, depth_on_containment,
-                        flip_gci2=flip_gci2)
+                 gci1_radius_term=True, consistent_radius=True):
         if radius not in ("abs", "softplus"):
             raise ValueError("radius must be 'abs' or 'softplus'.")
-        self.radius = radius
+        geometry = METHODS["regd_elem"](
+            nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=margin,
+            reg_norm=reg_norm, gci1_radius_term=gci1_radius_term, lamda=lamda, p=p,
+            gamma1=gamma1, gamma2=gamma2, eps=eps, depth_on_containment=depth_on_containment,
+            flip_gci2=flip_gci2, radius=radius, consistent_radius=consistent_radius)
+        self._assemble(geometry, nb_ont_classes, nb_rels, nb_inds, embed_dim, reg_norm)
 
-    def _radius(self, index):
-        raw = self.class_rad(index).squeeze(-1)
-        if self.radius == "softplus":
-            return th.nn.functional.softplus(raw)
-        return th.abs(raw)
+    @property
+    def radius(self):
+        """``"abs"`` or ``"softplus"``: how the radius is obtained from the stored
+        parameter (the class model's ``radius_form``)."""
+        return self.class_model.radius_form
 
-    def _region(self, index):
-        center = self.class_embed(index)
-        return center, self._radius(index).clamp_min(self.eps)
+    @radius.setter
+    def radius(self, value):
+        if value not in ("abs", "softplus"):
+            raise ValueError("radius must be 'abs' or 'softplus'.")
+        self.class_model.radius_form = value
 
-    def gci1_loss(self, data, neg=False):
-        if self.radius == "abs" or neg:
-            return super().gci1_loss(data, neg=neg)
-        # ELEm's C1 ⊓ C2 ⊑ D with softplus radii (Elem.nf2Loss of the RegD code).
-        c, d, e = (self.class_embed(data[:, i]) for i in range(3))
-        rc, rd = self._radius(data[:, 0]).unsqueeze(-1), self._radius(data[:, 1]).unsqueeze(-1)
-        dst = th.linalg.norm(d - c, dim=1, keepdim=True)
-        dst2 = th.linalg.norm(e - c, dim=1, keepdim=True)
-        dst3 = th.linalg.norm(e - d, dim=1, keepdim=True)
-        m = self.margin
-        loss = th.relu(dst - rc - rd - m) + th.relu(dst2 - rc - m) + th.relu(dst3 - rd - m)
-        if self.gci1_radius_term:
-            re = self._radius(data[:, 2]).unsqueeze(-1)
-            loss = loss + th.relu(th.minimum(rc, rd) - re - m)
-        return loss
+    @property
+    def consistent_radius(self):
+        """See the class parameter (the RegD objective's ``consistent_radius``)."""
+        return self.objective.consistent_radius
 
-    def gci1_bot_loss(self, data, neg=False):
-        if self.radius == "abs" or neg:
-            return super().gci1_bot_loss(data, neg=neg)
-        # ELEm's disjointness with softplus radii (Elem.disJointLoss of the RegD code).
-        c, d = self.class_embed(data[:, 0]), self.class_embed(data[:, 1])
-        rc, rd = self._radius(data[:, 0]).unsqueeze(-1), self._radius(data[:, 1]).unsqueeze(-1)
-        dst = th.linalg.norm(d - c, dim=1, keepdim=True)
-        return th.relu(rc + rd - dst + self.margin)
+    @consistent_radius.setter
+    def consistent_radius(self, value):
+        self.objective.consistent_radius = bool(value)

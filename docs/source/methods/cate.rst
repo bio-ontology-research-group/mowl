@@ -99,6 +99,20 @@ interactions; for datasets that name an evaluation property it is done automatic
 the CatE benchmarks (``python -m mowl.benchmarks run cate-go-completion --method cate``)
 can evaluate the model.
 
+Built from parts
+----------------
+
+``model.module`` is the combination that
+:func:`~mowl.representation.library.hierarchy_methods.cate` names: free vectors in the product
+order as the class model (:class:`~mowl.representation.library.hierarchy_classes.OrderPoints`),
+the order violation of Eq. 6 as the measure, and a lattice geometry
+(:class:`~mowl.representation.library.hierarchy_geometry.LatticeGeometry`) in which the compound
+elements :math:`\exists r.D` and :math:`C \sqcap D` are looked up. The loss of Eq. 7 is
+:func:`~mowl.representation.library.hierarchy_objectives.margin_loss`; ``negative_aggregation``
+and ``filter_negatives`` are its options, and the part of the model that is shared with
+order embeddings is the class model and the measure. The earlier hand-written model is kept for
+comparison in :mod:`mowl.baselines`.
+
 Example
 -------
 
@@ -149,6 +163,49 @@ term for the interaction task) in one go:
 
     mean False
 
+The training of the model is the combination of regimes that it names by default
+(``model.training_regime``): minibatches over the morphisms
+(:class:`~mowl.training.EpochBatches`), corruptions of the superconcept
+(:class:`~mowl.training.EdgeCorruption`), the mask of corruptions that are morphisms
+(:class:`~mowl.training.KnownRowMask`), the loss of Eq. 7
+(:class:`~mowl.training.GroupedMarginLoss`), the cyclic learning rate
+(:class:`~mowl.training.CyclicLearningRate`) and, when ``train`` gets ``validate_every``, the
+selection by the validation MRR with early stopping
+(:class:`~mowl.training.ValidationPatience`).
+
+.. testcode::
+
+    print([r.key for r in CatE(Dataset(ontology), embed_dim=4).training_regime.regimes])
+
+.. testoutput::
+
+    ['epoch-batches', 'edge-corruption', 'known-row-mask', 'grouped-margin', 'cyclic-lr', 'validation-patience']
+
 Guarantees and limitations, including why Helly-type limits of convex regions do not apply
 to an order embedding, are listed on the card ``cate`` of the :doc:`method catalogue
 <catalogue>`.
+
+Parts
+-----
+
+:class:`~mowl.nn.graph.cate.CatEModule` only names its parts. The lookup of the elements
+:math:`\exists r.D` is the mixin
+:class:`~mowl.representation.library.hierarchy_geometry.ExistentialElements`, which any
+lattice geometry can use, and the validation score of the paper (the raw mean reciprocal rank of
+the order violation) and the scoring of rows from columns of ids are in
+:mod:`mowl.evaluation.lattice_ranking`.
+
+.. testcode::
+
+    import torch as th
+    from mowl.evaluation.lattice_ranking import order_mean_reciprocal_rank
+
+    class Order(th.nn.Module):
+        def order_violation(self, a, b):
+            return (b - a).abs().float()
+
+    print(order_mean_reciprocal_rank(Order(), [(0, 1, th.tensor([0, 1, 2, 3]))]))
+
+.. testoutput::
+
+    1.0

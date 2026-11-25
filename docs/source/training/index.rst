@@ -33,6 +33,97 @@ its neutral default. Several regimes are combined with
 :class:`~mowl.training.ComposedRegime`. Models that override ``train`` with a loop of their
 own may ignore regimes.
 
+Every optimisation step of mOWL is taken by one loop,
+:meth:`mowl.training.loop.TrainingLoop.run_training`. A regime can compute the loss of a step
+itself (:meth:`~mowl.training.TrainingRegime.step_loss`): a tensor (the loop calls
+``backward``), a mapping of named terms with a ``"total"`` (the terms reach
+``on_epoch_end``), :class:`~mowl.training.Accumulated` when the regime has accumulated the
+gradient chunk by chunk itself (:func:`~mowl.training.accumulate_backward`, memory bounded by
+a chunk), or ``None`` for a step with nothing to supervise (no optimiser step, not counted in
+the epoch). The canonical mixture's batches of individuals, the sampled objective of
+GroundedEL (:class:`~mowl.training.sampled_objective.SampledObjectiveTraining`) and the
+triple batches of the knowledge graph models (:class:`~mowl.training.triples.TripleBatches`)
+are such regimes; :class:`~mowl.training.MicroBatchAccumulation` gives any model gradient
+accumulation over micro-batches:
+
+.. testcode::
+
+   import torch as th
+   from mowl.training import MicroBatchAccumulation, RegimeTrained, Rows
+
+   class Toy(RegimeTrained):
+       training_datasets = {"x": Rows(th.tensor([[1.0, 2.0], [3.0, -1.0], [0.5, 0.5]]))}
+       device, learning_rate, model_filepath = "cpu", 0.1, None
+
+       def __init__(self):
+           self.module = th.nn.Linear(2, 1)
+
+       def score_rows(self, form, rows, neg=False):
+           return self.module(rows).squeeze(1) ** 2
+
+       def get_optimizer(self):
+           return th.optim.SGD(self.module.parameters(), lr=self.learning_rate)
+
+   th.manual_seed(0)
+   whole = Toy()
+   th.manual_seed(0)
+   chunked = Toy()
+   chunked.training_regime = MicroBatchAccumulation(chunk_size=1)
+   whole.train(epochs=2)
+   chunked.train(epochs=2)
+   print(th.allclose(whole.module.weight, chunked.module.weight))
+
+.. testoutput::
+
+   True
+
+A model with a step of its own is driven by the same regimes:
+:class:`~mowl.models.GroundedEL` trains in the shared loop through its sampled objective, and
+its default training design is the composition :class:`~mowl.training.GroundedELTraining` of
+:class:`~mowl.training.TemperatureAnnealing`, a learning-rate decay,
+:class:`~mowl.training.IdleComponentReseeding` and
+:class:`~mowl.training.LagrangianDualWeights`. Each of them states the small protocol a
+model must provide (a temperature, ``reseed_components``, ``dual_weights``) and refuses
+other models when it is attached. See :doc:`../methods/grounded`.
+
+The readings of :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE` other
+than ``"axiom"`` are regimes of :mod:`mowl.training.structural`:
+:class:`~mowl.training.structural.StructuralTables` (the definition table and the targets of
+the structural reading, compiled when training starts),
+:class:`~mowl.training.structural.ExtraPenalties` (its existence, size and witness penalties)
+and :class:`~mowl.training.structural.SampledPointLoss` (the point loss on a sample of the
+canonical elements). The models attach them (``model.method_regimes()``); a regime assigned
+to ``training_regime`` is added to them, and one of the same class replaces one of them:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import MultiBoxEL
+   from mowl.training import IdleComponentReseeding
+   from mowl.training.structural import ExtraPenalties, StructuralTables
+
+   model = MultiBoxEL(FamilyDataset(), embed_dim=4, objective="structural")
+   model.training_regime = IdleComponentReseeding(every=1)
+   kinds = {type(r) for r in model.training_regime.regimes}
+   assert {StructuralTables, ExtraPenalties, IdleComponentReseeding} <= kinds
+
+Models whose data are not the EL normal forms (the edges of a graph, the morphisms of a
+lattice, the typed rows of E2R, verbalised triplets) use the same hooks through
+:class:`~mowl.training.RegimeTrained`: :class:`~mowl.models.E2R`,
+:class:`~mowl.models.BinaryCodeBox`, :class:`~mowl.models.CatE`, :class:`~mowl.models.HiT`,
+:class:`~mowl.models.OnT` and :class:`~mowl.models.FaithEL` have no loop of their own. Each names
+its training as a combination of regimes (read ``model.training_regime``): batching
+(:class:`~mowl.training.EpochBatches`, :class:`~mowl.training.PerNormalFormMiniBatches`,
+:class:`~mowl.training.AlternatingMinibatches`), negatives
+(:class:`~mowl.training.EdgeCorruption` with :class:`~mowl.training.KnownRowMask`), the loss
+(:class:`~mowl.training.SelfAdversarialBCE`, :class:`~mowl.training.GroupedMarginLoss`,
+:class:`~mowl.training.SumLoss`, :class:`~mowl.training.SampledLogicalLosses`), the schedule
+(:class:`~mowl.training.CyclicLearningRate`, :class:`~mowl.training.LinearWarmupDecay`),
+selection and stopping (:class:`~mowl.training.ValidationPatience`) and the projection of the
+parameters (:class:`~mowl.training.Regularization` with an
+:class:`~mowl.training.IntervalProjection` or a :class:`~mowl.training.ModuleProjection`).
+Every one of them can be used by the other methods and replaced in these.
+
 Strict and slack margins
 ------------------------
 
@@ -98,6 +189,68 @@ model is evaluated on entailed knowledge as well as on novel axioms.
 :class:`~mowl.training.ClosurePositives` adds entailed axioms as training positives. It is
 **not** part of the papers and is provided as an extension.
 
+Regularisation
+--------------
+
+Where the parameters of a model may lie is a choice separate from the representation and
+from the loss. Publications mean three different things by it:
+
+- a **penalty** added to the loss, such as the :math:`|\lVert c \rVert - 1|` of
+  ELEmbeddings, which holds only approximately;
+- a **projection** after every optimisation step, such as the normalisation of the entity
+  vectors in TransE, which holds exactly;
+- a **parametrisation** that cannot be violated, such as a box size stored as a logarithm.
+  This is part of the model and stays there, and so do the constraints a geometry needs to
+  be well defined (points inside the Poincaré ball, boxes inside the unit cube).
+
+Penalties and projections are components (:mod:`mowl.training.regularization`) that the
+regime :class:`~mowl.training.Regularization` applies to any model trained by the generic
+loop, in addition to the regularisation term of the model's module or, with
+``keep_default=False``, instead of it. ELEmbeddings with its centres exactly on the unit
+sphere instead of pulled towards it:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import ELEmbeddings, ELBE
+   from mowl.training import (Regularization, SphereProjection, NormPenalty,
+                              embedding_tables)
+
+   model = ELEmbeddings(FamilyDataset(), embed_dim=10)
+   model.training_regime = Regularization(SphereProjection(), keep_default=False)
+   model.train(epochs=2)
+   norms = model.module.class_embed.weight.norm(dim=1)
+   print(bool((norms - 1).abs().max() < 1e-5))
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   ...True
+
+``Regularization(keep_default=False)`` alone trains without the penalty. The same components
+work on other methods; ``embedding_tables`` lists what can be constrained:
+
+.. testcode::
+
+   boxes = ELBE(FamilyDataset(), embed_dim=10)
+   print(embedding_tables(boxes))
+   boxes.training_regime = Regularization(NormPenalty(parameters="class_embed", weight=0.1))
+   boxes.train(epochs=2)
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   ('class_model.centres', ...)...
+
+The penalties are :class:`~mowl.training.NormPenalty` (norm near a target),
+:class:`~mowl.training.MaxNormPenalty` (norm below a bound),
+:class:`~mowl.training.PowerPenalty` (L1, L2, N3) and
+:class:`~mowl.training.AnchorPenalty` (boxes near the placement of their initialiser, the
+``anchor_weight`` of ELBE, Box\ :sup:`2`\ EL, MultiELBE, MultiBoxEL and PrismEL); the projections are
+:class:`~mowl.training.SphereProjection`, :class:`~mowl.training.BallProjection` and
+:class:`~mowl.training.IntervalProjection`. A term a module adds inside the loss of every
+axiom (EmEL++) is part of that loss and is not switched off.
+
 The reference code
 ------------------
 
@@ -158,3 +311,107 @@ cached:
 
 See :mod:`mowl.training.closure` for exactly which rules are applied, and
 :doc:`/evaluation/deductive` for the matching evaluation regime.
+
+Pairs of named classes: data and negatives
+------------------------------------------
+
+The order and lattice embeddings (order embeddings, box lattices, Gumbel boxes, entailment
+cones, shadow cones, disk embeddings) train on the told pairs :math:`C \sqsubseteq D` between
+named classes only. :mod:`mowl.training.taxonomy` has the data side as three functions that
+work for any model that trains on two-column rows: :func:`~mowl.training.taxonomy.named_pair_rows`
+keeps the rows made of named classes, sorted and without duplicates,
+:func:`~mowl.training.taxonomy.pair_codes` codes the told pairs as integers and
+:func:`~mowl.training.taxonomy.redraw_known_pairs` draws again every corruption that is a told
+(or reflexive) pair, for all rows at once.
+
+.. testcode::
+
+   import numpy as np
+   import torch as th
+   from mowl.training.taxonomy import named_pair_rows, pair_codes, redraw_known_pairs
+
+   rows = th.tensor([[3, 1], [0, 5], [3, 1], [2, 2], [0, 1]])
+   told = named_pair_rows(rows, 4, distinct=True)      # [[0, 1], [3, 1]]
+   corruptions = th.tensor([[0, 1], [3, 3]])
+   fresh = redraw_known_pairs(corruptions, 2, [1], pair_codes(told, 4), 4, np.arange(4))
+   assert not (fresh[:, 0] == fresh[:, 1]).any()
+
+:class:`~mowl.training.SumLoss` takes ``positive_floor=True`` for modules whose score of a
+stated axiom is a signed energy (disk embeddings, Eq. 10 and 11): the hinge
+:math:`\max(0, s^+)` of the positives is summed with the mean cost of the negatives.
+
+.. testcode::
+
+   from mowl.training import SumLoss
+
+   loss = SumLoss(positive_floor=True)
+
+Small parts of the box and ball methods
+---------------------------------------
+
+The named classes of RegD, ELBE, BoxSEL, ELK-Em, Box\ :sup:`2`\ EL, MultiBoxEL, MultiELBE and
+the volume-based MultiBoxEL do no arithmetic themselves; what they used to compute is done by
+parts that other methods can use too:
+
+* :func:`mowl.training.batching.epoch_rng`: the random generator of an epoch (seed plus
+  epoch), used to sample points and to re-seed components;
+* :class:`~mowl.training.MSETargetLoss` with ``reduce="mean_first"``: ELBE's and MultiELBE's loss;
+* :func:`mowl.representation.library.multibox_modules.in_chunks`: a loss evaluated a few rows at
+  a time;
+* :func:`mowl.representation.library.structural_regions.pad_slots`: inactive padding slots for
+  unions of boxes;
+* :mod:`mowl.representation.library.boundary_depth`: the boundary and depth dissimilarity of boxes
+  and balls, the formulas of the measure ``"boundary and depth"`` (a swap for any box or ball
+  method, see ``tests/representation/test_region_kind_formulas.py``);
+* :func:`mowl.evaluation.scoring_rules.exp_negative_score`: the score :math:`e^{-\ell}` of a
+  loss (ELK-Em), and :func:`mowl.evaluation.region_access.concatenated_rows`: regions exported
+  as one row per class.
+
+.. testcode::
+
+   import torch as th
+   from mowl.evaluation.scoring_rules import exp_negative_score
+   from mowl.training.batching import epoch_rng
+
+   assert float(exp_negative_score(th.tensor(0.0))) == 1.0
+   assert epoch_rng(3, 4).integers(100) == epoch_rng(4, 3).integers(100)
+
+Parts that the general models and the named classes call
+--------------------------------------------------------
+
+The general EL model (:class:`~mowl.base_models.elmodel.EmbeddingELModel`), the composed models
+and the named classes only wire parts; the arithmetic they used to do is in:
+
+* :func:`mowl.training.losses.weighted_mean_loss`: the neutral objective (mean positive loss
+  plus mean negative loss), the combination of :class:`~mowl.training.SumLoss` and the default
+  loss of every EL model; :func:`mowl.training.losses.ranking_hinge_loss`: the hinge of a
+  positive against each of its corrupted axioms; :func:`mowl.training.losses.collapsed_to_chance`:
+  whether a logistic loss sits at :math:`\log 2`;
+* :func:`mowl.training.negatives.corrupt_column_blocks`: the default negative sampler (one block
+  of corrupted rows per column);
+* :func:`mowl.evaluation.validation.mean_module_cost`: the validation loss of a module;
+* :func:`mowl.training.initialisation.extend_embeddings`: the table of a model to which axioms
+  were added, :func:`~mowl.training.initialisation.redraw_after` and
+  :func:`~mowl.training.initialisation.seeded_scope`: initial values drawn in the order (or from
+  the seed) of another module, and a block with the generator seeded and put back;
+  :func:`~mowl.training.initialisation.margin_embedding_range`: the range of the uniform
+  initialisation of the query embeddings;
+* :class:`~mowl.training.TemperatureAnnealing` for the temperature of MultiBoxEL and MultiELBE
+  (``tau_anneal=True``), :class:`~mowl.training.CyclicLearningRate` with ``range_ratio`` for
+  CatE and :func:`mowl.training.schedules.linear_decay_interval` for the word2vec rate;
+* :func:`mowl.training.taxonomy.descendant_fractions`: the unary marginal of the box lattice;
+* :func:`mowl.representation.library.hierarchy_regions.meet`, ``join`` and ``volume``: the lattice
+  of boxes, used by the volume-ratio measure and the box lattice method.
+
+.. testcode::
+
+   import torch as th
+   from mowl.training.losses import ranking_hinge_loss, weighted_mean_loss
+   from mowl.training.schedules import linear_decay_interval
+   from mowl.training.taxonomy import descendant_fractions
+
+   pos, neg = th.tensor([1.0, 2.0]), th.tensor([3.0, 0.0, 5.0, 1.0])
+   assert float(weighted_mean_loss(pos, neg)) == 1.5 + 2.25
+   assert float(ranking_hinge_loss(pos, neg)) >= 0.0
+   assert linear_decay_interval(0.025, 0.0001, 0, 10)[0] == 0.025
+   assert list(descendant_fractions([(1, 0), (2, 1)], 3)) == [1.0, 2 / 3, 1 / 3]

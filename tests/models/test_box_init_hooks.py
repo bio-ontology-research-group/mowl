@@ -116,9 +116,9 @@ def test_anchor_weight_adds_weighted_anchor_loss(
     expected_b2 = b2.module.regularization_loss() + weight * anchor_b2
     assert torch.allclose(b2.get_regularization_loss(), expected_b2, atol=1e-6)
 
-    # ELBEModule defines no regularization_loss, so the base term is 0
-    # (EmbeddingELModel.get_regularization_loss falls back to 0).
-    assert not hasattr(ELBEModule, "regularization_loss")
+    # ELBE has no regulariser (the module is a combination of parts without a penalty), so
+    # the base term is 0.
+    assert ELBEModule is not None
     elbe = ELBE(
         t3_dataset,
         embed_dim=7,
@@ -130,6 +130,7 @@ def test_anchor_weight_adds_weighted_anchor_loss(
         elbe.module.class_embed.weight.add_(1.0)
     anchor_elbe = init_k1.anchor_loss(elbe.module)
     assert float(anchor_elbe.item()) > 0.0
+    assert float(elbe.module.regularization_loss()) == 0.0
     expected_elbe = weight * anchor_elbe
     assert torch.allclose(elbe.get_regularization_loss(), expected_elbe, atol=1e-6)
 

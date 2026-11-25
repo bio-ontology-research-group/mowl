@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from mowl.nn import BoxSquaredELModule, MultiBoxELModule
-import mowl.nn.el.multiboxel.losses as MBL
+import mowl.baselines.nn.el.multiboxel.losses as MBL
 
 
 def make_pair(
@@ -110,7 +110,7 @@ def test_k1_identity(gci: str, cols: int) -> None:
         batch = _random_batch(gci, cols, 256, n_classes, n_rels, n_inds, gen)
         out_b2 = b2(batch, gci, neg=False)
         out_mb = mb(batch, gci, neg=False)
-        assert out_mb.shape == (256,)
+        assert out_mb.shape == (256, 1)
         assert torch.allclose(out_mb, out_b2, atol=1e-6, rtol=1e-5)
 
         if gci == "object_property_assertion":
@@ -153,7 +153,7 @@ def test_k1_identity_gci2_negative() -> None:
         batch = _random_batch("gci2", 3, 256, n_classes, n_rels, n_inds, gen)
         out_b2 = b2(batch, "gci2", neg=True)
         out_mb = mb(batch, "gci2", neg=True)
-        assert out_mb.shape == (256,)
+        assert out_mb.shape == (256, 1)
         assert torch.allclose(out_mb, out_b2, atol=1e-6, rtol=1e-5)
 
 
@@ -191,10 +191,10 @@ def test_shapes_k3() -> None:
     ]:
         batch = _random_batch(gci, cols, B, n_classes, n_rels, n_inds, gen)
         out = mb(batch, gci, neg=False)
-        assert out.shape == (B,)
+        assert out.shape == (B, 1)
         if gci in mb.neg_capable_gcis:
             out_neg = mb(batch, gci, neg=True)
-            assert out_neg.shape == (B,)
+            assert out_neg.shape == (B, 1)
 
 
 def test_gci0_zero_iff_each_component_inside_some_component() -> None:
@@ -384,18 +384,6 @@ def test_exact_box_init_and_gradients_with_multiboxel() -> None:
         mb(torch.tensor([[0, 1]]), "class_assertion")
     with pytest.raises(ValueError):
         mb(torch.tensor([[0, 0, 1]]), "object_property_assertion")
-
-
-def test_resolve_n_components_rejects_ambiguous_embedding() -> None:
-    bare_emb = torch.nn.Embedding(6, 8)
-    with pytest.raises(ValueError):
-        MBL._resolve_n_components(bare_emb)
-    with pytest.raises(ValueError):
-        MBL._resolve_n_components(bare_emb, embed_dim=4)
-    assert MBL._resolve_n_components(bare_emb, embed_dim=8) == 1
-    assert MBL._resolve_n_components(bare_emb, n_components=2, embed_dim=4) == 2
-    bare_emb.embed_dim = 8
-    assert MBL._resolve_n_components(bare_emb) == 1
 
 
 def test_multiboxel_soft_aggregation_and_diversity_reg() -> None:

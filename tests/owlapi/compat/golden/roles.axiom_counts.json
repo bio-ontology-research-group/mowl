@@ -1,0 +1,13 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "by_type": {
+   "Declaration": 8,
+   "SubClassOf": 6,
+   "SubObjectPropertyOf": 1,
+   "SubPropertyChainOf": 1
+  },
+  "logical": 8,
+  "total": 16
+ }
+}

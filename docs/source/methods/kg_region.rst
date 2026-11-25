@@ -1,0 +1,212 @@
+Region-based knowledge graph embeddings (BoxE, ExpressivE, RESHUFFLE, Concept2Box)
+==================================================================================
+
+These four methods were published for knowledge graphs, not for description logic
+ontologies: BoxE, ExpressivE and RESHUFFLE embed the *triples* of a graph, Concept2Box
+embeds a two-view graph of concepts and entities. mOWL implements their geometry and
+scoring as published and connects them to an ontology in the most natural supported way.
+What that connection is, and what it is not, is stated here and on the cards ``boxe``,
+``expressive``, ``reshuffle`` and ``concept2box`` of the :doc:`method catalogue
+<catalogue>`. Nothing below claims expressivity beyond it.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 30 28 28
+
+   * - Method
+     - Geometry
+     - Triples / axioms used
+     - Scored axiom forms
+   * - :class:`~mowl.models.boxe.model.BoxE`
+     - relation: one box per argument position; entity: point and bump
+     - edges of a projection
+     - ``gci0``, ``gci2``
+   * - :class:`~mowl.models.expressive.model.ExpressivE`
+     - relation: hyper-parallelogram in the virtual triple space
+     - edges of a projection
+     - ``gci0``, ``gci2``
+   * - :class:`~mowl.models.reshuffle.model.Reshuffle`
+     - entity: random binary matrix, relation: soft coordinate permutation, GNN
+     - edges of a projection
+     - ``gci0``, ``gci2``
+   * - :class:`~mowl.models.concept2box.model.Concept2Box`
+     - concept: Gumbel box, individual: point
+     - ``gci0``, ``gci2``, class and role assertions
+     - ``gci0``, ``gci2``, ``class_assertion``, ``object_property_assertion``
+
+BoxE, ExpressivE and RESHUFFLE on a projection
+----------------------------------------------
+
+The three models are combinations of the same parts, and :class:`~mowl.models.GraphKGEModel`
+is the one general model that puts any such combination together. A **projection**
+(:mod:`mowl.projection`, a part: a projector, its class or a name such as ``"gda"``) turns the
+ontology into triples (the default is :class:`~mowl.projection.OWL2VecStarProjector`:
+``C subclassof D``, ``C r D`` for :math:`C \sqsubseteq \exists r.D`, ``a type C`` for
+:math:`C(a)`, and ``a r b`` for :math:`r(a, b)`). The **entities** and the **relation model**
+(what a relation is) with the **interaction** that scores a triple make up the geometry
+(:class:`~mowl.representation.library.other_graph.TripleGeometry`; ``model.module.parts``
+names them), the **objective** is a loss on the scores of a triple and its corrupted triples,
+the **negative sampler** corrupts the triples, and the training and evaluation regimes are
+those of the library. An axiom :math:`C \sqsubseteq D` is scored by the score of the edge
+``C subclassof D``. Every part can be swapped by naming another one
+(``BoxE(dataset, relations="region over pairs", loss="margin ranking", projector="dl2vec")``).
+
+* **BoxE**: entities are points with a bump, a relation is a head box and a tail box, the
+  interaction is the distance of BoxE, the objective the self-adversarial negative sampling
+  loss (margin 3, temperature 2). The paper's unary relations (types as boxes) become binary
+  ``type`` edges.
+* **ExpressivE**: a relation is a hyper-parallelogram in the virtual triple space; the
+  interaction follows the authors' code: ``tanh`` on entities, centres and widths, the
+  minimal denominator ``min_denom`` and the distance of Equation 3
+  (:mod:`mowl.representation.library.graph_interactions`). Only the base model is provided. The pattern
+  theorems (symmetry, hierarchy, mutual exclusion) are checked on hand-built parallelograms
+  in ``tests/nn/test_expressive_module.py``.
+* **RESHUFFLE**: entities are encoded by a graph network from fixed random binary matrices
+  (:class:`~mowl.representation.library.other_graph.GraphEncodedPoints`), a relation is a
+  soft coordinate permutation
+  (:class:`~mowl.representation.library.other_graph.ReshuffleRelations`); written after the
+  authors' code and checked against the paper (the Propositions 1, 2 and 7 are tested on a
+  rule graph built by hand in ``tests/nn/test_reshuffle_module.py``). The ablations are options
+  (``kge_kwargs={"aggregation": "max_self_noLoop"}`` is RESHUFFLE without loop,
+  ``kge_kwargs={"row_function": "square"}`` is RESHUFFLE2). Differences: the paper
+  initialises the features with probability 0.5 of a 1, the code and our default use 0.3085
+  (``density``), the random features are drawn once, the graph is the projection
+  (transductive), and :meth:`~mowl.models.Reshuffle.inductive_costs` encodes another graph with
+  fresh features for the inductive setting. Early stopping on the Hits@10 of the validation
+  triples is a training regime (``early_stopping=...``,
+  :class:`~mowl.training.triples.HitsEarlyStopping`).
+
+``BoxE``, ``ExpressivE`` and ``Reshuffle`` (new in this version) train from the parameters
+they have: the ``seed`` decides the initial values, drawn once when the model is built, and
+calling ``train`` again goes on, as the published methods train once from one
+initialisation. PyKEEN's own loop, which the direct implementations use, draws every parameter
+again at each call (``reinitialise=True`` draws them again with mOWL's initialiser, not
+PyKEEN's); the comparison in ``tests/baselines`` starts the combination from the parameters
+PyKEEN's start drew and compares the training from there.
+:class:`~mowl.models.GraphPlusPyKEENModel`, which mOWL 2.1.0 had, keeps the released run by
+default: every ``train`` draws the parameters again as PyKEEN's loop does
+(``reinitialise = False`` continues instead, see :doc:`/graphs/kge`). The projection methods ``graph_kge`` and ``gda_projection``
+are the same combination with another relation model (TransE by default) and the margin
+ranking loss, ``gda_projection`` with :class:`~mowl.projection.GDAProjector`;
+:class:`~mowl.models.GraphPlusPyKEENModel` reads the parts from any PyKEEN model. The direct
+implementations (PyKEEN's models trained by PyKEEN's loop) are kept in
+:mod:`mowl.baselines` and compared with these combinations in ``tests/baselines``.
+
+The named classes only wire parts together; what they compute is in general parts that
+other methods use too:
+
+* the interactions (the ExpressivE distance, the RESHUFFLE score and message passing) are in
+  :mod:`mowl.representation.library.graph_interactions`;
+* the training on the triples of a graph (batches, corrupted triples, the objective and the
+  constraints after a step, the inverse triples) is
+  :func:`mowl.training.triples.train_on_triples`, and early stopping on validation Hits@k is
+  the regime :class:`~mowl.training.triples.HitsEarlyStopping`;
+* scoring an axiom as the edge it is projected to is the evaluation part
+  :class:`~mowl.evaluation.triple_axioms.AxiomTriples`, and scoring triples over a graph the
+  model has not seen is :class:`~mowl.evaluation.inductive_triples.InductiveTripleCosts`;
+* the graph is read through :class:`~mowl.representation.library.graph_projection.ProjectionView`,
+  the same part that gives the walk methods (``dl2vec``, ``owl2vec_star``, ``taxonomy_walks``)
+  their graph.
+
+.. testcode::
+
+    from mowl.representation.library.graph_projection import ProjectionView, projection_view
+
+    # the same projection, named as a graph model names it or as a walk method does
+    print(type(ProjectionView("dl2vec").projector).__name__)
+    print(type(projection_view("DL2Vec projection").projector).__name__)
+
+.. testoutput::
+
+    DL2VecProjector
+    DL2VecProjector
+
+In all three the guarantees of the papers (rule patterns, expressiveness, bounded inference)
+refer to the *projected triples*. They are not statements about the description logic
+semantics, and axioms the projector does not read (conjunctions, role chains, ...) are
+ignored.
+
+.. testcode::
+
+    import os, tempfile
+    import torch as th
+    from mowl.datasets import PathDataset
+    from mowl.models import BoxE, ExpressivE, Reshuffle
+
+    ns = "http://example.org/kg#"
+    axioms = [
+        "SubClassOf(<{ns}A> <{ns}B>)", "SubClassOf(<{ns}B> <{ns}C>)",
+        "SubClassOf(<{ns}A> ObjectSomeValuesFrom(<{ns}r> <{ns}D>))",
+        "ClassAssertion(<{ns}A> <{ns}a1>)", "ClassAssertion(<{ns}D> <{ns}d1>)",
+        "ObjectPropertyAssertion(<{ns}r> <{ns}a1> <{ns}d1>)",
+    ]
+    path = os.path.join(tempfile.mkdtemp(), "onto.owl")
+    with open(path, "w") as f:
+        f.write("Prefix(owl:=<http://www.w3.org/2002/07/owl#>)\nOntology(<http://example.org/kg>\n")
+        f.write("\n".join(a.format(ns=ns) for a in axioms) + "\n)\n")
+    dataset = PathDataset(path)
+
+    th.manual_seed(0)
+    model = ExpressivE(dataset, embed_dim=8, batch_size=16)   # or BoxE(...), Reshuffle(...)
+    model.train(epochs=2)
+    classes = model.class_index_dict
+    rows = th.tensor([[classes[ns + "A"], classes[ns + "B"]]])
+    print(model.axiom_costs("gci0", rows).shape)
+
+.. testoutput::
+    :options: +ELLIPSIS
+
+    torch.Size([1])
+
+Concept2Box on an ontology
+--------------------------
+
+Concept2Box embeds two graphs and the links between them: concepts as Gumbel boxes and
+entities as points. An ontology gives the three parts directly.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 35 40
+
+   * - Part of the paper
+     - In the ontology
+     - Loss
+   * - ontology view (concept graph)
+     - :math:`C \sqsubseteq D` (``gci0``), :math:`C \sqsubseteq \exists r.D` (``gci2``)
+     - :math:`|\phi - 1|^2` for a true, :math:`|\phi|^2` for a corrupted triple, with the
+       conditional probability :math:`\phi` of Equation 4
+   * - instance view (entity graph)
+     - role assertions :math:`r(a, b)`
+     - translational distance, hinge on corruptions
+   * - cross-view links
+     - class assertions :math:`C(a)`
+     - vector-to-box distance (Equations 8 and 9), margin on corruptions
+
+:class:`~mowl.models.concept2box.model.Concept2Box` is the combination of parts called
+``concept2box`` (Gumbel boxes in the context of a relation, translations of points, a volume
+ratio, a point-to-box distance and a point distance as measures; see
+:doc:`/representation/combine`); the loss module written by hand is kept in
+:mod:`mowl.baselines`. It uses the generic EL training loop and
+negative sampling of :class:`~mowl.base_models.EmbeddingELModel`. Conjunctions and
+existentials on the left, bottom and role axioms are not used, and the model says so in a
+warning. Adaptations of the paper: the BERT encoder of the texts of concept and relation is
+replaced by learned embeddings joined by the same kind of MLP (no text); the pairwise hinge
+of the instance and cross views is split into a positive and a negative part so that the
+shared loop applies; the Gumbel box formulas were checked against Dasgupta et al. (2020) and tested against the
+Bessel expression and a Monte Carlo estimate; the three losses are summed (Equation 11) while
+the paper alternates them; no reference code was consulted.
+
+.. testcode::
+
+    from mowl.models import Concept2Box
+
+    th.manual_seed(0)
+    model = Concept2Box(dataset, embed_dim=8, batch_size=16)
+    model.train(epochs=2)
+    print(sorted(model.scored_forms))
+
+.. testoutput::
+    :options: +ELLIPSIS
+
+    ...
+    ['class_assertion', 'gci0', 'gci2', 'object_property_assertion']

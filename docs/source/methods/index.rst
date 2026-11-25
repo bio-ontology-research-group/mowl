@@ -11,6 +11,7 @@ relevant published methods it does not implement, with the reason.
    :maxdepth: 1
 
    catalogue
+   parts
    regimes
    training_and_evaluation
    adding_a_method
@@ -26,11 +27,24 @@ relevant published methods it does not implement, with the reason.
    octagon
    bcbox
    alcone
+   dfalc
+   eike
+   boxsel
    e2r
    hit
    ont
    boxlite
+   order_embeddings
    cate
+   grounded
+   temporal_cones
+   attributed_dl
+   kg_region
+   hyperbolic_cones
+   shadow_cones
+   disk_embeddings
+   faithel
+   query_embeddings
 
 
 Representation, training and evaluation

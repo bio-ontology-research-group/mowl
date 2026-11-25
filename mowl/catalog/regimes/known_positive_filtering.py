@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import KULMANOV2019, MONDAL2021, SINGH202
 
 REGIME = RegimeCard(
     key='known-positive-filtering',
+    assumption="closed world over stated axioms",
     name='Filtering of asserted positives from negatives',
     kind=RegimeKind.TRAINING,
     summary=('A sampled negative that is itself an asserted training axiom is re-sampled in its '

@@ -3,7 +3,8 @@ deductive-closure utility (:mod:`mowl.training.dele`, :mod:`mowl.training.closur
 the regimes of the literature (negatives, losses, positives, schedules, model selection,
 batching)."""
 
-from mowl.training.regime import TrainingRegime, ComposedRegime
+from mowl.training.regime import (TrainingRegime, ComposedRegime, HOOKS, SCHEDULE_HOOKS,
+                                  unsupported_hooks, Accumulated)
 from mowl.training.closure import DeductiveClosure, NORMAL_FORMS
 from mowl.training.dele import (AllNormalFormNegatives, ClosureFilteredNegatives,
                                 ClosurePositives, DELECodeLoss, DELECodeLosses,
@@ -18,13 +19,18 @@ from mowl.training.initialisation import JointNormalisedInitialisation
 from mowl.training.loss_forms import (UnboundedNegativeLoss, PerAxiomNormPenalty,
                                       Box2ELBaselineLosses, EmELppCodeObjective)
 from mowl.training.losses import (SumLoss, MSETargetLoss, PairwiseMarginRankingLoss,
-                                  LogSigmoidLoss, BPRLoss, LogSumExpContrastiveLoss,
+                                  LogSigmoidLoss, BPRLoss, LogSumExpContrastiveLoss, GroupedLogSumExpContrastiveLoss,
                                   SoftmaxEnergyContrastiveLoss, PearsonCorrelationLoss,
                                   ProbabilisticBCELoss, NormalFormFrequencyWeighting)
+from mowl.training.terms import (pearson_correlation, correlation_contrastive_loss,
+                                 lexical_similarity_loss)
 from mowl.training.positives import (TransitiveReductionPositives,
                                      TransitiveClosurePositives, ValidationAxiomsAsPositives)
 from mowl.training.schedules import StepDecay, ConstantThenCosine, CyclicLearningRate, \
-    ReduceOnPlateau, EarlyStopping
+    ReduceOnPlateau, EarlyStopping, LinearDecay, TemperatureAnnealing
+from mowl.training.structure import IdleComponentReseeding
+from mowl.training.constraints import LagrangianDualWeights, dual_ascent_step
+from mowl.training.grounded import GroundedELTraining
 from mowl.training.selection import (ValidationSelection, ValidationRankSelection,
                                      ValidationF1Selection, validation_f1)
 from mowl.training.batching import PerNormalFormMiniBatches
@@ -33,14 +39,33 @@ from mowl.training.reference import (Box2ELCodeTraining, TransBoxCodeTraining,
                                      ELKEmCodeTraining, EmELppCodeTraining,
                                      RegDCodeTraining)
 from mowl.training.cate import CateCodeTraining
+from mowl.training.elkem import (ELKEmTraining, FixedConceptRouting, AssertionCorruption,
+                                 PearsonContrastiveTerm, LexicalRegularisation,
+                                 ValidationCheckpoint)
+from mowl.training.conditional import ConditionalStatements, Conditional
+from mowl.training.splits import ShuffledSplits
+from mowl.training.box_regularization import BoxBatchRegulariser
+from mowl.training.graph import (EpochBatches, EdgeCorruption, KnownRowMask, SelfAdversarialBCE,
+                                 GroupedMarginLoss, HeadRestrictedHinge, ValidationPatience)
+from mowl.training.loop import RegimeTrained, Rows, accumulate_backward, MicroBatchAccumulation
+from mowl.training.regularization import (Regularization, Regularizer, NormPenalty,
+                                          MaxNormPenalty, PowerPenalty, SphereProjection,
+                                          BallProjection, IntervalProjection, ModuleProjection,
+                                          AnchorPenalty, embedding_tables)
+from mowl.training.alternating import AlternatingMinibatches, FullBatch, FormSelection
+from mowl.training.text import LinearWarmupDecay, SampledLogicalLosses
 
 __all__ = [
+    "HOOKS", "SCHEDULE_HOOKS", "unsupported_hooks",
     "TrainingRegime", "ComposedRegime",
     "SlackMargin", "StrictMargin", "margin_semantics",
     "Box2ELCodeTraining", "TransBoxCodeTraining", "ELKEmCodeTraining",
     "EmELppCodeTraining", "EmELppCodeObjective", "ValidationAxiomsAsPositives",
     "RegDCodeTraining",
     "CateCodeTraining",
+    "Regularization", "Regularizer", "NormPenalty", "MaxNormPenalty", "PowerPenalty",
+    "SphereProjection", "BallProjection", "IntervalProjection", "AnchorPenalty",
+    "embedding_tables",
     "DeductiveClosure", "NORMAL_FORMS",
     "DELECodeLoss", "DELECodeLosses", "DELECodeTraining",
     "AllNormalFormNegatives", "ClosureFilteredNegatives", "ClosurePositives", "dele_regime",
@@ -50,13 +75,24 @@ __all__ = [
     "JointNormalisedInitialisation", "UnboundedNegativeLoss", "PerAxiomNormPenalty",
     "Box2ELBaselineLosses",
     "SumLoss", "MSETargetLoss", "PairwiseMarginRankingLoss", "LogSigmoidLoss", "BPRLoss",
-    "LogSumExpContrastiveLoss", "SoftmaxEnergyContrastiveLoss",
+    "LogSumExpContrastiveLoss", "GroupedLogSumExpContrastiveLoss", "SoftmaxEnergyContrastiveLoss",
     "PearsonCorrelationLoss", "ProbabilisticBCELoss",
+    "pearson_correlation", "correlation_contrastive_loss", "lexical_similarity_loss",
     "NormalFormFrequencyWeighting",
     "TransitiveReductionPositives", "TransitiveClosurePositives",
     "StepDecay", "ConstantThenCosine", "CyclicLearningRate", "ReduceOnPlateau",
-    "EarlyStopping",
+    "EarlyStopping", "LinearDecay", "TemperatureAnnealing",
+    "IdleComponentReseeding", "LagrangianDualWeights", "dual_ascent_step",
+    "GroundedELTraining",
     "ValidationSelection", "ValidationRankSelection", "ValidationF1Selection",
     "validation_f1",
     "PerNormalFormMiniBatches",
+    "ELKEmTraining", "FixedConceptRouting", "AssertionCorruption", "PearsonContrastiveTerm",
+    "LexicalRegularisation", "ValidationCheckpoint", "ConditionalStatements", "Conditional",
+    "ShuffledSplits", "BoxBatchRegulariser",
+    "EpochBatches", "EdgeCorruption", "KnownRowMask", "SelfAdversarialBCE", "GroupedMarginLoss",
+    "HeadRestrictedHinge", "ValidationPatience", "RegimeTrained", "Rows",
+    "Accumulated", "accumulate_backward", "MicroBatchAccumulation",
+    "ModuleProjection", "AlternatingMinibatches", "FullBatch", "FormSelection",
+    "LinearWarmupDecay", "SampledLogicalLosses",
 ]

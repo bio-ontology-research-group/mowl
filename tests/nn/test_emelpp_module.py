@@ -5,7 +5,7 @@ from unittest import TestCase
 
 import torch as th
 
-import mowl.nn.el.emelpp.losses as L
+import mowl.baselines.nn.el.emelpp.losses as L  # the direct formulas, the reference
 from mowl.nn.el.elem.module import ELEmModule
 from mowl.nn.el.emelpp.module import EmELPPModule, EmELVarModule
 
@@ -122,8 +122,14 @@ class TestNormalForms(TestCase):
         set_class(self.m, 1, E2, 0.3)
         for name, data in [("gci0", idx(0, 1)), ("gci1", idx(0, 1, 0)), ("gci3", idx(0, 0, 1)),
                            ("gci1_bot", idx(0, 1, 5))]:
-            self.assertTrue(th.equal(self.m(data, name), self.m(data, name, neg=True)),
-                            name)
+            with self.assertRaises(NotImplementedError):
+                self.m(data, name, neg=True)
+            self.m.strict_negatives = False  # the earlier fall-through: the positive loss
+            try:
+                self.assertTrue(th.equal(self.m(data, name), self.m(data, name, neg=True)),
+                                name)
+            finally:
+                self.m.strict_negatives = True
 
     def test_one_value_per_row(self):
         data = th.tensor([[0, 1], [1, 0], [2, 3]])

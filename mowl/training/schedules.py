@@ -14,6 +14,9 @@ optimiser.
   training epochs"), ELK-Em (Section 5.1: "decayed by 0.1 after 5,000 epochs").
 * :class:`ConstantThenCosine`: constant for a fraction of training, then cosine decay to
   a floor -- ELK-Em (Section 5.2).
+* :class:`LinearDecay`: linear decay to a floor -- GroundedEL (``lr_schedule="linear"``).
+* :class:`TemperatureAnnealing`: not a learning-rate schedule but the same kind of
+  per-epoch schedule, for the temperature of soft memberships -- GroundedEL, MultiBoxEL.
 * :class:`CyclicLearningRate`: triangular cyclical learning rate (Smith 2017) -- CatE
   (Section 4.1).
 * :class:`ReduceOnPlateau`: divide the learning rate when a validation quantity stops
@@ -120,6 +123,92 @@ class ConstantThenCosine(_Schedule):
             g["lr"] = self.lr_at(lr, epoch, epochs)
 
 
+class LinearDecay(_Schedule):
+    """Linear decay of the learning rate from its initial value at the first epoch to
+    ``min_lr`` at the last one.
+
+    :param min_lr: Final learning rate.
+    """
+
+    key = "linear-lr-decay"
+
+    def __init__(self, min_lr=1e-4, base_optimizer=None):
+        super().__init__(base_optimizer)
+        self.min_lr = float(min_lr)
+
+    def setup(self, opt):
+        self.base_lrs = [g["lr"] for g in opt.param_groups]
+
+    def lr_at(self, base_lr, epoch, epochs):
+        if epochs <= 1:
+            return base_lr
+        t = epoch / (epochs - 1)
+        return (1.0 - t) * base_lr + t * self.min_lr
+
+    def update(self, epoch, epochs):
+        for g, lr in zip(self.opt.param_groups, self.base_lrs):
+            g["lr"] = self.lr_at(lr, epoch, epochs)
+
+
+class TemperatureAnnealing(TrainingRegime):
+    """Anneal the temperature of a model with soft (sigmoid or softmin) memberships from
+    ``start`` at the first epoch to ``end`` at the last one.
+
+    A high temperature gives smooth memberships and useful gradients far from a region's
+    boundary; a low one makes the trained memberships agree with the crisp regions that
+    are read off the model afterwards. Used by GroundedEL (always) and MultiBoxEL
+    (``tau_anneal=True``); it applies to every model whose module has a temperature: a
+    ``set_tau(value)`` method, or a ``tau`` attribute.
+
+    :param start: Temperature of the first epoch (> 0).
+    :param end: Temperature of the last epoch (> 0).
+    :param shape: ``"geometric"`` (``start * (end / start) ** t``, the default) or
+        ``"linear"``, with ``t = epoch / (epochs - 1)``.
+    """
+
+    key = "temperature-annealing"
+
+    def __init__(self, start=1.0, end=0.01, shape="geometric"):
+        super().__init__()
+        if not (start > 0 and end > 0):
+            raise ValueError("start and end must be > 0.")
+        if shape not in ("geometric", "linear"):
+            raise ValueError("shape must be 'geometric' or 'linear'.")
+        self.start, self.end, self.shape = float(start), float(end), shape
+        self.history = []
+
+    def attach(self, model):
+        module = getattr(model, "module", None)
+        if not (hasattr(module, "set_tau") or hasattr(module, "tau")
+                or hasattr(module, "temperature")):
+            raise TypeError(
+                f"TemperatureAnnealing needs a model whose module has a temperature "
+                f"('set_tau', 'tau' or 'temperature'); {type(model).__name__} has none.")
+        super().attach(model)
+
+    def value_at(self, epoch, epochs):
+        """The temperature of ``epoch`` (0-based) in a run of ``epochs`` epochs."""
+        if epochs <= 1:
+            return self.start
+        t = min(max(epoch / (epochs - 1), 0.0), 1.0)
+        if self.shape == "linear":
+            return (1.0 - t) * self.start + t * self.end
+        return self.start * ((self.end / self.start) ** t)
+
+    def on_epoch_start(self, epoch, epochs):
+        tau = float(self.value_at(epoch, epochs))
+        module = self.model.module
+        if hasattr(module, "set_tau"):
+            module.set_tau(tau)
+        elif hasattr(module, "tau"):
+            module.tau = tau
+            if hasattr(self.model, "tau") and not callable(self.model.tau):
+                self.model.tau = tau
+        else:
+            module.temperature = tau
+        self.history.append(tau)
+
+
 class CyclicLearningRate(_Schedule):
     """Triangular cyclical learning rate between ``base_lr`` and ``max_lr``
     (:class:`torch.optim.lr_scheduler.CyclicLR`, Smith 2017), stepped once per epoch.
@@ -132,13 +221,20 @@ class CyclicLearningRate(_Schedule):
     :param max_lr: Upper bound (default: ten times ``base_lr``).
     :param step_size_up: Epochs from the lower to the upper bound.
     :param mode: ``"triangular"``, ``"triangular2"`` or ``"exp_range"``.
+    :param range_ratio: Instead of ``base_lr``: the lower bound is ``max_lr / range_ratio``
+        (``max_lr`` is then required).
     """
 
     key = "cyclic-lr"
 
     def __init__(self, base_lr=None, max_lr=None, step_size_up=10, mode="triangular",
-                 base_optimizer=None):
+                 base_optimizer=None, range_ratio=None):
         super().__init__(base_optimizer)
+        if range_ratio is not None:
+            if base_lr is not None or max_lr is None:
+                raise ValueError("range_ratio takes max_lr and no base_lr: the lower bound "
+                                 "is max_lr / range_ratio.")
+            base_lr = max_lr / range_ratio
         self.base_lr = base_lr
         self.max_lr = max_lr
         self.step_size_up = int(step_size_up)
@@ -155,6 +251,15 @@ class CyclicLearningRate(_Schedule):
     def update(self, epoch, epochs):
         if epoch > 0:
             self.scheduler.step()
+
+
+def linear_decay_interval(high, low, epoch, epochs):
+    """The learning rates at the start and at the end of ``epoch`` (0-based) of ``epochs`` when
+    the rate falls linearly from ``high`` (before the first epoch) to ``low`` (after the last):
+    the schedule of word2vec's ``alpha``, which is set per call and not through an optimiser."""
+    start = high - (high - low) * epoch / epochs
+    end = high - (high - low) * (epoch + 1) / epochs
+    return start, end
 
 
 def validation_loss(model, gci_name=None):
@@ -286,4 +391,3 @@ class EarlyStopping(ReduceOnPlateau):
         # No learning-rate reduction: a constant schedule that accepts ``step(value)``.
         self.scheduler = th.optim.lr_scheduler.ReduceLROnPlateau(
             opt, patience=10 ** 9, factor=0.999999)
-

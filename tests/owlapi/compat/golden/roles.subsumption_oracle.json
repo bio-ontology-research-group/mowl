@@ -1,0 +1,505 @@
+{
+ "owlapi": "5.5.1",
+ "value": [
+  [
+   "http://mowl.borg/geo#A",
+   "http://mowl.borg/geo#B",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#B",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#r http://mowl.borg/geo#B",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#B",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#s http://mowl.borg/geo#B",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "http://mowl.borg/geo#C",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#C",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#r http://mowl.borg/geo#C",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#C",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#s http://mowl.borg/geo#C",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "http://mowl.borg/geo#D",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#D",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#r http://mowl.borg/geo#D",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#D",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#s http://mowl.borg/geo#D",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#r http://mowl.borg/geo#E",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#A",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#s http://mowl.borg/geo#E",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "http://mowl.borg/geo#A",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#A",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#B and some http://mowl.borg/geo#r http://mowl.borg/geo#A",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#A",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#B and some http://mowl.borg/geo#s http://mowl.borg/geo#A",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "http://mowl.borg/geo#C",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#C",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#B and some http://mowl.borg/geo#r http://mowl.borg/geo#C",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#C",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#B and some http://mowl.borg/geo#s http://mowl.borg/geo#C",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "http://mowl.borg/geo#D",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#D",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#B and some http://mowl.borg/geo#r http://mowl.borg/geo#D",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#D",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#B and some http://mowl.borg/geo#s http://mowl.borg/geo#D",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#B and some http://mowl.borg/geo#r http://mowl.borg/geo#E",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#B",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#B and some http://mowl.borg/geo#s http://mowl.borg/geo#E",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "http://mowl.borg/geo#A",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#A",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#C and some http://mowl.borg/geo#r http://mowl.borg/geo#A",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#A",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#C and some http://mowl.borg/geo#s http://mowl.borg/geo#A",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "http://mowl.borg/geo#B",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#B",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#C and some http://mowl.borg/geo#r http://mowl.borg/geo#B",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#B",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#C and some http://mowl.borg/geo#s http://mowl.borg/geo#B",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "http://mowl.borg/geo#D",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#D",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#C and some http://mowl.borg/geo#r http://mowl.borg/geo#D",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#D",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#C and some http://mowl.borg/geo#s http://mowl.borg/geo#D",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#C and some http://mowl.borg/geo#r http://mowl.borg/geo#E",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#C",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#C and some http://mowl.borg/geo#s http://mowl.borg/geo#E",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "http://mowl.borg/geo#A",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#A",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#D and some http://mowl.borg/geo#r http://mowl.borg/geo#A",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#A",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#D and some http://mowl.borg/geo#s http://mowl.borg/geo#A",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "http://mowl.borg/geo#B",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#B",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#D and some http://mowl.borg/geo#r http://mowl.borg/geo#B",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#B",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#D and some http://mowl.borg/geo#s http://mowl.borg/geo#B",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "http://mowl.borg/geo#C",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#C",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#D and some http://mowl.borg/geo#r http://mowl.borg/geo#C",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#C",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#D and some http://mowl.borg/geo#s http://mowl.borg/geo#C",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#D and some http://mowl.borg/geo#r http://mowl.borg/geo#E",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#D",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#E",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/geo#D and some http://mowl.borg/geo#s http://mowl.borg/geo#E",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "http://mowl.borg/geo#A",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#A",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#E and some http://mowl.borg/geo#r http://mowl.borg/geo#A",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#A",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#E and some http://mowl.borg/geo#s http://mowl.borg/geo#A",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "http://mowl.borg/geo#B",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#B",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#E and some http://mowl.borg/geo#r http://mowl.borg/geo#B",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#B",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#E and some http://mowl.borg/geo#s http://mowl.borg/geo#B",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "http://mowl.borg/geo#C",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#C",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#E and some http://mowl.borg/geo#r http://mowl.borg/geo#C",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#C",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#E and some http://mowl.borg/geo#s http://mowl.borg/geo#C",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "http://mowl.borg/geo#D",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "some http://mowl.borg/geo#r http://mowl.borg/geo#D",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#E and some http://mowl.borg/geo#r http://mowl.borg/geo#D",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/geo#E",
+   "some http://mowl.borg/geo#s http://mowl.borg/geo#D",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/geo#E and some http://mowl.borg/geo#s http://mowl.borg/geo#D",
+   "",
+   "False"
+  ]
+ ]
+}

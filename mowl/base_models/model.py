@@ -1,4 +1,6 @@
 from deprecated.sphinx import deprecated, versionchanged, versionadded
+import functools
+import re
 import tempfile
 from mowl.datasets import Dataset
 from mowl.owlapi import OWLAPIAdapter
@@ -6,6 +8,33 @@ from mowl.evaluation import RankingEvaluator
 from mowl.error import messages as msg
 from java.util import HashSet
 
+
+
+#: The arguments that swap a part of a method (see :mod:`mowl.representation.swap`).
+PART_ARGUMENTS = ("classes", "relations", "individuals", "measure", "objective",
+                  "objective_options", "regularizers", "intersection", "distance",
+                  "negation", "source", "reading", "encoder", "scorer", "walker", "view")
+
+
+def _refusing_parts(init):
+    """``init`` that explains a part argument it does not take: the named classes are one
+    combination of parts each; the parts are swapped in the general models."""
+    @functools.wraps(init)
+    def wrapper(self, *args, **kwargs):
+        try:
+            init(self, *args, **kwargs)
+        except TypeError as error:
+            match = re.search(r"unexpected keyword argument '(\w+)'", str(error))
+            if match and match.group(1) in PART_ARGUMENTS and match.group(1) in kwargs:
+                raise TypeError(
+                    f"{type(self).__name__} is a named combination of parts and takes only "
+                    f"its own options, not the part {match.group(1)!r}. To replace a part, "
+                    f"use the general model of its kind with the method key: "
+                    f"ComposedEL / ComposedALC / ComposedSequenceModel / "
+                    f"QueryEmbeddingModel / ConstructedModel(dataset, method=<key>, "
+                    f"{match.group(1)}=...) (see the page 'Combine parts').") from error
+            raise
+    return wrapper
 
 
 @versionchanged(version="0.1.0", reason="Parameter ``model_filepath`` added in the base class for \
@@ -19,6 +48,18 @@ class Model():
     :type model_filepath: str, optional
     """
 
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "__init__" in cls.__dict__:
+            cls.__init__ = _refusing_parts(cls.__dict__["__init__"])
+
+    #: How the rank-based evaluation regimes obtain axiom scores from the model:
+    #: ``"module"``, ``"evaluation_model"``, ``"method"`` or ``"vectors"``; ``None`` if
+    #: the model has none (see :mod:`mowl.evaluation.model_scoring`).
+    axiom_scoring = None
+    #: The normal forms the model has a score for (``None``: not restricted).
+    scored_forms = None
 
     def __init__(self, dataset, model_filepath=None):
         if not isinstance(dataset, Dataset):
@@ -42,6 +83,31 @@ class Model():
     #: ignored or only partly used). Set ``mowl.base_models.model.Model
     #: .check_expressivity_on_init = False`` to switch the check off.
     check_expressivity_on_init = True
+
+    #: The :data:`mowl.training.regime.HOOKS` the training loop of this model consults.
+    #: Empty: the model trains with an objective of its own and takes no training regime.
+    training_hooks = frozenset()
+
+    @property
+    def training_regime(self):
+        """The :class:`~mowl.training.TrainingRegime` used by :meth:`train`, or ``None``.
+
+        A regime can be assigned only if the training loop of the model consults every
+        hook the regime overrides (:attr:`training_hooks`); otherwise assigning it raises
+        :class:`TypeError`, so that a regime is never silently ignored.
+        """
+        return getattr(self, "_training_regime", None)
+
+    @training_regime.setter
+    def training_regime(self, regime):
+        if regime is not None:
+            from mowl.training.regime import TrainingRegime, check_compatible
+            if not isinstance(regime, TrainingRegime):
+                raise TypeError("training_regime must be a mowl.training.TrainingRegime "
+                                "or None.")
+            check_compatible(regime, self)
+            regime.attach(self)
+        self._training_regime = regime
 
     @property
     def card(self):
@@ -79,6 +145,17 @@ class Model():
             warnings.warn(f"{type(self).__name__}: {self.expressivity_report.summary()}",
                           UserWarning, stacklevel=3)
         return self.expressivity_report
+
+    @property
+    def as_geometry(self):
+        """What the model contains, behind one interface
+        (:class:`mowl.representation.Geometry`): the regions of classes, individuals and
+        compound classes, and the relations between them.
+
+        :raises NotImplementedError: If the method does not expose a geometry yet.
+        """
+        from mowl.representation import geometry_of
+        return geometry_of(self)
 
     def train(self, *args, **kwargs):
         '''Abstract method for training the model. This method must be implemented in children classes

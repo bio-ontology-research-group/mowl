@@ -41,6 +41,22 @@ Convex polyhedral model
    :show-inheritance:
 
 
+Convex model of a finite model
+------------------------------
+
+.. automodule:: mowl.geometric.convex_regions
+   :members:
+   :show-inheritance:
+
+
+Strong faithfulness
+-------------------
+
+.. automodule:: mowl.geometric.faithfulness
+   :members:
+   :show-inheritance:
+
+
 Interval-union model
 --------------------
 
@@ -92,11 +108,15 @@ Shared multi-box utilities
 MultiBoxEL neural module and losses
 -----------------------------------
 
+The module is the combination of parts that MultiBoxEL is
+(:func:`~mowl.representation.library.multibox_methods.multiboxel`). The loss functions below are
+those of the direct implementation (:mod:`mowl.baselines`), which the combination is tested against.
+
 .. automodule:: mowl.nn.el.multiboxel.module
    :members:
    :show-inheritance:
 
-.. automodule:: mowl.nn.el.multiboxel.losses
+.. automodule:: mowl.baselines.nn.el.multiboxel.losses
    :members:
    :show-inheritance:
 
@@ -112,11 +132,15 @@ MultiBoxEL model
 MultiELBE neural module and losses
 ----------------------------------
 
+The module is the combination of parts that MultiELBE is
+(:func:`~mowl.representation.library.multibox_methods.multielbe`). The loss functions below are
+those of the direct implementation (:mod:`mowl.baselines`).
+
 .. automodule:: mowl.nn.el.multielbe.module
    :members:
    :show-inheritance:
 
-.. automodule:: mowl.nn.el.multielbe.losses
+.. automodule:: mowl.baselines.nn.el.multielbe.losses
    :members:
    :show-inheritance:
 
@@ -132,11 +156,11 @@ MultiELBE model
 Prism neural module and losses
 ------------------------------
 
-.. automodule:: mowl.nn.el.prism.module
+.. automodule:: mowl.baselines.nn.el.prism.module
    :members:
    :show-inheritance:
 
-.. automodule:: mowl.nn.el.prism.losses
+.. automodule:: mowl.baselines.nn.el.prism.losses
    :members:
    :show-inheritance:
 
@@ -148,11 +172,17 @@ PrismEL model
    :members:
    :show-inheritance:
 
+The neural module that :class:`~mowl.models.PrismEL` trains is
+:class:`~mowl.nn.PrismModule`, the geometry of the method ``prism`` built from parts
+(:func:`~mowl.representation.library.shapes_methods.prism`). The page above and the module
+and losses of the previous section describe the earlier, hand-written implementation, which is
+kept for comparison in :mod:`mowl.baselines`.
+
 
 Canonical membership structure
 ------------------------------
 
-.. automodule:: mowl.geometric.membership
+.. automodule:: mowl.representation.library.membership_structure
    :members:
    :show-inheritance:
 
@@ -176,7 +206,12 @@ CanonicalMixture model
 Soft component aggregation and diversity regularisation
 -------------------------------------------------------
 
-.. automodule:: mowl.nn.el.softagg
+The parts: :func:`~mowl.representation.library.multibox_parts.soft_minimum` and the
+aggregation of :class:`~mowl.representation.library.multibox_parts.UnionMeasure`, and the
+regulariser :class:`~mowl.representation.library.multibox_objective.DiversityPenalty`. The
+direct implementation, which the comparison tests read:
+
+.. automodule:: mowl.baselines.nn.el.multiboxel.softagg
    :members:
    :show-inheritance:
 
@@ -188,7 +223,10 @@ Canonical-element point supervision and losses
    :members:
    :show-inheritance:
 
-.. automodule:: mowl.nn.el.pointloss
+The parts: :mod:`mowl.representation.library.structural_points`. The direct
+implementation:
+
+.. automodule:: mowl.baselines.nn.el.multiboxel.pointloss
    :members:
    :show-inheritance:
 
@@ -196,7 +234,15 @@ Canonical-element point supervision and losses
 Structural region algebra, definition tables, and losses
 --------------------------------------------------------
 
-.. automodule:: mowl.nn.el.structural
+.. automodule:: mowl.representation.library.structural_tables
+   :members:
+   :show-inheritance:
+
+The losses are computed from the parts
+(:class:`~mowl.representation.library.structural_reading.StructuralReading` and the slot
+algebra of :mod:`mowl.representation.library.structural_regions`). The direct implementation:
+
+.. automodule:: mowl.baselines.nn.el.multiboxel.structural_losses
    :members:
    :show-inheritance:
 

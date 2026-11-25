@@ -104,7 +104,9 @@ CARD = MethodCard(
         "mowl.training.SoftmaxEnergyContrastiveLoss on the task's normal form only, the "
         "host model's squared-error loss elsewhere). Deviations and ambiguities: Eq. 9 "
         "adds the depth term to every positive pair but the authors' training code only "
-        "to non-contained pairs (flag depth_on_containment, false in the recipes); the "
+        "to non-contained pairs in training (flag depth_on_containment: true is Eq. 9, false is "
+        "the code's training reading and the recipes' choice; the code's scoring adds it "
+        "always); the "
         "loss of Eq. 10 uses d_bd for the negatives, the code the full energy; the "
         "negatives replace the superclass or filler (the code), while the text says the "
         "child; for the prediction task the code's nf3Loss_ours constrains the reversed "
@@ -113,7 +115,10 @@ CARD = MethodCard(
         "clips the parent offsets at exp(-1e-4) and uses softplus radii for the ball "
         "host, mOWL does neither; the paper's Section 5.2 swaps boxes and balls for "
         "ELBE/ELEM. Margins are 0 for ontologies (appendix C.1); the DAG experiments "
-        "(mammal, noun, MCG, Hearst) are not implemented."),
+        "(mammal, noun, MCG, Hearst) are not implemented. With radius='softplus' every "
+        "form uses the softplus radius (consistent_radius=False restores the old mix with "
+        "|radius|). Eq. 10's negative term pushes the negative out of the parent only "
+        "(non-inclusion, not disjointness): with gamma2 = 0 it is almost always zero."),
 )
 
 #: The same method with ELEm (balls) as the host model. A separate key, so the ball

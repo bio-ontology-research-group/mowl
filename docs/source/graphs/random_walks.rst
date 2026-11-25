@@ -68,23 +68,20 @@ Let's see the difference of filtered and non-filtered random walks:
 
    from mowl.walking import DeepWalk
 
-   walker = DeepWalk(6,3,alpha=0,outfile="no_filtered_walks", workers=4)
+   walker = DeepWalk(30,3,alpha=0,outfile="no_filtered_walks", workers=4)
    walker.walk(edges)
 
-.. code:: python
-	  
+.. testcode:: filtered
+
    with open("no_filtered_walks", "r") as f:
-       lines = f.readlines()
-       lines.sort()
+       lines = sorted({line for line in f if " rel " in line})
        print(lines)
 
-The output will include the following walks:
+The output includes the following walks (shown here without repetitions):
 
-.. code:: bash
+.. testoutput:: filtered
 
-   node_1 rel node_2
-   node_1 rel node_3 rel node_4
-   node_3 rel node_4
+   ['node_1 rel node_2\n', 'node_1 rel node_3 rel node_4\n', 'node_3 rel node_4\n']
 	  
 
 
@@ -94,22 +91,20 @@ The output will include the following walks:
 
    from mowl.walking import DeepWalk
 
-   walker2 = DeepWalk(3,3,alpha=0,outfile="filtered_walks", workers=4)
+   walker2 = DeepWalk(30,3,alpha=0,outfile="filtered_walks", workers=4)
    walker2.walk(edges, nodes_of_interest = ["node_1", "node_2"])
 
-.. code:: python
-	  
+.. testcode:: filtered
+
    with open("filtered_walks", "r") as f:
-       lines = f.readlines()
-       lines.sort()
+       lines = sorted({line for line in f if " rel " in line})
        print(lines)
 
-In this case, the output will include the following walks:
+In this case, the output includes the following walks (shown here without repetitions):
 
-.. code:: bash
+.. testoutput:: filtered
 
-   node_1 rel node_2
-   node_1 rel node_3 rel node_4
+   ['node_1 rel node_2\n', 'node_1 rel node_3 rel node_4\n']
 
 .. hint::
 

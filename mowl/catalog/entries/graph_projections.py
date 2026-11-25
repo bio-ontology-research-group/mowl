@@ -22,6 +22,8 @@ OWL2VEC_STAR = MethodCard(
     key="owl2vec_star",
     expressivity="OWL 2 DL",
     tasks=(),
+    head_tasks=("subsumption",),
+    factory="mowl.benchmarks.families.owl2vec_star",
     name="OWL2Vec*",
     family=Family.GRAPH,
     region="random walks + Word2Vec",
@@ -53,6 +55,8 @@ DL2VEC = MethodCard(
     key="dl2vec",
     expressivity="OWL 2 DL",
     tasks=(),
+    head_tasks=("subsumption",),
+    factory="mowl.benchmarks.families.dl2vec",
     name="DL2Vec",
     family=Family.GRAPH,
     region="random walks + Word2Vec",
@@ -80,6 +84,8 @@ TAXONOMY_WALKS = MethodCard(
     key="taxonomy_walks",
     expressivity="taxonomy",
     tasks=(),
+    head_tasks=("subsumption",),
+    factory="mowl.benchmarks.families.taxonomy_walks",
     name="Taxonomy projection + random walks",
     family=Family.GRAPH,
     region="random walks + Word2Vec",
@@ -103,6 +109,11 @@ TAXONOMY_WALKS = MethodCard(
 
 GRAPH_KGE = MethodCard(
     key="graph_kge",
+    # What the widest projectors read; a narrower projector uses less of the ontology.
+    expressivity="OWL 2 DL",
+    # The score of the edge an axiom is projected to: C -subclassof-> D for C ⊑ D.
+    tasks=("subsumption",),
+    factory="mowl.benchmarks.families.graph_kge",
     name="Projection + knowledge graph embedding",
     family=Family.GRAPH,
     region="knowledge graph embedding (PyKEEN)",
@@ -124,7 +135,10 @@ GRAPH_KGE = MethodCard(
     references=(R.ALI2021, R.CHEN2025),
     notes=(
         "Use GraphPlusPyKEENModel with any projector from mowl.projection and a PyKEEN "
-        "ERModel. OWL2Vec*-TransE in Chen et al. (2025) is an instance."),
+        "ERModel. OWL2Vec*-TransE in Chen et al. (2025) is an instance. Scores (axiom_costs) "
+        "exist for C ⊑ D, C ⊑ ∃r.D, C(a) (the type edge) and r(a, b) (the role edge), each "
+        "the score of the edge the axiom is projected to; infinite if the projector has no "
+        "such edge."),
 )
 
 GDA_PROJECTION = MethodCard(

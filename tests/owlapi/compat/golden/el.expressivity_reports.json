@@ -1,0 +1,257 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "acone": {
+   "ok": false,
+   "summary": "8 of 26 logical axioms go beyond EL with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "alcone": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond ALC with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "alcone-exact": {
+   "ok": false,
+   "summary": "10 of 26 logical axioms go beyond ALC (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: C(a) (3), dom(r), ran(r) (1), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "attributed_dl": {
+   "ok": false,
+   "summary": "3 of 26 logical axioms go beyond ELH⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), Trans(r) (1)."
+  },
+  "bcbox": {
+   "ok": false,
+   "summary": "20 of 26 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "betae": {
+   "ok": false,
+   "summary": "8 of 26 logical axioms go beyond EL with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "box2el": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "box_lattice": {
+   "ok": false,
+   "summary": "20 of 26 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "box_milp": {
+   "ok": false,
+   "summary": "18 of 26 logical axioms go beyond propositional EL⊥ (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 7 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: C(a) (3), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "boxe": {
+   "ok": false,
+   "summary": "8 of 26 logical axioms go beyond EL with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "boxel": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "boxlite": {
+   "ok": false,
+   "summary": "6 of 26 logical axioms go beyond DL-Lite_H with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 EquivalentClasses, 2 SubClassOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊓ (4), r ∘ s ⊑ t (1), Trans(r) (1)."
+  },
+  "boxsel": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "canonical_mixture": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "canonical_model": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "cate": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond ALC with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "composed": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "composed-alc": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond ALC with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "composed_graph_kge": {
+   "ok": false,
+   "summary": "8 of 26 logical axioms go beyond EL with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "composed_sequences": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond OWL 2 DL (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion. Constructs outside the supported logic: C(a) (3), r(a,b) (2)."
+  },
+  "composed_subspace": {
+   "ok": false,
+   "summary": "10 of 26 logical axioms go beyond E2R fragment with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 EquivalentClasses, 7 SubClassOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ∃r.C (8), r ∘ s ⊑ t (1), Trans(r) (1)."
+  },
+  "concept2box": {
+   "ok": false,
+   "summary": "9 of 26 logical axioms go beyond EL without conjunction with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 EquivalentClasses, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), ⊓ (4), dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "cone_qe": {
+   "ok": false,
+   "summary": "8 of 26 logical axioms go beyond EL with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "convex_polyhedral": {
+   "ok": false,
+   "summary": "7 of 26 logical axioms go beyond ELH(∘)⊥ (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: C(a) (3), dom(r), ran(r) (1), r(a,b) (2), Trans(r) (1)."
+  },
+  "convex_regions": {
+   "ok": false,
+   "summary": "7 of 26 logical axioms go beyond ELH(∘)⊥ (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: C(a) (3), dom(r), ran(r) (1), r(a,b) (2), Trans(r) (1)."
+  },
+  "dfalc": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond ALC with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "disk_embeddings": {
+   "ok": false,
+   "summary": "20 of 26 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "dl2vec": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond OWL 2 DL (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion. Constructs outside the supported logic: C(a) (3), r(a,b) (2)."
+  },
+  "e2r": {
+   "ok": false,
+   "summary": "10 of 26 logical axioms go beyond E2R fragment with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 EquivalentClasses, 7 SubClassOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ∃r.C (8), r ∘ s ⊑ t (1), Trans(r) (1)."
+  },
+  "eike": {
+   "ok": false,
+   "summary": "15 of 26 logical axioms go beyond taxonomy with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 EquivalentClasses, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "elbe": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "elem": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "elkem": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "emelpp": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "emelvar": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "expressive": {
+   "ok": false,
+   "summary": "8 of 26 logical axioms go beyond EL with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "faithel": {
+   "ok": false,
+   "summary": "3 of 26 logical axioms go beyond ELH⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), Trans(r) (1)."
+  },
+  "falcon": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond ALC with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "graph_kge": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond OWL 2 DL (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion. Constructs outside the supported logic: C(a) (3), r(a,b) (2)."
+  },
+  "grounded": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "gumbel_box": {
+   "ok": false,
+   "summary": "20 of 26 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "hit": {
+   "ok": false,
+   "summary": "20 of 26 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "hyperbolic_cones": {
+   "ok": false,
+   "summary": "20 of 26 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "interval_union": {
+   "ok": false,
+   "summary": "7 of 26 logical axioms go beyond ELH(∘)⊥ (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: C(a) (3), dom(r), ran(r) (1), r(a,b) (2), Trans(r) (1)."
+  },
+  "least_model": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  },
+  "mcmultibox": {
+   "ok": false,
+   "summary": "10 of 26 logical axioms go beyond ELH(∘) (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 2 SubClassOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), dom(r), ran(r) (1), r(a,b) (2), Trans(r) (1)."
+  },
+  "multiboxel": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "multielbe": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "octagon": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "ont": {
+   "ok": false,
+   "summary": "13 of 26 logical axioms go beyond EL (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), dom(r), ran(r) (1), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "onto2vec": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond OWL 2 DL (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion. Constructs outside the supported logic: C(a) (3), r(a,b) (2)."
+  },
+  "opa2vec": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond OWL 2 DL (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion. Constructs outside the supported logic: C(a) (3), r(a,b) (2)."
+  },
+  "order_embeddings": {
+   "ok": false,
+   "summary": "20 of 26 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "owl2vec_star": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond OWL 2 DL (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion. Constructs outside the supported logic: C(a) (3), r(a,b) (2)."
+  },
+  "prism": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "query2box": {
+   "ok": false,
+   "summary": "8 of 26 logical axioms go beyond EL with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "regd": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "regd_elem": {
+   "ok": false,
+   "summary": "5 of 26 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "reshuffle": {
+   "ok": false,
+   "summary": "8 of 26 logical axioms go beyond EL with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 DisjointClasses, 1 ObjectPropertyDomain, 2 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), dom(r), ran(r) (1), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "shadow_cones": {
+   "ok": false,
+   "summary": "20 of 26 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "taxonomy_walks": {
+   "ok": false,
+   "summary": "20 of 26 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 1 DisjointClasses, 1 EquivalentClasses, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 8 SubClassOf, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: ⊥ (3), C(a) (3), ⊓ (4), dom(r), ran(r) (1), ∃r.C (8), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "temporal_cones": {
+   "ok": false,
+   "summary": "10 of 26 logical axioms go beyond ALC (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 3 ClassAssertion, 2 ObjectPropertyAssertion, 1 ObjectPropertyDomain, 2 SubObjectPropertyOf, 1 SubPropertyChainOf, 1 TransitiveObjectProperty. Constructs outside the supported logic: C(a) (3), dom(r), ran(r) (1), r(a,b) (2), r ∘ s ⊑ t (1), r ⊑ s (2), Trans(r) (1)."
+  },
+  "transbox": {
+   "ok": false,
+   "summary": "2 of 26 logical axioms go beyond ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥ with ABox) and will be ignored or only partly used: 1 ObjectPropertyDomain, 1 TransitiveObjectProperty. Constructs outside the supported logic: dom(r), ran(r) (1), Trans(r) (1)."
+  }
+ }
+}

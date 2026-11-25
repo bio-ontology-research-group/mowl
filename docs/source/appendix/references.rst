@@ -55,6 +55,10 @@ References
 
 .. [ozcep2020] Özçep, Ö. L., Leemhuis, M., & Wolter, D. (2020). `Cone Semantics for Logics with Negation <https://doi.org/10.24963/ijcai.2020/252>`_. In: Proceedings of the Twenty-Ninth International Joint Conference on Artificial Intelligence (IJCAI-20), 1820–1826.
 
+.. [bourgaux2021] Bourgaux, C., Ozaki, A., & Pan, J. Z. (2021). `Geometric Models for (Temporally) Attributed Description Logics <https://arxiv.org/abs/2108.12239>`_. Proceedings of DL 2021.
+
+.. [leemhuis2024temporal] Leemhuis, M. (2024). `Embedding Temporal Description Logic Ontologies by Cone-based Geometric Models <https://ceur-ws.org/Vol-3763/paper3.pdf>`_. Proceedings of FCR 2024, CEUR-WS Vol-3763.
+
 .. [ozcep2023] Özçep, Ö. L., Leemhuis, M., & Wolter, D. (2023). `Embedding Ontologies in the Description Logic ALC by Axis-Aligned Cones <https://doi.org/10.1613/jair.1.13939>`_. Journal of Artificial Intelligence Research, 78.
 
 .. [leemhuis2020] Leemhuis, M., Özçep, Ö. L., & Wolter, D. (2020). `Orthologics for Cones <https://arxiv.org/abs/2008.03172>`_. ArXiv, abs/2008.03172.
@@ -68,3 +72,41 @@ References
 .. [mohapatra2021a] Mohapatra, B., Bhatia, S., Mutharaju, R., & Srinivasaraghavan, G. (2021). EmELvar: A NeuroSymbolic Reasoner for the EL++ Description Logic. SemREC'21 workshop at ISWC 2021.
 
 .. [duc2021] Le Duc, C. (2021). Category-theoretical semantics of the description logic ALC. Proceedings of the 34th International Workshop on Description Logics (DL 2021), CEUR-WS vol. 2954.
+
+.. [ganea2018] Ganea, O.-E., Bécigneul, G., & Hofmann, T. (2018). `Hyperbolic Entailment Cones for Learning Hierarchical Embeddings <https://arxiv.org/abs/1804.01882>`_. In: Proceedings of the 35th International Conference on Machine Learning (ICML 2018).
+
+.. [yu2023shadow] Yu, T., Liu, T. J. B., Tseng, A., & De Sa, C. (2024). `Shadow Cones: A Generalized Framework for Partial Order Embeddings <https://arxiv.org/abs/2305.15215>`_. In: The Twelfth International Conference on Learning Representations (ICLR 2024).
+
+.. [suzuki2019] Suzuki, R., Takahama, R., & Onoda, S. (2019). `Hyperbolic Disk Embeddings for Directed Acyclic Graphs <https://arxiv.org/abs/1902.04335>`_. In: Proceedings of the 36th International Conference on Machine Learning (ICML 2019).
+
+.. [ren2020q2b] Ren, H., Hu, W., & Leskovec, J. (2020). `Query2box: Reasoning over Knowledge Graphs in Vector Space using Box Embeddings <https://arxiv.org/abs/2002.05969>`_. ICLR 2020.
+
+.. [ren2020betae] Ren, H., & Leskovec, J. (2020). `Beta Embeddings for Multi-Hop Logical Reasoning in Knowledge Graphs <https://arxiv.org/abs/2010.11465>`_. NeurIPS 2020.
+
+.. [zhang2021cone] Zhang, Z., Wang, J., Chen, J., Ji, S., & Wu, F. (2021). `ConE: Cone Embeddings for Multi-Hop Reasoning over Knowledge Graphs <https://arxiv.org/abs/2110.13715>`_. NeurIPS 2021.
+
+.. [he2024acone] He, Y., Hernandez, D., Nayyeri, M., Xiong, B., Zhu, Y., Kharlamov, E., & Staab, S. (2024). `Generating SROI⁻ Ontologies via Knowledge Graph Query Embedding Learning <https://arxiv.org/abs/2407.09212>`_. ArXiv, abs/2407.09212.
+
+.. [wang2024eike] Wang, K., Qi, G., Chen, J., Huang, Y., & Wu, T. (2024). `Embedding Ontologies via Incorporating Extensional and Intensional Knowledge <https://arxiv.org/abs/2402.01677>`_. IJCAI 2024 (arXiv:2402.01677).
+
+.. [huang2023] Huang, Z., Wang, D., Huang, B., Zhang, C., Shang, J., Liang, Y., Wang, Z., Li, X., Faloutsos, C., Sun, Y., & Wang, W. (2023). `Concept2Box: Joint Geometric Embeddings for Learning Two-View Knowledge Graphs <https://arxiv.org/abs/2307.01933>`_. arXiv:2307.01933.
+
+.. [lv2018transc] Lv, X., Hou, L., Li, J., & Liu, Z. (2018). `Differentiating Concepts and Instances for Knowledge Graph Embedding <https://arxiv.org/abs/1811.04588>`_. EMNLP 2018.
+
+.. [hao2019joie] Hao, J., Chen, M., Yu, W., Sun, Y., & Wang, W. (2019). `Universal Representation Learning of Knowledge Bases by Jointly Embedding Instances and Ontological Concepts <https://doi.org/10.1145/3292500.3330838>`_. KDD 2019.
+
+.. [pavlovic2025] Pavlović, A., Sallinger, E., & Schockaert, S. (2025). `Faithful Differentiable Reasoning with Reshuffled Region-based Embeddings <https://doi.org/10.24963/kr.2025/48>`_. In: Proceedings of the 22nd International Conference on Principles of Knowledge Representation and Reasoning (KR 2025), 489-499. ArXiv, abs/2406.09529.
+
+.. [teru2020] Teru, K. K., Denis, E. G., & Hamilton, W. L. (2020). `Inductive Relation Prediction by Subgraph Reasoning <https://arxiv.org/abs/1911.06962>`_. In: Proceedings of the 37th International Conference on Machine Learning (ICML 2020).
+
+.. [abboud2020] Abboud, R., Ceylan, I. I., Lukasiewicz, T., & Salvatori, T. (2020). `BoxE: A Box Embedding Model for Knowledge Base Completion <https://arxiv.org/abs/2007.06267>`_. NeurIPS 2020.
+
+.. [dasgupta2020] Dasgupta, S. S., Boratko, M., Zhang, D., Vilnis, L., Li, X. L., & McCallum, A. (2020). `Improving Local Identifiability in Probabilistic Box Embeddings <https://arxiv.org/abs/2010.04831>`_. NeurIPS 2020.
+
+.. [pavlovic2023] Pavlović, A., & Sallinger, E. (2023). `ExpressivE: A Spatio-Functional Embedding For Knowledge Graph Completion <https://arxiv.org/abs/2206.04192>`_. ICLR 2023.
+
+.. [vendrov2016] Vendrov, I., Kiros, R., Fidler, S., & Urtasun, R. (2016). `Order-Embeddings of Images and Language <https://arxiv.org/abs/1511.06361>`_. ICLR 2016.
+
+.. [vilnis2018] Vilnis, L., Li, X., Murty, S., & McCallum, A. (2018). `Probabilistic Embedding of Knowledge Graphs with Box Lattice Measures <https://arxiv.org/abs/1805.06627>`_. ACL 2018.
+
+.. [zhu2024] Zhu, Y., Potyka, N., Xiong, B., Tran, T.-K., Nayyeri, M., Kharlamov, E., & Staab, S. (2024). `Approximating Probabilistic Inference in Statistical EL with Knowledge Graph Embeddings <https://arxiv.org/abs/2407.11821>`_. arXiv:2407.11821.

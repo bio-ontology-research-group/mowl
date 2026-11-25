@@ -15,7 +15,7 @@ mowl.init_jvm("2g")
 from mowl.datasets import PathDataset
 from mowl.geometric import ExactBoxInit
 from mowl.models import PrismEL
-import mowl.nn.el.prism.losses as PL
+import mowl.baselines.nn.el.prism.losses as PL
 from tests.datasetFactory import FamilyDataset
 
 

@@ -4,6 +4,7 @@ Implements the MILP search for axis-parallel box models of propositional EL
 ontologies and the :class:`BoxModel` interpretation.
 
 Contract and mathematical guarantees:
+
 - By Helly's theorem for axis-parallel boxes in :math:`\\mathbb{R}^d` (Helly
   number 2; Eckhoff 1988; Leemhuis & Kutz, NeSy 2025, Defs. 3, 6; Prop. 4),
   box semantics always satisfy Helly's property. Consequently, an ontology that
@@ -64,6 +65,7 @@ Contract and mathematical guarantees:
   concept names).
 
 References:
+
 - M. Leemhuis & O. Kutz, *Understanding the Expressive Capabilities of
   Knowledge Base Embeddings under Box Semantics*, NeSy 2025 (PMLR
   284:303–321), Definitions 1, 3, 6; Propositions 4, 5, 8.
@@ -263,6 +265,7 @@ class BoxModelBuilder:
 
     Contract (Leemhuis & Kutz, NeSy 2025,
     Prop. 4 & Prop. 5):
+
     - Raises :class:`~mowl.geometric.errors.UnsupportedAxiom` if ``cm.axioms``
       contains any role axiom (:class:`~mowl.geometric.normal_forms.NF3`,
       :class:`~mowl.geometric.normal_forms.NF4`,

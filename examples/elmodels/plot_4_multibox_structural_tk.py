@@ -39,7 +39,7 @@ component idle and reproducing the single-box Helly obstruction across all
 This tutorial builds :math:`\mathcal{T}_k` (:math:`k \in \{3, 5\}`) with the
 mOWL OWLAPI adapter, certifies single-box impossibility via
 :func:`~mowl.geometric.helly.helly_check` and
-:class:`~mowl.geometric.completion.CanonicalModel`, compares the round-4
+:class:`~mowl.geometric.completion.CanonicalModel`, compares the
 default structural recipe against the witness-point recipe across three random
 seeds, and visualises the resulting 2-D multi-box regions at :math:`k = 5`.
 """
@@ -78,7 +78,20 @@ from mowl.datasets import PathDataset
 from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.helly import helly_check
 from mowl.models import MultiBoxEL
-from mowl.nn.el.structural import nonempty_measure, signed_overlap
+from mowl.representation.library.structural_regions import SlotBoxes, side, slot_pairs
+
+
+def nonempty_measure(w):
+    """The smallest signed side of every slot: positive iff the slot has interior."""
+    return side(w)
+
+
+def signed_overlap(cen_a, w_a, cen_b, w_b):
+    """Per pair of slots and coordinate the signed overlap (negative where apart)."""
+    a = SlotBoxes.make(cen_a, w_a, th.ones(cen_a.shape[:2], dtype=th.bool))
+    b = SlotBoxes.make(cen_b, w_b, th.ones(cen_b.shape[:2], dtype=th.bool))
+    _, w, _ = slot_pairs(a, b)
+    return (2.0 * w).view(cen_a.shape[0], cen_a.shape[1], cen_b.shape[1], -1)
 from mowl.owlapi import OWLAPIAdapter
 
 # %%
@@ -187,17 +200,17 @@ for k in (3, 5):
 # constructively by intersecting the component boxes of their operands
 # (:meth:`~mowl.nn.MultiBoxELModule.all_class_regions`). Training optimises:
 #
-# * **Existence** (:func:`~mowl.nn.el.structural.existence_loss` via
-#   :func:`~mowl.nn.el.structural.nonempty_measure`): every satisfiable class
+# * **Existence** (:class:`~mowl.representation.library.structural_reading.ExistencePenalty` via
+#   :func:`~mowl.representation.library.structural_reading.size_of`): every satisfiable class
 #   must have at least one active slot whose minimum half-width exceeds
 #   ``margin``.
-# * **Disjointness** (:func:`~mowl.nn.el.structural.gci1_bot_structural` via
-#   :func:`~mowl.nn.el.structural.signed_overlap`): for every
+# * **Disjointness** (:meth:`~mowl.representation.library.structural_reading.StructuralReading.gci1_bot` via
+#   :func:`~mowl.representation.library.structural_reading.pair_size_of`): for every
 #   :math:`A_i \sqcap A_j \sqsubseteq \bot`, every pair of non-empty active
 #   slots must be separated by at least ``margin`` along some coordinate.
 #
 # **Why the default structural recipe gets trapped.** Even with
-# ``n_components=2`` boxes per primitive class :math:`X_j`, the round-4 defaults
+# ``n_components=2`` boxes per primitive class :math:`X_j`, the default settings
 # (``bot_agg="mean"``, ``witness_weight=0.0``, ``reseed_every=0``,
 # ``reseed_mode="dead"``, ``size_reg=1e-3``) allow every :math:`A_i` to satisfy
 # existence using the *same* single component of each :math:`X_j`. Restricted to
@@ -206,11 +219,11 @@ for k in (3, 5):
 # slots share a common intersection and all :math:`\binom{k}{2}` pairs
 # :math:`(A_i, A_j)` overlap.
 #
-# **The three round-5 ingredients** break this symmetry:
+# **The three witness-point ingredients** break this symmetry:
 #
 # 1. **Sum aggregation** (``bot_agg="sum"``): sums the squared-hinge overlap
 #    penalties over all active slot pairs of :math:`(C, D)` in
-#    :func:`~mowl.nn.el.structural.gci1_bot_structural` instead of averaging
+#    :meth:`~mowl.representation.library.structural_reading.StructuralReading.gci1_bot` instead of averaging
 #    them (``bot_agg="mean"``), preventing the :math:`1 / (S_C S_D)` dilution as
 #    the number of definition slots grows.
 # 2. **Canonical-model witness points** (``witness_weight=1.0``): compiles a
@@ -218,7 +231,7 @@ for k in (3, 5):
 #    model and attaches one learnable point :math:`p(w) \in \mathbb{R}^d` per
 #    satisfiable class (:meth:`~mowl.nn.MultiBoxELModule.witness_points`). Using
 #    :func:`~mowl.nn.el.structural.inside_measure`,
-#    :func:`~mowl.nn.el.structural.witness_loss` pulls :math:`p(A_i)` inside at
+#    :class:`~mowl.representation.library.structural_reading.WitnessPenalty` pulls :math:`p(A_i)` inside at
 #    least one active component of every :math:`X_j` (:math:`j \ne i`) and pushes
 #    it outside *every* active component of :math:`X_i` (since
 #    :math:`A_i \sqcap X_i \sqsubseteq \bot` is entailed by the canonical model).
@@ -428,8 +441,8 @@ fig, axes = plt.subplots(1, 2, figsize=(13, 5.8))
 palette = plt.cm.tab10(np.linspace(0.0, 0.5, 5))
 
 panel_specs = [
-    ("default", "Round-4 default recipe (Helly trap)"),
-    ("witness", "Round-5 witness-point recipe (Exact model)"),
+    ("default", "Default recipe (Helly trap)"),
+    ("witness", "Witness-point recipe (Exact model)"),
 ]
 
 for ax, (recipe_name, title_prefix) in zip(axes, panel_specs):

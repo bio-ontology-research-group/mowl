@@ -1,8 +1,28 @@
+from contextlib import contextmanager
+
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn.el.regd.dissimilarity import contrastive_loss
 from mowl.nn.el.regd.module import RegDELBEModule, RegDELEmModule
+
+
+@contextmanager
+def _scoring(module):
+    """The module's raw-energy scoring context; a geometry that is not a RegD module (its
+    parts were swapped) gets the raw energy of its ``boundary and depth`` measure, if it has
+    one, and is scored as it is otherwise."""
+    if hasattr(module, "scoring"):
+        with module.scoring():
+            yield
+    elif hasattr(getattr(module, "measure", None), "raw"):
+        previous = module.measure.raw
+        module.measure.raw = True
+        try:
+            yield
+        finally:
+            module.measure.raw = previous
+    else:
+        yield
 
 
 class _EnergyView(th.nn.Module):
@@ -13,7 +33,7 @@ class _EnergyView(th.nn.Module):
         self.module = module
 
     def forward(self, data, gci_name, neg=False):
-        with self.module.scoring():
+        with _scoring(self.module):
             return self.module(data, gci_name, neg=neg)
 
 
@@ -40,25 +60,30 @@ class _RegDModel(EmbeddingELModel):
 
     def _after_init_module(self):
         self.evaluation_model = _EnergyView(self.module)
+        # the training of the method: Eq. 10 for gci0 and gci2, the host's loss for the rest
+        self.module.default_regimes = (self._contrastive_regime, self._host_loss_regime)
+        self._attach_default_regimes()
 
-    def compute_loss(self, pos_scores, neg_scores=None):
-        """For ``gci0`` and ``gci2``, the contrastive loss of Section 3.3 (Eq. 10) with the
-        ``num_neg`` negatives of each positive; for every other normal form, the host model's
-        loss."""
-        if neg_scores is not None and self.module.last_gci_name in self.module.contrastive_gcis:
-            n = pos_scores.shape[0]
-            negatives = neg_scores.reshape(-1, n).t()
-            return contrastive_loss(pos_scores.reshape(-1), negatives, self.gamma1)
-        return super().compute_loss(pos_scores, neg_scores)
+    def _contrastive_regime(self):
+        """The contrastive loss of Section 3.3 (Eq. 10): each positive of ``gci0`` and
+        ``gci2`` against its ``num_neg`` negatives, the regime
+        :class:`~mowl.training.GroupedLogSumExpContrastiveLoss`."""
+        from mowl.training.losses import GroupedLogSumExpContrastiveLoss
+        forms = tuple(getattr(self.module, "contrastive_gcis", ("gci0", "gci2")))
+        return GroupedLogSumExpContrastiveLoss(self.gamma1, normal_forms=forms)
+
+    def _host_loss_regime(self):
+        """The loss of the other normal forms: the host model's (``None``: the base sum)."""
+        return None
 
     def eval_method(self, data):
-        with self.module.scoring():
+        with _scoring(self.module):
             return super().eval_method(data)
 
     def score(self, axiom):
         """RegD energy of an axiom (lower: more likely entailed). It is negative when the
         child region lies inside the parent region and the depth term does not cancel that."""
-        with self.module.scoring():
+        with _scoring(self.module):
             return super().score(axiom)
 
 
@@ -160,16 +185,11 @@ class RegDELBE(_RegDModel):
         ).to(self.device)
         self._after_init_module()
 
-    def compute_loss(self, pos_scores, neg_scores=None):
-        """See :meth:`_RegDModel.compute_loss`. Other normal forms: ELBE's mean-squared-error
-        loss (positives towards 0, negatives towards 1)."""
-        if neg_scores is not None and self.module.last_gci_name in self.module.contrastive_gcis:
-            return super().compute_loss(pos_scores, neg_scores)
-        pos_mean = th.mean(pos_scores)
-        loss = th.square(pos_mean)
-        if neg_scores is not None:
-            loss = loss + th.square(th.mean(neg_scores) - 1.0)
-        return loss
+    def _host_loss_regime(self):
+        """ELBE's mean-squared-error loss (positives towards 0, negatives towards 1) for the
+        normal forms that are not trained with the contrastive loss."""
+        from mowl.training.losses import MSETargetLoss
+        return MSETargetLoss(0.0, 1.0, reduce="mean_first")
 
 
 class RegDELEm(_RegDModel):
@@ -200,6 +220,8 @@ class RegDELEm(_RegDModel):
     :param flip_gci2: See :class:`RegDELBE`.
     :param radius: ``"abs"`` (default) or ``"softplus"`` (the RegD code's ``Elem``); see
         :class:`~mowl.nn.el.regd.RegDELEmModule`.
+    :param consistent_radius: See :class:`~mowl.nn.el.regd.RegDELEmModule`. Defaults to
+        ``True``.
     :param gci1_radius_term: See :class:`~mowl.models.ELEmbeddings`.
     """
 
@@ -218,6 +240,7 @@ class RegDELEm(_RegDModel):
                  flip_gci2=False,
                  radius="abs",
                  gci1_radius_term=True,
+                 consistent_radius=True,
                  learning_rate=0.005,
                  batch_size=4096 * 8,
                  model_filepath=None,
@@ -236,6 +259,7 @@ class RegDELEm(_RegDModel):
         self.flip_gci2 = bool(flip_gci2)
         self.radius = radius
         self.gci1_radius_term = gci1_radius_term
+        self.consistent_radius = consistent_radius
         self.init_module()
 
     def init_module(self):
@@ -250,5 +274,6 @@ class RegDELEm(_RegDModel):
             eps=self.eps, depth_on_containment=self.depth_on_containment,
             flip_gci2=self.flip_gci2, radius=self.radius,
             gci1_radius_term=self.gci1_radius_term,
+            consistent_radius=self.consistent_radius,
         ).to(self.device)
         self._after_init_module()

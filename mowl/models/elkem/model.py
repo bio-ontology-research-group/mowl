@@ -1,12 +1,12 @@
 import logging
 
-import numpy as np
 import torch as th
-from tqdm import trange
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn.el.elkem.losses import pearson_contrastive_loss
 from mowl.nn.el.elkem.module import ELKEmModule
+from mowl.evaluation.region_access import concatenated_rows
+from mowl.evaluation.scoring_rules import exp_negative_score
+from mowl.training import elkem as T
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -15,7 +15,7 @@ logger.setLevel(logging.INFO)
 TOP_IRI = "http://www.w3.org/2002/07/owl#Thing"
 BOT_IRI = "http://www.w3.org/2002/07/owl#Nothing"
 
-ASSERTION_FORMS = ("class_assertion", "object_property_assertion")
+ASSERTION_FORMS = T.ASSERTION_FORMS
 
 
 class ELKEm(EmbeddingELModel):
@@ -33,7 +33,11 @@ class ELKEm(EmbeddingELModel):
 
     .. rubric:: Training objective
 
-    Each epoch draws one mini-batch of at most ``batch_size`` axioms from every normal form
+    The objective below is the default training regime of the method
+    (:class:`~mowl.training.elkem.ELKEmTraining`, the regimes that ``model.training_regime``
+    holds: mini-batches, negatives of the assertions, the correlation term, the lexical
+    regulariser, the learning-rate decay and the model selection); any of them can be replaced
+    by assigning another regime. Each epoch draws one mini-batch of at most ``batch_size`` axioms from every normal form
     (as in the authors' code, one optimisation step per epoch) and minimises
 
     * the mean per-axiom loss of every normal form (Table 2 of the paper);
@@ -84,7 +88,7 @@ class ELKEm(EmbeddingELModel):
 
     .. rubric:: Differences from the paper and the authors' code
 
-    The built-in loop below follows the paper. The design of the authors' code is available
+    The default regimes follow the paper. The design of the authors' code is available
     as ``variant="reference"`` (geometry) plus the training regime
     ``elkem-code-training`` (:class:`~mowl.training.reference.ELKEmCodeTraining`).
 
@@ -172,6 +176,8 @@ class ELKEm(EmbeddingELModel):
 
         self._bot_ids, self._top_ids = self._fixed_classes()
         self._tensors = None
+        self._lexical_features = lexical_features
+        # validates the features now
         self._lexical_idx, self._lexical_feats = self._prepare_lexical(lexical_features)
         self.init_module()
 
@@ -186,7 +192,25 @@ class ELKEm(EmbeddingELModel):
             top_ids=self._top_ids,
             abox_threshold=self.abox_threshold,
             variant=self.variant,
+            size_weight=self.reg_factor,
         ).to(self.device)
+        # the training regimes of the method (the options are the constructor's)
+        self.module.default_regimes = (self._default_training_regime,)
+        self._attach_default_regimes()
+
+    def _training_options(self):
+        """The options of the default regime :class:`~mowl.training.elkem.ELKEmTraining`."""
+        return dict(batch_size=self.batch_size, k_neg=self.k_neg,
+                    contrastive_factor=self.contrastive_factor,
+                    use_contrastive=self.use_contrastive, abox_k_neg=self.abox_k_neg,
+                    abox_pos_weight=self.abox_pos_weight, abox_neg_weight=self.abox_neg_weight,
+                    lexical_features=self._lexical_features, lexical_weight=self.lexical_weight,
+                    lexical_decay=self.lexical_decay,
+                    lexical_batch_size=self.lexical_batch_size,
+                    lr_decay_epoch=self.lr_decay_epoch, lr_decay_factor=self.lr_decay_factor)
+
+    def _default_training_regime(self):
+        return T.ELKEmTraining(**self._training_options())
 
     # ------------------------------------------------------------------ data
 
@@ -221,46 +245,14 @@ class ELKEm(EmbeddingELModel):
 
     def _training_tensors(self):
         """Training axioms per normal form, with the rows involving fixed-empty concepts
-        rerouted (see the class docstring)."""
-        if self._tensors is not None:
-            return self._tensors
-        tensors = {k: v[:].to(self.device) for k, v in self.training_datasets.items()
-                   if len(v) > 0}
-        bot = th.tensor(self._bot_ids, dtype=th.long, device=self.device)
-        if "gci0" in tensors:
-            tensors["gci0"] = tensors["gci0"][~th.isin(tensors["gci0"][:, 0], bot)]
-        for form in ("gci1", "gci3"):
-            if form in tensors:
-                data = tensors[form]
-                to_bot = th.isin(data[:, 2], bot)
-                if to_bot.any():
-                    bot_form = form + "_bot"
-                    moved = data[to_bot]
-                    tensors[bot_form] = (th.cat([tensors[bot_form], moved])
-                                         if bot_form in tensors else moved)
-                    tensors[form] = data[~to_bot]
-        self._tensors = {k: v for k, v in tensors.items() if len(v) > 0}
+        rerouted (:class:`~mowl.training.elkem.FixedConceptRouting`)."""
+        if self._tensors is None:
+            self._tensors = T.route_fixed_empty(self.training_datasets, self._bot_ids,
+                                                self.device)
         return self._tensors
 
     def _prepare_lexical(self, features):
-        if features is None:
-            return None, None
-        ind_dict = self.individual_index_dict
-        if isinstance(features, dict):
-            idx = [ind_dict[iri] for iri in features if iri in ind_dict]
-            feats = [np.asarray(features[iri], dtype=np.float32) for iri in features
-                     if iri in ind_dict]
-            if not idx:
-                raise ValueError("No key of lexical_features is an individual of the dataset.")
-            feats = np.stack(feats)
-        else:
-            feats = np.asarray(features, dtype=np.float32)
-            if feats.ndim != 2 or feats.shape[0] != len(ind_dict):
-                raise ValueError("lexical_features must have one row per individual "
-                                 f"({len(ind_dict)}), got shape {feats.shape}.")
-            idx = list(range(len(ind_dict)))
-        return (th.tensor(idx, dtype=th.long, device=self.device),
-                th.tensor(feats, device=self.device))
+        return T.prepare_lexical(features, self.individual_index_dict, self.device)
 
     # ------------------------------------------------------------------ negatives
 
@@ -269,22 +261,10 @@ class ELKEm(EmbeddingELModel):
         pool = [i for i in self.named_class_index_dict.values() if i not in excluded]
         return th.tensor(pool, dtype=th.long, device=self.device)
 
-    @staticmethod
-    def _resample(pool, n, forbidden, rounds=20):
-        """Draw ``n`` entries of ``pool``, redrawing those equal to a forbidden value."""
-        sample = pool[th.randint(len(pool), (n,), device=pool.device)]
-        for _ in range(rounds):
-            clash = th.zeros(n, dtype=th.bool, device=pool.device)
-            for values in forbidden:
-                clash |= sample == values
-            if not clash.any():
-                break
-            sample[clash] = pool[th.randint(len(pool), (int(clash.sum()),),
-                                            device=pool.device)]
-        return sample
-
     def generate_negatives(self, gci_name, gci_dataset):
-        r"""Corrupted axioms for ``gci_name``.
+        r"""Corrupted axioms for ``gci_name`` (the sampling of the regimes
+        :class:`~mowl.training.elkem.PearsonContrastiveTerm` and
+        :class:`~mowl.training.elkem.AssertionCorruption`).
 
         * ``gci0`` :math:`C \sqsubseteq D`: ``k_neg`` corruptions per row, :math:`D`
           replaced by a random named class (not :math:`C`, :math:`D`, :math:`\top`,
@@ -300,19 +280,9 @@ class ELKEm(EmbeddingELModel):
         """
         data = gci_dataset[:].to(self.device)
         if gci_name == "gci0":
-            pos = data.repeat_interleave(self.k_neg, dim=0)
-            neg = pos.clone()
-            neg[:, 1] = self._resample(self._class_pool(), len(pos), (pos[:, 0], pos[:, 1]))
-            return neg
+            return T.corrupt_columns(data, self.k_neg, (1,), self._class_pool(), (0, 1))
         if gci_name == "gci2":
-            pos = data.repeat_interleave(self.k_neg, dim=0)
-            corrupt_d = th.rand(len(pos), device=self.device) < 0.5
-            avoid = th.where(corrupt_d, pos[:, 2], pos[:, 0])
-            new = self._resample(self._class_pool(), len(pos), (avoid,))
-            neg = pos.clone()
-            neg[:, 0] = th.where(corrupt_d, pos[:, 0], new)
-            neg[:, 2] = th.where(corrupt_d, new, pos[:, 2])
-            return neg
+            return T.corrupt_columns(data, self.k_neg, (0, 2), self._class_pool())
         if gci_name == "class_assertion":
             return self._corrupt_assertions(data, column=1, pool=self._class_pool(),
                                             gci_name=gci_name)
@@ -323,61 +293,23 @@ class ELKEm(EmbeddingELModel):
         return super().generate_negatives(gci_name, gci_dataset)
 
     def _corrupt_assertions(self, data, column, pool, gci_name, rounds=20):
-        pos = data.repeat_interleave(self.abox_k_neg, dim=0)
-        neg = pos.clone()
-        observed = self._training_tensors().get(gci_name)
-        width = int(max(pos.max().item(), observed.max().item()
-                        if observed is not None else 0)) + 1
+        return T.corrupt_assertions(data, self._training_tensors().get(gci_name), column, pool,
+                                    self.abox_k_neg, rounds)
 
-        def encode(rows):
-            code = th.zeros(len(rows), dtype=th.long, device=rows.device)
-            for j in range(rows.shape[1]):
-                code = code * width + rows[:, j]
-            return code
-
-        known = encode(observed) if observed is not None else None
-        neg[:, column] = self._resample(pool, len(neg), (pos[:, column],))
-        for _ in range(rounds):
-            if known is None:
-                break
-            clash = th.isin(encode(neg), known)
-            if not clash.any():
-                break
-            neg[clash, column] = pool[th.randint(len(pool), (int(clash.sum()),),
-                                                 device=self.device)]
-        return neg
-
-    # ------------------------------------------------------------------ hooks
+    # ------------------------------------------------------------------ training
 
     def get_optimizer(self):
         return th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
 
-    def get_scheduler(self, optimizer):
-        """Step decay of the learning rate after ``lr_decay_epoch`` epochs."""
-        milestones = [] if self.lr_decay_epoch is None else [self.lr_decay_epoch]
-        return th.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones,
-                                                 gamma=self.lr_decay_factor)
-
-    def get_regularization_loss(self):
-        if not self.reg_factor:
-            return 0
-        return self.reg_factor * self.module.size_regularization_loss()
-
     def lexical_regularization_loss(self):
         """Lexical regulariser (Eq. 6) on a random batch of individuals with external
-        representations, or ``None`` if no representations were given."""
-        if self._lexical_idx is None:
-            return None
-        n = len(self._lexical_idx)
-        pick = th.randperm(n, device=self.device)[:self.lexical_batch_size]
-        return self.module.lexical_loss(self._lexical_idx[pick], self._lexical_feats[pick],
-                                        self.lexical_decay)
-
-    def additional_training_loss(self, epoch):
-        lex = self.lexical_regularization_loss()
-        if lex is None or not self.lexical_weight:
-            return None
-        return self.lexical_weight * lex
+        representations, or ``None`` if no representations were given
+        (:class:`~mowl.training.elkem.LexicalRegularisation`)."""
+        regime = T.LexicalRegularisation(self._lexical_features, self.lexical_weight,
+                                         self.lexical_decay, self.lexical_batch_size)
+        regime.model = self
+        regime.indices, regime.matrix = self._lexical_idx, self._lexical_feats
+        return regime.term()
 
     def contrastive_active(self):
         """Whether the Pearson contrastive term is used (see ``use_contrastive``)."""
@@ -385,103 +317,20 @@ class ELKEm(EmbeddingELModel):
             return bool(self.use_contrastive)
         return not any(form in self._training_tensors() for form in ASSERTION_FORMS)
 
-    def contrastive_loss(self, batches):
-        """Sum over ``gci0`` and ``gci2`` of the Pearson loss (Eq. 5) of the batch."""
-        loss = None
-        for form in ("gci0", "gci2"):
-            pos = batches.get(form)
-            if pos is None or len(pos) == 0:
-                continue
-            neg = self.generate_negatives(form, pos)
-            term = pearson_contrastive_loss(self.module.score(pos, form),
-                                            self.module.score(neg, form))
-            loss = term if loss is None else loss + term
-        return loss
-
-    def _sample_batches(self):
-        batches = {}
-        for name, data in self._training_tensors().items():
-            if len(data) > self.batch_size:
-                data = data[th.randperm(len(data), device=self.device)[:self.batch_size]]
-            batches[name] = data
-        return batches
-
-    def training_loss(self, batches=None):
-        """Total loss of one mini-batch per normal form (without the regulariser)."""
-        if batches is None:
-            batches = self._sample_batches()
-        loss = th.tensor(0.0, device=self.device)
-        for name, data in batches.items():
-            pos = self.module(data, name)
-            if name in ASSERTION_FORMS:
-                neg = self.module(self.generate_negatives(name, data), name, neg=True)
-                loss = loss + self.abox_pos_weight * pos.mean() + \
-                    self.abox_neg_weight * neg.mean()
-            else:
-                loss = loss + pos.mean()
-        if self.contrastive_active() and self.contrastive_factor:
-            contrast = self.contrastive_loss(batches)
-            if contrast is not None:
-                loss = loss + self.contrastive_factor * contrast
-        return loss
-
-    # ------------------------------------------------------------------ training
-
     def train(self, epochs, validate_every=1, epoch_callback=None):
-        """Train the model (see the class docstring for the objective).
-
-        With a :attr:`~mowl.base_models.elmodel.EmbeddingELModel.training_regime` attached
-        (for example the regime 'elkem-code-training' of
-        :class:`mowl.training.reference.ELKEmCodeTraining`), the *generic* training loop of
-        :meth:`mowl.base_models.elmodel.EmbeddingELModel.train` runs instead of the
-        built-in one, and every hook (batches, negatives, loss, schedule, selection) is
-        the regime's. The built-in loop below is the model's own design and is used
-        without a regime.
+        """Train the model with the generic loop and the regimes of the method (see the class
+        docstring); a model whose regime was removed (``training_regime = None``) gets the
+        default regimes again.
 
         :param epochs: Number of epochs (one mini-batch per normal form and epoch).
         :param validate_every: Validate every N epochs. Defaults to 1; the paper uses 100.
         :param epoch_callback: Optional ``epoch_callback(epoch, model)`` called after each
             epoch.
         """
-        if self.training_regime is not None:
-            return super().train(epochs, validate_every=validate_every,
-                                 epoch_callback=epoch_callback)
-        tensors = self._training_tensors()
-        logger.info("Training axioms: " + ", ".join(f"{k}: {len(v)}"
-                                                    for k, v in tensors.items()))
-        optimizer = self.get_optimizer()
-        scheduler = self.get_scheduler(optimizer)
-        has_validation = self._has_validation_subsumptions()
-        best = float("inf")
-
-        for epoch in trange(epochs):
-            self.module.train()
-            self.on_epoch_start(epoch, epochs)
-            loss = self.training_loss()
-            extra = self.additional_training_loss(epoch)
-            if extra is not None:
-                loss = loss + extra
-            loss = loss + self.get_regularization_loss()
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-
-            if epoch_callback is not None:
-                epoch_callback(epoch, self)
-
-            if has_validation and (epoch + 1) % validate_every == 0:
-                med = self.validation_median_rank()
-                if med < best:
-                    best = med
-                    self.best_validation_median_rank = med
-                    th.save(self.module.state_dict(), self.model_filepath)
-                logger.debug(f"Epoch {epoch + 1}: train loss {loss.item():.4f}, "
-                             f"validation median rank {med}")
-
-        if not has_validation or best == float("inf"):
-            th.save(self.module.state_dict(), self.model_filepath)
+        if self.training_regime is None:
+            self._attach_default_regimes()
+        return super().train(epochs, validate_every=validate_every,
+                             epoch_callback=epoch_callback)
 
     def _has_validation_subsumptions(self):
         if self.dataset.validation is None:
@@ -492,35 +341,11 @@ class ELKEm(EmbeddingELModel):
     def _rank_subsumptions(self, pairs, chunk_budget=2_000_000):
         """Average-tie ranks of the superclasses of ``pairs`` (rows ``[C, D]``) among all
         named classes except :math:`\\top` and the query, by ascending :math:`\\ell^0`."""
-        top = set(self._top_ids)
-        candidates = th.tensor([i for i in self.named_class_index_dict.values()
-                                if i not in top], dtype=th.long, device=self.device)
-        cand_set = set(candidates.tolist())
-        pairs = pairs[[d in cand_set for d in pairs[:, 1].tolist()]]
-        n = len(candidates)
-        step = max(1, chunk_budget // max(n, 1))
-        ranks = []
-        was_training = self.module.training
-        self.module.eval()
-        with th.no_grad():
-            for start in range(0, len(pairs), step):
-                chunk = pairs[start:start + step].to(self.device)
-                q = len(chunk)
-                grid = th.stack([chunk[:, 0].repeat_interleave(n), candidates.repeat(q)], dim=1)
-                losses = self.module.zero_margin_loss(grid, "gci0").view(q, n)
-                target = self.module.zero_margin_loss(chunk, "gci0").unsqueeze(1)
-                others = (candidates.unsqueeze(0) != chunk[:, :1]) & \
-                    (candidates.unsqueeze(0) != chunk[:, 1:2])
-                below = ((losses < target) & others).sum(dim=1)
-                ties = ((losses == target) & others).sum(dim=1)
-                ranks.append(1 + below.double() + ties.double() / 2)
-        self.module.train(was_training)
-        return th.cat(ranks) if ranks else th.empty(0, dtype=th.double)
+        return T._rank_subsumptions(self, pairs, chunk_budget)
 
     def validation_median_rank(self):
         """Median rank of the validation subsumptions (unfiltered, average-tie ranks)."""
-        ranks = self._rank_subsumptions(self.validation_datasets["gci0"][:])
-        return float(ranks.median()) if len(ranks) else float("inf")
+        return T.subsumption_median_rank(self)
 
     # ------------------------------------------------------------------ scoring
 
@@ -532,7 +357,7 @@ class ELKEm(EmbeddingELModel):
         with th.no_grad():
             loss = super().score(axiom)
         self.module.train(was_training)
-        return th.exp(-loss)
+        return exp_negative_score(loss)
 
     @property
     def class_embeddings(self):
@@ -540,7 +365,7 @@ class ELKEm(EmbeddingELModel):
         idx = th.arange(len(self.class_index_dict), device=self.device)
         with th.no_grad():
             lower, upper = self.module.class_box(idx)
-        boxes = th.cat([lower, upper], dim=1).cpu().numpy()
+        boxes = concatenated_rows([lower, upper])
         return dict(zip(self.class_index_dict.keys(), boxes))
 
     @property
@@ -548,7 +373,7 @@ class ELKEm(EmbeddingELModel):
         """Roles as ``{iri: concat(range_l, range_u, error_l, error_u, slope, shift)}``."""
         idx = th.arange(len(self.object_property_index_dict), device=self.device)
         with th.no_grad():
-            parts = th.cat(self.module.role(idx), dim=1).cpu().numpy()
+            parts = concatenated_rows(self.module.role(idx))
         return dict(zip(self.object_property_index_dict.keys(), parts))
 
     @property

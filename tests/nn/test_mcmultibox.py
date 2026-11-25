@@ -2,7 +2,7 @@
 import pytest
 import torch as th
 
-import mowl.nn.el.mcmultibox.volume as V
+import mowl.baselines.nn.el.mcmultibox.volume as V
 from mowl.nn.el.mcmultibox.module import VolumeMultiBoxELModule
 
 
@@ -323,3 +323,103 @@ def test_same_seed_same_module():
     a = VolumeMultiBoxELModule(5, 2, embed_dim=3, num_boxes=2, num_points=64, seed=5)
     b = VolumeMultiBoxELModule(5, 2, embed_dim=3, num_boxes=2, num_points=64, seed=5)
     assert th.equal(a.class_embed, b.class_embed) and th.equal(a.points, b.points)
+
+
+_FORM_ROWS = {"gci0": (0, 0), "gci1": (0, 0, 0), "gci2": (0, 1, 0), "gci3": (1, 0, 0),
+              "role_inclusion": (1, 1), "role_chain": (1, 1, 1)}
+
+
+def _random_rows(form, n_classes, n_rels, count, gen):
+    kinds = _FORM_ROWS[form]
+    return th.stack([th.randint(n_rels if k else n_classes, (count,), generator=gen)
+                     for k in kinds], 1)
+
+
+@pytest.mark.parametrize("form", sorted(_FORM_ROWS))
+def test_row_chunks_give_the_numbers_and_gradients_of_the_whole_batch(form):
+    """The axioms of a batch are processed a few at a time (bounded memory); losses and
+    gradients are those of the whole batch at once."""
+    whole = make_module(n_classes=6, n_rels=3, points=300, point_chunk_size=128, seed=5,
+                        temperature=0.5, max_chunk_elements=None)
+    chunked = make_module(n_classes=6, n_rels=3, points=300, point_chunk_size=128, seed=5,
+                          temperature=0.5, max_chunk_elements=128 * 2 * 4 * 3)
+    assert chunked.rows_per_chunk("concept") == 6 and chunked.rows_per_chunk("role") == 3
+    assert whole.rows_per_chunk() is None
+    data = _random_rows(form, 6, 3, 17, th.Generator().manual_seed(1))
+    a, b = whole(data, form), chunked(data, form)
+    assert a.shape == b.shape == (17, 1)
+    assert th.allclose(a, b, atol=1e-6, rtol=0)
+    a.sum().backward()
+    b.sum().backward()
+    for p, q in ((whole.class_embed, chunked.class_embed), (whole.rel_embed, chunked.rel_embed)):
+        assert (p.grad is None) == (q.grad is None)
+        if p.grad is not None:
+            assert p.grad.abs().sum() > 0
+            assert th.allclose(p.grad, q.grad, atol=1e-6, rtol=0)
+
+
+def test_row_chunk_size_follows_the_element_budget():
+    m = VolumeMultiBoxELModule(10, 2, embed_dim=5, num_boxes=5, num_points=20000)
+    # 2**25 elements / (2048 points x 5 boxes x 5 coordinates) = 655 axioms per chunk
+    assert m.rows_per_chunk("concept") == 655 and m.rows_per_chunk("role") == 327
+    small = VolumeMultiBoxELModule(10, 2, embed_dim=5, num_boxes=5, num_points=100)
+    assert small.rows_per_chunk("concept") == 2 ** 25 // (100 * 25)
+
+
+# ------------------------------------------------------------------------- ranking
+def old_ranking(module, data, gci_name, chunk=1024):
+    """The ranking distance as it was computed: the training loss row by row."""
+    fn = module.get_loss_function(gci_name)
+    with th.no_grad():
+        return th.cat([fn(data[i:i + chunk]) for i in range(0, len(data), chunk)])
+
+
+@pytest.mark.parametrize("gci_name", ["gci2", "gci3"])
+def test_ranking_distance_equals_the_row_by_row_loss(gci_name):
+    th.manual_seed(0)
+    m = make_module(n_classes=9, n_rels=3, d=3, n=2, points=700, temperature=0.5,
+                    point_chunk_size=256, max_chunk_elements=2 ** 12)
+    query = th.randint(0, 9, (1,))
+    rel = th.randint(0, 3, (1,))
+    cands = th.arange(9)
+    if gci_name == "gci2":
+        data = th.stack([query.expand(9), rel.expand(9), cands], dim=1)
+    else:
+        data = th.stack([rel.expand(9), query.expand(9), cands], dim=1)
+    # a head-ranking batch too (varying first operand) and repeated rows
+    other = th.stack([cands, rel.expand(9), query.expand(9)], dim=1) if gci_name == "gci2" \
+        else th.stack([rel.expand(9), cands, query.expand(9)], dim=1)
+    data = th.cat([data, other, data[:3]])
+    got = m.distance(data, gci_name)
+    assert th.allclose(got, old_ranking(m, data, gci_name).reshape(-1, 1), atol=1e-6,
+                       rtol=1e-5)
+    assert got.shape == (len(data), 1)
+
+
+def test_ranking_computes_each_distinct_operand_once(monkeypatch):
+    import mowl.representation.library.multibox_parts as P
+    m = make_module(n_classes=40, n_rels=2, d=2, n=2, points=512, point_chunk_size=128)
+    calls = []
+    original = P.box_membership
+
+    def counting(p, c, o, *args, **kwargs):
+        calls.append(len(c))
+        return original(p, c, o, *args, **kwargs)
+
+    monkeypatch.setattr(P, "box_membership", counting)
+    data = th.stack([th.zeros(40, dtype=th.long), th.zeros(40, dtype=th.long),
+                     th.arange(40)], dim=1)
+    m.distance(data, "gci2")
+    # per point chunk (4): the one distinct source class once, and the domain boxes of the one
+    # distinct relation once (not 40 times each)
+    assert sum(calls) == 8
+
+
+@pytest.mark.parametrize("gci_name", ["gci0", "gci1", "gci2", "gci3"])
+def test_distance_is_a_column_for_every_form(gci_name):
+    m = make_module(n_classes=6, n_rels=2, d=2, n=2, points=64)
+    width = 2 if gci_name == "gci0" else 3
+    data = th.randint(0, 2, (5, width))
+    assert m.distance(data, gci_name).shape == (5, 1)
+    m.per_axiom_column = False
+    assert m.distance(data, gci_name).shape == (5,)

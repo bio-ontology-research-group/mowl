@@ -1,4 +1,4 @@
-"""Unit tests for mowl.nn.el.pointloss and exact T3 point scoring."""
+"""Point scoring of MultiBoxEL and MultiELBE against the direct point losses, and exact T3 point scoring."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +14,7 @@ from mowl.datasets.el.points import PointSupervision
 from mowl.geometric.completion import CanonicalModel
 from mowl.models import MultiBoxEL, MultiELBE
 from mowl.nn import MultiBoxELModule, MultiELBEModule
-from mowl.nn.el.pointloss import (
+from mowl.baselines.nn.el.multiboxel.pointloss import (
     membership_bce,
     soft_box_membership,
     union_membership,

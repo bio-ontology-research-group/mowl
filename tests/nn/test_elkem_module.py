@@ -13,7 +13,7 @@ from unittest import TestCase
 
 import torch as th
 
-import mowl.nn.el.elkem.losses as L
+import mowl.baselines.nn.el.elkem.losses as L
 from mowl.nn.el.elkem.module import ELKEmModule
 
 EPS = 1e-5
@@ -446,3 +446,34 @@ class TestModuleLosses(TestCase):
         # opposite directions (s_ext = 0) and identical points (s_geo = 1) -> loss 1
         feats = th.tensor([[1.0, 0.0], [-1.0, 0.0]])
         self.assertAlmostEqual(L.lexical_loss(th.zeros(2, 2), feats, 1.0).item(), 1.0)
+
+
+class TestTrivialDisjointnessAndShape(TestCase):
+
+    def build(self, variant="paper"):
+        th.manual_seed(0)
+        m = ELKEmModule(6, 1, 2, embed_dim=3, margin=0.1, bot_ids=[0], top_ids=[1],
+                        variant=variant)
+        m.train()
+        return m
+
+    def test_bottom_and_top_disjointness_is_free(self):
+        rows = th.tensor([[0, 1], [1, 0], [0, 2], [2, 3]])
+        m = self.build()
+        loss = m.gci1_bot_loss(rows).reshape(-1)
+        self.assertTrue(th.equal(loss[:3], th.zeros(3)))
+        self.assertGreaterEqual(float(loss[3]), 0.0)
+        gb = th.tensor([[0, 0], [0, 2]])
+        self.assertTrue(th.equal(m.gci3_bot_loss(gb).reshape(-1)[:1], th.zeros(1)))
+        # the reference variant keeps the primitive's value (the margin)
+        ref = self.build("reference")
+        self.assertAlmostEqual(float(ref.gci1_bot_loss(rows)[0]), 0.1, places=5)
+        self.assertAlmostEqual(float(ref.gci1_bot_loss(rows)[1]), 0.1, places=5)
+
+    def test_zero_margin_loss_is_a_column(self):
+        m = self.build()
+        rows = th.tensor([[2, 3], [3, 4]])
+        for name in ("gci0", "gci1_bot"):
+            self.assertEqual(m.zero_margin_loss(rows, name).shape, (2, 1))
+        m.per_axiom_column = False
+        self.assertEqual(m.zero_margin_loss(rows, "gci0").shape, (2,))

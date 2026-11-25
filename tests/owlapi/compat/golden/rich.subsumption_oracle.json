@@ -1,0 +1,505 @@
+{
+ "owlapi": "4.5.29",
+ "value": [
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Adult and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#BusyParent",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Adult and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#BusyParent",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Adult and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Cat",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Adult and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Cat",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "http://mowl.borg/compat/rich#Childless",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Adult and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Childless",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Adult and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Childless",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Adult and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Dog",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Adult",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Adult and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Dog",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#BusyParent and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Adult",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#BusyParent and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Adult",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#BusyParent and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Cat",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#BusyParent and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Cat",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#BusyParent and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Childless",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#BusyParent and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Childless",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#BusyParent and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Dog",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#BusyParent",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#BusyParent and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Dog",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Cat and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Adult",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Cat and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Adult",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Cat and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#BusyParent",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Cat and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#BusyParent",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Cat and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Childless",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Cat and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Childless",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Cat and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Dog",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Cat",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Cat and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Dog",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Childless and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Adult",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Childless and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Adult",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Childless and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#BusyParent",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Childless and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#BusyParent",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Childless and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Cat",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Childless and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Cat",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Childless and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Dog",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Childless",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Dog",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Childless and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Dog",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Dog and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Adult",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Adult",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Dog and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Adult",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Dog and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#BusyParent",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#BusyParent",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Dog and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#BusyParent",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "http://mowl.borg/compat/rich#Cat",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Dog and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Cat",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Cat",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Dog and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Cat",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Dog and some http://mowl.borg/compat/rich#hasAncestor http://mowl.borg/compat/rich#Childless",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/rich#Dog",
+   "some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Childless",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/rich#Dog and some http://mowl.borg/compat/rich#hasChild http://mowl.borg/compat/rich#Childless",
+   "",
+   "True"
+  ]
+ ]
+}

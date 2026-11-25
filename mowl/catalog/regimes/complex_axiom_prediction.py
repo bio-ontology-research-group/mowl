@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import YANG2025
 
 REGIME = RegimeCard(
     key='complex-axiom-prediction',
+    assumption="closed world over stated axioms",
     task="subsumption-prediction",
     target="inductive prediction",
     name='Prediction of complex subsumptions (TransBox)',

@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import MASHKOVA2026
 
 REGIME = RegimeCard(
     key='draw-negatives-once',
+    assumption="closed world over stated axioms",
     name='Negatives drawn once and reused',
     kind=RegimeKind.TRAINING,
     summary=('Wraps a negative sampler and keeps its first draw per normal form for all '

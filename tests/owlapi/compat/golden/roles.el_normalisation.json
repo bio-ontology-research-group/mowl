@@ -1,0 +1,75 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "auxiliary_classes": 0,
+  "class_assertion": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci0": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci0_bot": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci1": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci1_bot": {
+   "named": [
+    [
+     "http://mowl.borg/geo#C",
+     "http://mowl.borg/geo#E",
+     "http://www.w3.org/2002/07/owl#Nothing"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci2": {
+   "named": [
+    [
+     "http://mowl.borg/geo#A",
+     "http://mowl.borg/geo#r",
+     "http://mowl.borg/geo#B"
+    ],
+    [
+     "http://mowl.borg/geo#B",
+     "http://mowl.borg/geo#r",
+     "http://mowl.borg/geo#B"
+    ],
+    [
+     "http://mowl.borg/geo#E",
+     "http://mowl.borg/geo#r",
+     "http://mowl.borg/geo#B"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci3": {
+   "named": [
+    [
+     "http://mowl.borg/geo#s",
+     "http://mowl.borg/geo#B",
+     "http://mowl.borg/geo#C"
+    ],
+    [
+     "http://mowl.borg/geo#t",
+     "http://mowl.borg/geo#B",
+     "http://mowl.borg/geo#D"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci3_bot": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "object_property_assertion": {
+   "named": [],
+   "with_auxiliary": 0
+  }
+ }
+}

@@ -16,9 +16,11 @@ from mowl.datasets import PathDataset
 from mowl.geometric.completion import CanonicalModel
 from mowl.models import MultiBoxEL
 from mowl.nn import MultiBoxELModule
-import mowl.nn.el.multiboxel.losses as L
+import mowl.baselines.nn.el.multiboxel.losses as L
 from mowl.nn.el.structural import (
     build_structural_tables,
+)
+from mowl.baselines.nn.el.multiboxel.structural_losses import (
     nonempty_measure,
     pair_size,
     region_size,
@@ -31,6 +33,12 @@ from tests.geometric.helpers import (
     _triple_nonempty,
     fixture_path,
 )
+
+
+def _close(a: th.Tensor, b: th.Tensor) -> bool:
+    """The module is a combination of parts: the same number up to the rounding of other
+    operations (the direct implementation, in tests/baselines, is bitwise equal)."""
+    return th.allclose(a, b, atol=1e-6, rtol=1e-5)
 
 
 def test_structural_train_builds_tables_and_masks(tmp_path: Path) -> None:
@@ -97,8 +105,8 @@ def test_axiom_objective_unchanged() -> None:
     for is_train in (True, False):
         mod.train(is_train)
 
-        assert th.equal(
-            mod.gci0_loss(gci0_rows),
+        assert _close(
+            mod.gci0_loss(gci0_rows).reshape(-1),
             L.gci0_loss(
                 gci0_rows,
                 mod.class_center,
@@ -109,8 +117,8 @@ def test_axiom_objective_unchanged() -> None:
                 tau=mod.tau,
             ),
         )
-        assert th.equal(
-            mod.gci0_bot_loss(gci0_bot_rows),
+        assert _close(
+            mod.gci0_bot_loss(gci0_bot_rows).reshape(-1),
             L.gci0_bot_loss(
                 gci0_bot_rows,
                 mod.class_offset,
@@ -119,8 +127,8 @@ def test_axiom_objective_unchanged() -> None:
                 tau=mod.tau,
             ),
         )
-        assert th.equal(
-            mod.gci1_loss(gci1_rows),
+        assert _close(
+            mod.gci1_loss(gci1_rows).reshape(-1),
             L.gci1_loss(
                 gci1_rows,
                 mod.class_center,
@@ -131,8 +139,8 @@ def test_axiom_objective_unchanged() -> None:
                 tau=mod.tau,
             ),
         )
-        assert th.equal(
-            mod.gci1_bot_loss(gci1_bot_rows),
+        assert _close(
+            mod.gci1_bot_loss(gci1_bot_rows).reshape(-1),
             L.gci1_bot_loss(
                 gci1_bot_rows,
                 mod.class_center,
@@ -144,8 +152,8 @@ def test_axiom_objective_unchanged() -> None:
             ),
         )
         for neg in (False, True):
-            assert th.equal(
-                mod.gci2_loss(gci2_rows, neg=neg),
+            assert _close(
+                mod.gci2_loss(gci2_rows, neg=neg).reshape(-1),
                 L.gci2_loss(
                     gci2_rows,
                     mod.class_center,
@@ -163,8 +171,8 @@ def test_axiom_objective_unchanged() -> None:
                     tau=mod.tau,
                 ),
             )
-            assert th.equal(
-                mod.object_property_assertion_loss(opa_rows, neg=neg),
+            assert _close(
+                mod.object_property_assertion_loss(opa_rows, neg=neg).reshape(-1),
                 L.object_property_assertion_loss(
                     opa_rows,
                     mod.ind_center,
@@ -181,8 +189,8 @@ def test_axiom_objective_unchanged() -> None:
                     tau=mod.tau,
                 ),
             )
-        assert th.equal(
-            mod.gci3_loss(gci3_rows),
+        assert _close(
+            mod.gci3_loss(gci3_rows).reshape(-1),
             L.gci3_loss(
                 gci3_rows,
                 mod.class_center,
@@ -198,8 +206,8 @@ def test_axiom_objective_unchanged() -> None:
                 tau=mod.tau,
             ),
         )
-        assert th.equal(
-            mod.gci3_bot_loss(gci3_bot_rows),
+        assert _close(
+            mod.gci3_bot_loss(gci3_bot_rows).reshape(-1),
             L.gci3_bot_loss(
                 gci3_bot_rows,
                 mod.head_offset,
@@ -207,8 +215,8 @@ def test_axiom_objective_unchanged() -> None:
                 tau=mod.tau,
             ),
         )
-        assert th.equal(
-            mod.class_assertion_loss(ca_rows),
+        assert _close(
+            mod.class_assertion_loss(ca_rows).reshape(-1),
             L.class_assertion_loss(
                 ca_rows,
                 mod.ind_center,
@@ -301,7 +309,8 @@ def test_multiboxel_structural_survives_reload_and_narrow_tensor_raises(
             actual = fresh.module(model.training_datasets[name][:], name)
             assert th.equal(actual, expected), f"Mismatch on {name} after from_pretrained"
             actual_fresh_rows = fresh.module(fresh.training_datasets[name][:], name)
-            assert th.equal(actual_fresh_rows.sort().values, expected.sort().values)
+            assert th.equal(actual_fresh_rows.reshape(-1).sort().values,
+                            expected.reshape(-1).sort().values)
         assert th.equal(fresh.module.structural_extra_loss(), pre_extra)
 
     # Too-narrow normal-form tensors must raise ValueError in build_structural_tables

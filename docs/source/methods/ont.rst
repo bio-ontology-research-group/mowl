@@ -3,8 +3,11 @@ OnT (Ontology Transformer)
 
 OnT [yang2025ont]_ extends :doc:`HiT <hit>` from class hierarchies to
 :math:`\mathcal{EL}`. The catalogue key is ``ont``; the model is
-:class:`mowl.models.ont.OnT`, the losses are in :mod:`mowl.nn.lm.ont` and the verbaliser in
-:mod:`mowl.text.verbalise`.
+:class:`mowl.models.ont.OnT`, a combination of parts (the function ``ont`` in
+:mod:`mowl.representation.library.hierarchy_methods`: HiT's class model and measure, a rotation
+per role as the relation model, the existential and conjunction losses of the geometry); the
+module is :class:`mowl.nn.lm.ont.OnTModule` and the verbaliser is in :mod:`mowl.text.verbalise`.
+The earlier direct implementation is kept in :mod:`mowl.baselines.models.ont` as the reference.
 
 Concepts, roles and axioms
 --------------------------
@@ -54,7 +57,7 @@ With the stand-in encoder, so that it runs without ``sentence-transformers``:
 
    from mowl.datasets.builtin import FamilyDataset
    from mowl.models.ont import OnT
-   from mowl.nn.lm.encoders import BagOfWordsEncoder
+   from mowl.representation.library.text_encoders import BagOfWordsEncoder
    from mowl.owlapi import OWLAPIAdapter
 
    dataset = FamilyDataset()

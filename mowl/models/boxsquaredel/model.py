@@ -72,10 +72,3 @@ class BoxSquaredEL(EmbeddingELModel):
         if self.init_boxes is not None:
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict)
-
-    def get_regularization_loss(self):
-        loss = super().get_regularization_loss()
-        if self.init_boxes is not None and self.anchor_weight > 0:
-            loss = loss + self.anchor_weight * self.init_boxes.anchor_loss(self.module)
-        return loss
-

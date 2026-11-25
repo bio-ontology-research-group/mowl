@@ -42,8 +42,9 @@ _T = "tests/models/test_boxlite_model.py::"
 CARD = MethodCard(
     key="boxlite",
     expressivity="DL-Lite_H with ABox",
-    tasks=("subsumption", "role-subsumption", "disjointness", "instance-checking",
-           "role-assertion"),
+    # The implementation scores concept and role assertions (Section 5.2 of the paper);
+    # the TBox is satisfied by construction and is not given a graded score.
+    tasks=("instance-checking", "role-assertion"),
     name="BoxLitE",
     family=Family.GEOMETRIC,
     region="box (convex programme)",

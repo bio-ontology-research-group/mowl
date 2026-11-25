@@ -1,0 +1,27 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "role_chain": [
+   [
+    "http://mowl.borg/compat/el#hasPart",
+    "http://mowl.borg/compat/el#hasPart",
+    "http://mowl.borg/compat/el#hasPart"
+   ],
+   [
+    "http://mowl.borg/compat/el#partOf",
+    "http://mowl.borg/compat/el#partOf",
+    "http://mowl.borg/compat/el#partOf"
+   ]
+  ],
+  "role_inclusion": [
+   [
+    "http://mowl.borg/compat/el#feedsOn",
+    "http://mowl.borg/compat/el#eats"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasDirectPart",
+    "http://mowl.borg/compat/el#hasPart"
+   ]
+  ]
+ }
+}

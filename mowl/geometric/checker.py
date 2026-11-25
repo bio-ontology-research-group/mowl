@@ -1,6 +1,7 @@
 """Exact geometric model checker for :mod:`mowl.geometric` region families.
 
 Semantics and guarantees:
+
 - :class:`GeometricInterpretation`: abstract base class for region assignments
   :math:`\\eta` over a universe :math:`U = \\eta(\\top)` in one of the three
   families ``{"interval", "box", "polyhedral"}``. Maps ``TOP`` to
@@ -17,6 +18,7 @@ Semantics and guarantees:
   (:meth:`ModelChecker.is_strongly_faithful_on_names`).
 
 Decision procedures by family:
+
 - ``"interval"`` (:class:`~mowl.geometric.regions.IntervalUnion` for classes,
   :class:`~mowl.geometric.regions.RectUnion` for roles):
   all normal forms (:class:`NF1`, :class:`NF2`, :class:`NF3`, :class:`NF4`,
@@ -34,6 +36,7 @@ Decision procedures by family:
   :class:`~mowl.geometric.errors.UnsupportedAxiom`.
 - ``"polyhedral"`` (:class:`~mowl.geometric.regions.Face` or H-rep polyhedra
   for classes, :class:`~mowl.geometric.regions.PairHull` for roles):
+
   - :class:`NF1` and :class:`NF2` on :class:`Face` instances of a single
     simplex are decided combinatorially and exactly via ``vertex_ids``
     (:meth:`Face.is_subset`, :meth:`Face.intersection`). When regions are
@@ -75,6 +78,7 @@ Decision procedures by family:
     checks raise :class:`~mowl.geometric.errors.UnsupportedRegion`.
 
 References:
+
 - Gutiérrez-Basulto & Schockaert, KR 2018 (arXiv:1805.10461), Props. 3, 4.
 - Lacerda, Ozaki & Guimarães, TGDK 2(3):2, 2024, Defs. 2, 8, 12, Thms. 13, 16, 18, 25.
 - Leemhuis & Kutz, NeSy 2025 (PMLR 284:303–321), Defs. 1, 3, 6, Props. 4, 5, 8.
@@ -253,6 +257,7 @@ class ModelChecker:
       :class:`~mowl.geometric.errors.UnsupportedAxiom` with message
       ``"box family: role axioms not supported in v1"``.
     - **Polyhedral family** (``family == "polyhedral"``):
+
       - :class:`NF1` and :class:`NF2`: decided combinatorially via ``vertex_ids``
         when the regions are exact :class:`~mowl.geometric.regions.Face`
         objects (`type(reg) is Face`), and by linear programming

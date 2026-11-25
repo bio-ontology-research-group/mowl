@@ -45,12 +45,16 @@ class TestDefaultsUnchanged(TestCase):
             self.assertEqual(m.neg_capable_gcis, frozenset({"gci2", "object_property_assertion"}))
             self.assertFalse(m.all_negative_losses)
 
-    def test_neg_flag_ignored_by_default(self):
+    def test_neg_flag_refused_by_default_and_ignored_with_the_option(self):
         th.manual_seed(0)
         for m in (ELEmModule(N, R, 0), ELBEModule(N, R), BoxSquaredELModule(N, R)):
             for name, cols in (("gci0", "cc"), ("gci1", "ccc"), ("gci3", "rcc")):
                 data = _rows(cols)[:20]
+                with self.assertRaises(NotImplementedError):  # no negative loss: refused
+                    m(data, name, neg=True)
+                m.strict_negatives = False  # the earlier fall-through: the positive loss
                 self.assertTrue(th.equal(m(data, name), m(data, name, neg=True)))
+                m.strict_negatives = True
 
     def test_enabling_is_truthful(self):
         m = ELEmModule(N, R, 0, all_negative_losses=True, epsilon=0.2)

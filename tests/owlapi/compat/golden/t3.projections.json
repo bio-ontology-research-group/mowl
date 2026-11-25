@@ -1,0 +1,104 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "dl2vec": [],
+  "dl2vec_bidirectional": [],
+  "owl2vecstar": [
+   [
+    "http://mowl.borg/geo#A",
+    "http://subclassof",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#A",
+    "http://subclassof",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://subclassof",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://subclassof",
+    "http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://subclassof",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://subclassof",
+    "http://mowl.borg/geo#X3"
+   ]
+  ],
+  "owl2vecstar_literals": [
+   [
+    "http://mowl.borg/geo#A",
+    "http://subclassof",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#A",
+    "http://subclassof",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://subclassof",
+    "http://mowl.borg/geo#X2"
+   ],
+   [
+    "http://mowl.borg/geo#B",
+    "http://subclassof",
+    "http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://subclassof",
+    "http://mowl.borg/geo#X1"
+   ],
+   [
+    "http://mowl.borg/geo#C",
+    "http://subclassof",
+    "http://mowl.borg/geo#X3"
+   ],
+   [
+    "http://mowl.borg/geo#X1",
+    "http://superclassof",
+    "http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#X1",
+    "http://superclassof",
+    "http://mowl.borg/geo#C"
+   ],
+   [
+    "http://mowl.borg/geo#X2",
+    "http://superclassof",
+    "http://mowl.borg/geo#A"
+   ],
+   [
+    "http://mowl.borg/geo#X2",
+    "http://superclassof",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#X3",
+    "http://superclassof",
+    "http://mowl.borg/geo#B"
+   ],
+   [
+    "http://mowl.borg/geo#X3",
+    "http://superclassof",
+    "http://mowl.borg/geo#C"
+   ]
+  ],
+  "taxonomy": [],
+  "taxonomy_bidirectional": [],
+  "taxonomy_rels": []
+ }
+}

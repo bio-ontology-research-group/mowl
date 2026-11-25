@@ -8,7 +8,7 @@ import torch as th
 
 # mowl.datasets first: importing mowl.nn first hits a circular import
 import mowl.datasets  # noqa: F401
-import mowl.nn.el.regd.dissimilarity as D
+import mowl.representation.library.boundary_depth as D
 from mowl.nn.el.regd.module import RegDELBEModule, RegDELEmModule
 
 
@@ -523,3 +523,54 @@ class TestTreeEmbedding(TestCase):
             module = cls(n, 1, None, embed_dim=5, margin=0, gamma2=0.1)
             self.assertEqual(
                 self._train_and_count_violations(module, n, ancestors, steps=2500), 0)
+
+
+class TestSoftplusRadiusConsistency:
+    """With radius="softplus" every form reads the same radius of a class."""
+
+    @staticmethod
+    def _module(**kw):
+        th.manual_seed(0)
+        m = RegDELEmModule(6, 2, 3, embed_dim=4, radius="softplus", margin=0.1, **kw)
+        with th.no_grad():
+            m.class_rad.weight.copy_(th.tensor([[-2.0], [-1.0], [0.5], [1.5], [-0.3], [2.0]]))
+        return m
+
+    def test_bottom_forms_and_assertion_use_softplus(self):
+        m = self._module()
+        sp = th.nn.functional.softplus(m.class_rad.weight)
+        d2 = th.tensor([[0, 1], [4, 2]])
+        d3 = th.tensor([[0, 1, 2], [1, 4, 5]])
+        assert th.allclose(m.gci0_bot_loss(d2), sp[d2[:, 0]])
+        assert th.allclose(m.gci3_bot_loss(d3), sp[d3[:, 1]])
+        ca = th.tensor([[0, 1], [2, 4]])
+        got = m.class_assertion_loss(ca)
+        c = m.ind_embed(ca[:, 0])
+        d = m.class_embed(ca[:, 1])
+        ri = th.abs(m.ind_rad(ca[:, 0]))
+        expect = th.relu(th.linalg.norm(c - d, dim=1, keepdim=True) + ri - sp[ca[:, 1]] - 0.1)
+        assert th.allclose(got, expect)
+
+    def test_gci1_negative_uses_softplus_and_old_option_does_not(self):
+        data = th.tensor([[0, 1, 2], [4, 1, 5]])
+        new = self._module()
+        old = self._module(consistent_radius=False)
+        # the same loss as the positive form (ELEm ignores neg for gci1) in both, which the
+        # earlier fall-through option strict_negatives=False selects
+        new.strict_negatives = old.strict_negatives = False
+        assert th.allclose(new.gci1_loss(data, neg=True), new.gci1_loss(data))
+        assert th.allclose(old.gci1_loss(data), new.gci1_loss(data))
+        assert not th.allclose(old.gci1_loss(data, neg=True), new.gci1_loss(data, neg=True))
+
+    def test_old_option_keeps_absolute_radius_in_bottom_forms(self):
+        old = self._module(consistent_radius=False)
+        d = th.tensor([[0, 1], [4, 2]])
+        assert th.allclose(old.gci0_bot_loss(d), old.class_rad(d[:, 0]))  # raw, as before
+        assert old.consistent_radius is False
+
+    def test_abs_radius_unchanged(self):
+        th.manual_seed(0)
+        m = RegDELEmModule(6, 2, 3, embed_dim=4)
+        assert m.radius == "abs" and m.consistent_radius is True
+        d = th.tensor([[0, 1], [4, 2]])
+        assert th.allclose(m.gci0_bot_loss(d), m.class_rad(d[:, 0]))

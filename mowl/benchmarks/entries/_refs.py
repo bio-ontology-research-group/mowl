@@ -52,3 +52,131 @@ LEEMHUIS2025 = Reference(
     "Leemhuis, M., Kutz, O. (2025). Understanding the Expressive Capabilities of Knowledge "
     "Base Embeddings under Box Semantics. In Proceedings of NeSy 2025, PMLR 284:303-321.",
     "https://proceedings.mlr.press/v284/leemhuis25a.html")
+
+VENDROV2016 = Reference(
+    "vendrov2016",
+    "Vendrov, I., Kiros, R., Fidler, S., Urtasun, R. (2016). Order-Embeddings of Images and "
+    "Language. ICLR 2016.",
+    "https://arxiv.org/abs/1511.06361")
+
+GANEA2018 = Reference(
+    "ganea2018",
+    "Ganea, O.-E., Bécigneul, G., Hofmann, T. (2018). Hyperbolic Entailment Cones for "
+    "Learning Hierarchical Embeddings. ICML 2018.",
+    "https://arxiv.org/abs/1804.01882")
+
+SUZUKI2019 = Reference(
+    "suzuki2019",
+    "Suzuki, R., Takahama, R., Onoda, S. (2019). Hyperbolic Disk Embeddings for Directed "
+    "Acyclic Graphs. ICML 2019.",
+    "https://arxiv.org/abs/1902.04335")
+
+YU2023SHADOW = Reference(
+    "yu2023shadow",
+    "Yu, T., Liu, T. J. B., Tseng, A., De Sa, C. (2024). Shadow Cones: A Generalized "
+    "Framework for Partial Order Embeddings. ICLR 2024.",
+    "https://arxiv.org/abs/2305.15215")
+
+DASGUPTA2020 = Reference(
+    "dasgupta2020",
+    "Dasgupta, S. S., Boratko, M., Zhang, D., Vilnis, L., Li, X. L., McCallum, A. (2020). "
+    "Improving Local Identifiability in Probabilistic Box Embeddings. NeurIPS 2020.",
+    "https://arxiv.org/abs/2010.04831")
+
+ABBOUD2020 = Reference(
+    "abboud2020",
+    "Abboud, R., Ceylan, I. I., Lukasiewicz, T., Salvatori, T. (2020). BoxE: A Box Embedding "
+    "Model for Knowledge Base Completion. NeurIPS 2020.",
+    "https://arxiv.org/abs/2007.06267")
+
+PAVLOVIC2023 = Reference(
+    "pavlovic2023",
+    "Pavlović, A., Sallinger, E. (2023). ExpressivE: A Spatio-Functional Embedding For "
+    "Knowledge Graph Completion. ICLR 2023.",
+    "https://arxiv.org/abs/2206.04192")
+
+WANG2024EIKE = Reference(
+    "wang2024eike",
+    "Wang, K., Qi, G., Chen, J., Huang, Y., Wu, T. (2024). Embedding Ontologies via "
+    "Incorporating Extensional and Intensional Knowledge. arXiv:2402.01677 (IJCAI 2024 / Data "
+    "Intelligence).",
+    "https://arxiv.org/abs/2402.01677")
+
+HUANG2023 = Reference(
+    "huang2023",
+    "Huang, Z., Wang, D., Huang, B., Zhang, C., Shang, J., Liang, Y., Wang, Z., Li, X., "
+    "Faloutsos, C., Sun, Y., Wang, W. (2023). Concept2Box: Joint Geometric Embeddings for "
+    "Learning Two-View Knowledge Graphs. arXiv:2307.01933.",
+    "https://arxiv.org/abs/2307.01933")
+
+LV2018TRANSC = Reference(
+    "lv2018transc",
+    "Lv, X., Hou, L., Li, J., Liu, Z. (2018). Differentiating Concepts and Instances for "
+    "Knowledge Graph Embedding. EMNLP 2018.",
+    "https://arxiv.org/abs/1811.04588")
+
+HAO2019JOIE = Reference(
+    "hao2019joie",
+    "Hao, J., Chen, M., Yu, W., Sun, Y., Wang, W. (2019). Universal Representation Learning of "
+    "Knowledge Bases by Jointly Embedding Instances and Ontological Concepts. KDD 2019.",
+    "https://doi.org/10.1145/3292500.3330838")
+
+
+PAVLOVIC2025 = Reference(
+    "pavlovic2025",
+    "Pavlovic, A., Sallinger, E., Schockaert, S. (2025). Faithful Differentiable Reasoning "
+    "with Reshuffled Region-based Embeddings. In Proceedings of KR 2025, 489-499.",
+    "https://doi.org/10.24963/kr.2025/48")
+
+TERU2020 = Reference(
+    "teru2020",
+    "Teru, K. K., Denis, E. G., Hamilton, W. L. (2020). Inductive Relation Prediction by "
+    "Subgraph Reasoning. ICML 2020.",
+    "https://arxiv.org/abs/1911.06962")
+
+
+REN2020Q2B = Reference(
+    "ren2020q2b",
+    "Ren, H., Hu, W., Leskovec, J. (2020). Query2box: Reasoning over Knowledge Graphs in "
+    "Vector Space using Box Embeddings. ICLR 2020.",
+    "https://arxiv.org/abs/2002.05969")
+
+REN2020BETAE = Reference(
+    "ren2020betae",
+    "Ren, H., Leskovec, J. (2020). Beta Embeddings for Multi-Hop Logical Reasoning in "
+    "Knowledge Graphs. NeurIPS 2020.",
+    "https://arxiv.org/abs/2010.11465")
+
+ZHANG2021CONE = Reference(
+    "zhang2021cone",
+    "Zhang, Z., Wang, J., Chen, J., Ji, S., Wu, F. (2021). ConE: Cone Embeddings for "
+    "Multi-Hop Reasoning over Knowledge Graphs. NeurIPS 2021.",
+    "https://arxiv.org/abs/2110.13715")
+
+HE2024ACONE = Reference(
+    "he2024acone",
+    "He, Y., Hernandez, D., Nayyeri, M., Xiong, B., Zhu, Y., Kharlamov, E., Staab, S. "
+    "(2024). Generating SROI- Ontologies via Knowledge Graph Query Embedding Learning. "
+    "arXiv:2407.09212.",
+    "https://arxiv.org/abs/2407.09212")
+
+
+LACERDA2024FAITHEL = Reference(
+    "lacerda2024faithel",
+    "Lacerda, V., Ozaki, A., Guimarães, R. (2024). FaithEL: Strongly TBox Faithful Knowledge "
+    "Base Embeddings for EL. In Rules and Reasoning (RuleML+RR 2024), LNCS 15183, "
+    "pp. 191-199. Code: https://github.com/victorlacerdab/FaithEL_method.",
+    "https://doi.org/10.1007/978-3-031-72407-7_14")
+
+WU2022 = Reference(
+    "wu2022",
+    "Wu, X., Zhu, X., Zhao, Y., Dai, X. (2022). Differentiable Fuzzy ALC: A Neural-Symbolic "
+    "Representation Language for Symbol Grounding. arXiv:2211.12006.",
+    "https://arxiv.org/abs/2211.12006")
+
+ZHU2024 = Reference(
+    "zhu2024",
+    "Zhu, Y., Potyka, N., Xiong, B., Tran, T.-K., Nayyeri, M., Kharlamov, E., Staab, S. "
+    "(2024). Approximating Probabilistic Inference in Statistical EL with Knowledge Graph "
+    "Embeddings. arXiv:2407.11821.",
+    "https://arxiv.org/abs/2407.11821")

@@ -48,6 +48,29 @@ source or the target with a random vertex, self-adversarial negative weights, an
 :math:`w_r \lVert \mathbf{1} - B \rVert_{\ell_1}` with :math:`w_r` = ``code_reg`` (Section
 4.5), which penalises dropping dimensions and so keeps more of the transitivity bias.
 
+The training is not code of the model but a combination of regimes (:mod:`mowl.training`) that
+the method names; read it, or replace one piece:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import BinaryCodeBox
+   from mowl.training import EdgeCorruption, EpochBatches, SelfAdversarialBCE
+
+   model = BinaryCodeBox(FamilyDataset(), embed_dim=4, num_negs=8, batch_size=4)
+   print([r.key for r in model.training_regime.regimes])
+   # the same method with the plain sum of Eq. (10) instead of the self-adversarial weights
+   parts = [r if not isinstance(r, SelfAdversarialBCE) else SelfAdversarialBCE(False)
+            for r in model.training_regime.regimes]
+   from mowl.training import ComposedRegime
+   model.training_regime = ComposedRegime(*parts)
+   print(len(model.train(epochs=2)))
+
+.. testoutput::
+
+   ['epoch-batches', 'edge-corruption', 'known-row-mask', 'self-adversarial-bce']
+   2
+
 What the paper leaves open and mOWL chooses:
 
 * codes are the sigmoid of free logits (the paper only says :math:`B \in [0, 1]`);
@@ -121,6 +144,35 @@ second).
   codes change which pairs of vertices count as edges, not the intersection behaviour of
   regions, so they do not address it; unions of boxes (MultiBoxEL) do.
 
+Built from parts
+----------------
+
+The model is a combination of parts, defined once in
+:func:`~mowl.representation.library.hierarchy_methods.bcbox`: boxes with codes as the class
+model (:class:`~mowl.representation.library.hierarchy_classes.CodedBoxes`), the smoothed
+volume ratio that reads the codes as the measure
+(:class:`~mowl.representation.library.hierarchy_measures.LogVolumeRatio`), the energy
+:math:`E` as the cost of an edge and :math:`-\log(1 - e^{-E})` as that of a corruption,
+the self-adversarial binary cross entropy of Eq. (10)
+(:func:`~mowl.representation.library.hierarchy_objectives.bce_edge_loss`) and the code lasso as
+the regulariser (``code_reg``). The earlier hand-written module is kept for comparison in
+:mod:`mowl.baselines`.
+
+.. testcode::
+
+    from mowl.datasets.builtin import FamilyDataset
+    from mowl.models.bcbox.model import BinaryCodeBox
+
+    model = BinaryCodeBox(FamilyDataset(), embed_dim=4, variant="gbc", code_reg=0.1)
+    print(model.module.parts["classes"], "/", model.module.parts["measure"])
+    print(len(model.module.regularizers))
+
+.. testoutput::
+    :options: +ELLIPSIS
+
+    ...soft box / smoothed volume ratio
+    1
+
 Example
 -------
 
@@ -147,3 +199,12 @@ Example
 
 Guarantees and limitations are listed on the card ``bcbox`` of the :doc:`method catalogue
 <catalogue>`.
+
+Parts
+-----
+
+The class model :class:`~mowl.representation.library.hierarchy_classes.CodedBoxes` gives the
+trainable codes (``trainable_codes``) and the vector of a class (``vectors``: the two corners
+and, for ``vbc``, the code), and the measure
+:class:`~mowl.representation.library.hierarchy_measures.LogVolumeRatio` turns an energy into
+the probability of an edge (``probability``); the model classes only call them.

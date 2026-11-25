@@ -8,9 +8,9 @@ import torch as th
 
 import mowl.datasets  # noqa: F401  (import order: datasets before nn)
 from mowl.nn.lm import hyperbolic as hb
-from mowl.nn.lm.hit import (HiTModule, centripetal_loss, clustering_loss, hierarchy_loss,
+from mowl.baselines.nn.lm.hit import (HiTModule, centripetal_loss, clustering_loss, hierarchy_loss,
                             subsumption_score)
-from mowl.nn.lm.ont import (OnTModule, RoleTransformation, conjunction_loss,
+from mowl.baselines.nn.lm.ont import (OnTModule, RoleTransformation, conjunction_loss,
                             existential_loss)
 from mowl.nn.lm.encoders import BagOfWordsEncoder, as_encoder
 

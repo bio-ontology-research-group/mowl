@@ -6,6 +6,7 @@ from mowl.catalog.regimes._regime_refs import ZHAPA2023
 REGIMES = (
     RegimeCard(
         key="cate-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the CatE code",
         kind=RegimeKind.TRAINING,
         summary=(

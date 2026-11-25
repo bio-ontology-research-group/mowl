@@ -1,30 +1,34 @@
 from mowl.ontology.normalize import ELNormalizer, GCI, is_auxiliary_iri
 from mowl.base_models.model import Model
+from mowl.training.loop import TrainingLoop
+from mowl.training.losses import weighted_mean_loss
+from mowl.training.negatives import corrupt_column_blocks
+from mowl.training.regularization import AnchorPenalty, add_penalties
+from mowl.evaluation.validation import corrupted_pair_error, mean_module_cost
 from mowl.datasets.el import ELDataset
 from mowl.owlapi import OWLAPIAdapter
 from mowl.projection import projector_factory
 import torch as th
-from torch.utils.data import DataLoader, default_collate
-from tqdm import trange
-import warnings
+from torch.utils.data import DataLoader
 
 from deprecated.sphinx import versionadded, versionchanged
 
-from org.semanticweb.owlapi.model import OWLClassExpression, OWLClass, OWLObjectSomeValuesFrom, OWLObjectIntersectionOf
+from org.semanticweb.owlapi.model import (OWLClassExpression, OWLClass, OWLObjectSomeValuesFrom,
+                                          OWLObjectIntersectionOf)
 from java.util import HashSet
 
 import numbers
-import numpy as np
-import mowl.error.messages as msg
 import os
+import warnings
 import logging
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
+
 @versionchanged(version="2.0.0", reason="Added the 'load_normalized' parameter.")
-class EmbeddingELModel(Model):
+class EmbeddingELModel(TrainingLoop, Model):
     """Abstract class for :math:`\mathcal{EL}` embedding methods.
 
     :param dataset: mOWL dataset to use for training and evaluation.
@@ -38,7 +42,8 @@ reflected on the :class:`DataLoaders` that will be generated and also the model 
     contain 7 loss functions. If `False`, the model will work with 4 normal forms only, \
 merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type extended: bool, optional
-    :param load_normalized: If `True`, the ontology is assumed to be normalized and GCIs are extracted directly. Defaults to False.
+    :param load_normalized: If `True`, the ontology is assumed to be normalized and GCIs are
+        extracted directly. Defaults to False.
     :type load_normalized: bool, optional
     :param device: The device to use for training. Defaults to "cpu".
     :type device: str, optional
@@ -68,11 +73,15 @@ normalized training axioms is appended to :attr:`class_index_dict` and \
 embedding while the indices of the dataset entities are unchanged. ``dataset.classes`` and \
 ``dataset.evaluation_classes`` are not modified, so auxiliary classes are never ranking \
 candidates, and the ``"classes"`` pool for negative sampling contains named classes only \
-(:attr:`named_class_index_dict`); auxiliary classes do appear in the embedding dictionaries. Axioms of the validation and testing ontologies that mention auxiliary \
+(:attr:`named_class_index_dict`); auxiliary classes do appear in the embedding dictionaries. \
+Axioms of the validation and testing ontologies that mention auxiliary \
 entities of their own cannot be indexed and are skipped (see :class:`~mowl.datasets.el.ELDataset`).
     """
 
-    #: Default per-GCI negative sampling configuration used by :meth:`get_negative_sampling_config`.
+    axiom_scoring = "module"
+
+    #: Default per-GCI negative sampling configuration used by
+    #: :meth:`get_negative_sampling_config`.
     #: Bot GCIs are intentionally excluded — subsumption by bottom has no meaningful negative.
     #: Each entry specifies the entity pool(s) to sample from (``"classes"`` or
     #: ``"individuals"``) and which column(s) of the data tensor to corrupt with random
@@ -80,11 +89,11 @@ entities of their own cannot be indexed and are skipped (see :class:`~mowl.datas
     #: negatives is generated per column); ``index_pool`` may be a single pool name applied
     #: to all columns or a list of pool names, one per column.
     _DEFAULT_NEG_SAMPLING_CONFIG = {
-        "gci0":     {"index_pool": "classes",     "corrupt_column": 1},
-        "gci1":     {"index_pool": "classes",     "corrupt_column": 2},
-        "gci2":     {"index_pool": "classes",     "corrupt_column": 2},
-        "gci3":     {"index_pool": "classes",     "corrupt_column": 2},
-        "class_assertion":           {"index_pool": "classes",     "corrupt_column": 1},
+        "gci0": {"index_pool": "classes", "corrupt_column": 1},
+        "gci1": {"index_pool": "classes", "corrupt_column": 2},
+        "gci2": {"index_pool": "classes", "corrupt_column": 2},
+        "gci3": {"index_pool": "classes", "corrupt_column": 2},
+        "class_assertion": {"index_pool": "classes", "corrupt_column": 1},
         "object_property_assertion": {"index_pool": "individuals", "corrupt_column": 2},
     }
 
@@ -209,7 +218,8 @@ training ontology.
     def eval_gci_name(self, value):
         valid_gci_names = ["gci0", "gci1", "gci2", "gci3"]
         if self._extended:
-            valid_gci_names.extend(["gci0_bot", "gci1_bot", "gci3_bot"])
+            valid_gci_names.extend(["gci0_bot", "gci1_bot", "gci3_bot", "class_assertion",
+                                    "object_property_assertion"])
         if value not in valid_gci_names:
             raise ValueError(f"eval_gci_name must be one of {valid_gci_names}, got '{value}'")
         self._eval_gci_name = value
@@ -362,6 +372,12 @@ of :class:`torch.utils.data.DataLoader`
 
     # ==================== Training Methods ====================
 
+    #: The generic loop of :meth:`train` consults every hook.
+    training_hooks = frozenset((
+        "training_datasets", "negatives", "filter_negatives", "loss", "optimizer",
+        "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss",
+        "regularization", "after_step", "step_loss"))
+
     @property
     def training_regime(self):
         """The :class:`~mowl.training.TrainingRegime` used by :meth:`train`, or ``None`` \
@@ -384,15 +400,19 @@ either way, before they are scored;
         - ``additional_loss(epoch)``, added to the model's own \
 :meth:`additional_training_loss`;
         - ``optimizer()``; ``NotImplemented`` falls back to :meth:`get_optimizer`;
+        - ``on_epoch_end(epoch, losses)`` after the optimisation step of every epoch;
         - ``should_stop(epoch)`` at the end of every epoch, after validation; ``True`` \
 ends training;
         - ``on_train_end()`` once after the last epoch, also after an early stop;
         - ``score_negatives_like_positives``: if ``True``, negatives are scored with the \
 positive form of the loss (``module(neg_data, gci_name)``) before being passed to \
-``loss``, instead of ``module(neg_data, gci_name, neg=True)``.
+``loss``, instead of ``module(neg_data, gci_name, neg=True)``; per axiom type through \
+``scores_negatives_like_positives(gci_name)``, so that a module is asked for a negative loss \
+only where the regime's loss needs one.
 
         Without a regime, :meth:`train` behaves exactly as before regimes existed. Models \
-that override :meth:`train` with a loop of their own may ignore the regime.
+that override :meth:`train` with a loop of their own declare the hooks that loop consults in \
+:attr:`training_hooks`; a regime that changes anything else is refused when assigned.
 
         :rtype: :class:`~mowl.training.TrainingRegime` or None
         """
@@ -401,12 +421,26 @@ that override :meth:`train` with a loop of their own may ignore the regime.
     @training_regime.setter
     def training_regime(self, regime):
         if regime is not None:
-            from mowl.training.regime import TrainingRegime
+            from mowl.training.regime import TrainingRegime, check_compatible
             if not isinstance(regime, TrainingRegime):
                 raise TypeError("training_regime must be a mowl.training.TrainingRegime "
                                 "or None.")
+            check_compatible(regime, self)
             regime.attach(self)
         self._training_regime = regime
+
+    def _attach_default_regimes(self):
+        """The training regimes that belong to the method (``module.default_regimes``: a tuple
+        of functions that make one regime each, or ``None`` when the option that asks for it is
+        off; for example the negatives of the paper or its loss), unless a regime is attached
+        already. A named model calls this once its module exists."""
+        factories = getattr(self.module, "default_regimes", ())
+        if factories and self.training_regime is None:
+            from mowl.training.regime import ComposedRegime
+            regimes = [r for r in (make() for make in factories) if r is not None]
+            if not regimes:
+                return
+            self.training_regime = regimes[0] if len(regimes) == 1 else ComposedRegime(*regimes)
 
     def get_negative_sampling_config(self):
         """Returns the active negative sampling configuration.
@@ -563,20 +597,8 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         data = gci_dataset[:]
         columns, pools = self._resolve_neg_config(gci_name, num_columns=data.shape[1])
 
-        neg_blocks = []
-        for pool, column in zip(pools, columns):
-            all_ids = list(getattr(self, self._NEG_SAMPLING_POOLS[pool]).values())
-
-            idxs_for_negs = np.random.choice(all_ids, size=len(gci_dataset), replace=True)
-            rand_index = th.tensor(idxs_for_negs, dtype=th.long, device=self.device)
-
-            # Build negative data by replacing the specified column
-            neg_block = th.cat([data[:, :column], rand_index.unsqueeze(1)], dim=1)
-            if column + 1 < data.shape[1]:
-                neg_block = th.cat([neg_block, data[:, column + 1:]], dim=1)
-            neg_blocks.append(neg_block)
-
-        return th.cat(neg_blocks, dim=0)
+        id_pools = [list(getattr(self, self._NEG_SAMPLING_POOLS[pool]).values()) for pool in pools]
+        return corrupt_column_blocks(data, columns, id_pools, self.device)
 
     def compute_loss(self, pos_scores, neg_scores=None):
         """Compute loss from positive and negative scores.
@@ -601,10 +623,7 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         :return: Combined loss value
         :rtype: torch.Tensor
         """
-        loss = th.mean(pos_scores)
-        if neg_scores is not None:
-            loss += th.mean(neg_scores)
-        return loss
+        return weighted_mean_loss(pos_scores, neg_scores)
 
     def get_regularization_loss(self):
         """Get regularization loss from the module.
@@ -614,9 +633,35 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         :return: Regularization loss value
         :rtype: torch.Tensor
         """
+        base = 0
         if hasattr(self.module, 'regularization_loss'):
-            return self.module.regularization_loss()
-        return 0
+            base = self.module.regularization_loss()
+        return add_penalties(base, self.default_penalties(), self)
+
+    def default_penalties(self):
+        """Penalties added to the regularisation term of every step: the anchor of the boxes
+        to their initialisation when the model has ``init_boxes`` and ``anchor_weight > 0``
+        (:class:`mowl.training.regularization.AnchorPenalty`)."""
+        return AnchorPenalty.of(self)
+
+    def step_regularization_loss(self):
+        """The regularisation term of one optimisation step: :meth:`get_regularization_loss`
+        unless the :attr:`training_regime` replaces or extends it
+        (:class:`mowl.training.Regularization`). Training loops call this."""
+        reg = self.get_regularization_loss()
+        regime = self.training_regime
+        if regime is not None:
+            out = regime.regularization(reg)
+            if out is not NotImplemented:
+                reg = out
+        return reg
+
+    def after_optimizer_step(self):
+        """Called by training loops after every optimisation step; lets the
+        :attr:`training_regime` project the parameters."""
+        regime = self.training_regime
+        if regime is not None:
+            regime.after_step()
 
     def get_optimizer(self):
         """Create and return the optimizer.
@@ -728,110 +773,65 @@ that override :meth:`train` with a loop of their own may ignore the regime.
             num_columns = data.shape[1] if data is not None and data.dim() == 2 else None
             self._resolve_neg_config(gci_name, num_columns=num_columns, require_pool=False)
 
-        # Training regime (None by default: every hook below falls back to the model)
-        regime = self.training_regime
-        training_datasets = self.training_datasets
-        if regime is not None:
-            training_datasets = regime.training_datasets(training_datasets)
+        # The loop is the one of mowl.training.loop, counted by epochs (see loop_style)
+        self._best_validation_loss = float('inf')
+        return self.run_training(epochs, validate_every=validate_every,
+                                 epoch_callback=epoch_callback)
 
-        # Log dataset sizes
-        points_per_dataset = {k: len(v) for k, v in training_datasets.items()}
+    #: An epoch is one optimisation step; the model validates itself (:meth:`validate_epoch`).
+    loop_style = "epochs"
+
+    def score_rows(self, form, rows, neg=False):
+        """The per-row loss of ``rows`` of the normal form ``form``; ``neg=True`` for
+        corruptions, scored with the negative loss of the module."""
+        return self.module(rows, form, neg=True) if neg else self.module(rows, form)
+
+    def combine_scores(self, form, pos_scores, neg_scores=None):
+        """The loss of a normal form when no regime decides it: :meth:`compute_loss`."""
+        return self.compute_loss(pos_scores, neg_scores)
+
+    def log_training_datasets(self, datasets):
         string = "Training datasets: \n"
-        for k, v in points_per_dataset.items():
-            string += f"\t{k}: {v}\n"
+        for k, v in datasets.items():
+            string += f"\t{k}: {len(v)}\n"
         logger.info(string)
 
-        optimizer = NotImplemented
-        if regime is not None:
-            optimizer = regime.optimizer()
-        if optimizer is NotImplemented:
-            optimizer = self.get_optimizer()
-        best_loss = float('inf')
+    #: What the built-in validation keeps the best state by. ``"separation"`` (default): how
+    #: often a validation axiom of ``eval_gci_name`` scores no better than a corruption of
+    #: it (:func:`~mowl.evaluation.validation.corrupted_pair_error`). ``"loss"``: the mean
+    #: loss of the validation axioms alone, the rule of mOWL 2.1.0; a module that scores
+    #: every axiom as satisfied before it has learned anything (boxes that all overlap)
+    #: has its best value at the first epoch, and the training is thrown away.
+    validation_criterion = "separation"
 
-        for epoch in trange(epochs):
+    def validate_epoch(self, epoch: int, loss):
+        """Validation after an epoch on the validation axioms of ``eval_gci_name``; the best
+        state by :attr:`validation_criterion` is saved to ``model_filepath``."""
+        if self.dataset.validation is None:
+            print(f'Epoch {epoch + 1}: Train loss: {loss}')
+            return
+        if self._eval_gci_name is None:
+            raise ValueError(
+                "eval_gci_name must be set before training with validation. "
+                "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
+            )
+        gci_data = self.validation_datasets[self._eval_gci_name][:]
+        valid_loss = mean_module_cost(self.module, gci_data, self._eval_gci_name)
+        if self.validation_criterion == "loss":
+            value, shown = valid_loss, ""
+        elif self.validation_criterion == "separation":
+            candidates = sorted(self.named_class_index_dict.values())
+            value = corrupted_pair_error(self.module, gci_data, self._eval_gci_name, candidates)
+            shown = f" Valid pair error: {value}"
             self.module.train()
-            self.on_epoch_start(epoch, epochs)
-            if regime is not None:
-                regime.on_epoch_start(epoch, epochs)
-
-            train_loss = 0
-            loss = th.tensor(0.0, device=self.device)
-
-            for gci_name, gci_dataset in training_datasets.items():
-                if len(gci_dataset) == 0:
-                    continue
-
-                # Compute positive loss
-                pos_scores = self.module(gci_dataset[:], gci_name)
-
-                # Generate and compute negative loss if applicable
-                neg_data = NotImplemented
-                if regime is not None:
-                    neg_data = regime.negatives(gci_name, gci_dataset)
-                if neg_data is NotImplemented:
-                    neg_data = self.generate_negatives(gci_name, gci_dataset)
-                if regime is not None:
-                    neg_data = regime.filter_negatives(gci_name, gci_dataset, neg_data)
-                neg_scores = None
-                if neg_data is not None:
-                    if regime is not None and regime.score_negatives_like_positives:
-                        neg_scores = self.module(neg_data, gci_name)
-                    else:
-                        neg_scores = self.module(neg_data, gci_name, neg=True)
-
-                gci_loss = NotImplemented
-                if regime is not None:
-                    gci_loss = regime.loss(gci_name, pos_scores, neg_scores)
-                if gci_loss is NotImplemented:
-                    gci_loss = self.compute_loss(pos_scores, neg_scores)
-                loss = loss + gci_loss
-
-            extra_loss = self.additional_training_loss(epoch)
-            if extra_loss is not None:
-                loss = loss + extra_loss
-            if regime is not None:
-                regime_extra_loss = regime.additional_loss(epoch)
-                if regime_extra_loss is not None:
-                    loss = loss + regime_extra_loss
-
-            # Add regularization loss
-            loss = loss + self.get_regularization_loss()
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.detach().item()
-
-            if epoch_callback is not None:
-                epoch_callback(epoch, self)
-
-            # Validation
-            if (epoch + 1) % validate_every == 0:
-                if self.dataset.validation is not None:
-                    if self._eval_gci_name is None:
-                        raise ValueError(
-                            "eval_gci_name must be set before training with validation. "
-                            "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
-                        )
-                    with th.no_grad():
-                        self.module.eval()
-                        valid_loss = 0
-                        gci_data = self.validation_datasets[self._eval_gci_name][:]
-                        vloss = th.mean(self.module(gci_data, self._eval_gci_name))
-                        valid_loss += vloss.detach().item()
-
-                        if valid_loss < best_loss:
-                            best_loss = valid_loss
-                            th.save(self.module.state_dict(), self.model_filepath)
-                    print(f'Epoch {epoch+1}: Train loss: {train_loss} Valid loss: {valid_loss}')
-                else:
-                    print(f'Epoch {epoch+1}: Train loss: {train_loss}')
-
-            if regime is not None and regime.should_stop(epoch):
-                break
-
-        if regime is not None:
-            regime.on_train_end()
+        else:
+            raise ValueError("validation_criterion must be 'separation' or 'loss', got "
+                             f"{self.validation_criterion!r}.")
+        if value < self._best_validation_loss:
+            self._best_validation_loss = value
+            with th.no_grad():
+                th.save(self.module.state_dict(), self.model_filepath)
+        print(f'Epoch {epoch + 1}: Train loss: {loss} Valid loss: {valid_loss}{shown}')
 
     def eval_method(self, data):
         """Evaluation method used for scoring. Override if needed.
@@ -903,9 +903,17 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         return ent_embeds, rel_embeds, ind_embeds
 
     def load_best_model(self):
-        """Load the best model from the model filepath."""
-        self.init_module()
-        self.module.load_state_dict(th.load(self.model_filepath, weights_only=True))
+        """Load the best model from the model filepath.
+
+        The module is built anew, unless the current one has exactly the parameters of
+        the file: a training regime may have given the module a parameter of its own (the
+        subclass translation of the EmEL++ code), which a new module would not have.
+        """
+        state = th.load(self.model_filepath, weights_only=True)
+        current = getattr(self, "module", None)
+        if current is None or set(current.state_dict()) != set(state):
+            self.init_module()
+        self.module.load_state_dict(state)
         self.module.eval()
 
     @versionadded(version="0.2.0")
@@ -921,7 +929,7 @@ that override :meth:`train` with a loop of their own may ignore the regime.
             data_point = th.tensor(data_point, dtype=th.long, device=self.device)
             data_point = data_point.unsqueeze(0)
             return data_point
-        
+
         not_el_error_msg = "This axiom does not belong to the EL description logic specification."
         sub, super_ = axiom.getSubClass(), axiom.getSuperClass()
 
@@ -947,12 +955,12 @@ that override :meth:`train` with a loop of their own may ignore the regime.
                 filler = super_.getFiller()
                 if not isinstance(filler, OWLClass):
                     raise TypeError(not_el_error_msg)
-                
+
                 rel_id = self.dataset.object_property_to_id[rel]
                 filler_id = self.dataset.class_to_id[filler]
                 gci_name = "gci2"
                 gci_data = data_point_to_tensor([sub_id, rel_id, filler_id])
-                
+
         elif isinstance(sub, OWLObjectSomeValuesFrom):
             rel = sub.getProperty()
             filler = sub.getFiller()
@@ -971,9 +979,9 @@ that override :meth:`train` with a loop of their own may ignore the regime.
                     gci_name = "gci3"
             else:
                 gci_name = "gci3"
-            
+
             gci_data = data_point_to_tensor([rel_id, filler_id, super_id])
-            
+
         elif isinstance(sub, OWLObjectIntersectionOf):
             operands = sub.getOperandsAsList()
             if len(operands) != 2:
@@ -999,14 +1007,12 @@ that override :meth:`train` with a loop of their own may ignore the regime.
                 gci_name = "gci1"
 
             gci_data = data_point_to_tensor([left_id, right_id, super_id])
-            
+
         else:
             raise TypeError("This axiom does not belong to EL.")
 
-        
         score = self.module(gci_data, gci_name)
         return score
-
 
     @property
     def class_embeddings(self):
@@ -1020,22 +1026,19 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         rel_embeds = {
             k: v for k, v in zip(self.object_property_index_dict.keys(),
                                  self.module.rel_embed.weight.cpu().detach().numpy())}
-        
+
         return rel_embeds
-        
-    
+
     @property
     def individual_embeddings(self):
         if self.module.ind_embed is None:
             return dict()
-        
+
         ind_embeds = {
             k: v for k, v in zip(self.individual_index_dict.keys(),
                                  self.module.ind_embed.weight.cpu().detach().numpy())}
-        
-        return ind_embeds
-        
 
+        return ind_embeds
 
     def add_axioms(self, *axioms):
         """Add axioms to the ontology and make them available for further training."""
@@ -1043,7 +1046,10 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         additions = {axiom for axiom in axioms if not ontology.containsAxiom(axiom)}
         if not additions:
             return
-        if not self._supports_axiom_updates:
+        # (a model whose objective is not the axioms' own, "structural" or "points", trains on
+        # tables compiled from the ontology it was built with)
+        reading = getattr(self, "objective", None)
+        if not self._supports_axiom_updates or (isinstance(reading, str) and reading != "axiom"):
             raise NotImplementedError(
                 f"{type(self).__name__} uses structures built from its training ontology. "
                 "Create a new model for the updated ontology."
@@ -1083,6 +1089,19 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         if old_indices != new_indices:
             self._resize_module(old_indices, new_indices)
 
+    @staticmethod
+    def _entity_kind_hint(key):
+        """0, 1 or 2 (classes, object properties, individuals) from the name of a parameter,
+        or ``None``; used only when the row counts of two kinds coincide."""
+        head = key.split(".")[0].lower()
+        if "ind" in head:
+            return 2
+        if head.startswith(("rel", "role", "head", "tail")):
+            return 1
+        if "class" in head or "concept" in head:
+            return 0
+        return None
+
     @th.no_grad()
     def _resize_module(self, old_indices, new_indices):
         old_module = self.module
@@ -1101,6 +1120,37 @@ that override :meth:`train` with a loop of their own may ignore the regime.
                 old_ids = th.tensor([old_index[iri] for iri in common], device=source.device, dtype=th.long)
                 new_ids = th.tensor([new_index[iri] for iri in common], device=target.device, dtype=th.long)
                 target.index_copy_(0, new_ids, source.index_select(0, old_ids).to(target))
+        # Tables the module does not list (modules built from parts name theirs after the
+        # parts): a table whose number of rows follows the classes, the object properties or
+        # the individuals is indexed by them.
+        kinds = list(zip(old_indices, new_indices))
+        for key in list(old_state):
+            source, target = old_state[key], new_state.get(key)
+            if target is None or source.dim() == 0 or source.shape == target.shape:
+                continue
+            matches = [k for k, (old_index, new_index) in enumerate(kinds)
+                       if source.shape[0] == len(old_index) and target.shape[0] == len(new_index)
+                       and source.shape[1:] == target.shape[1:]]
+            if len(matches) > 1:
+                hinted = self._entity_kind_hint(key)
+                matches = [k for k in matches if k == hinted]
+            if len(matches) != 1:
+                # (a table over something else that grew with the ontology, such as the
+                # relations of a projection: it keeps its fresh initialisation)
+                warnings.warn(
+                    f"{type(old_module).__name__}: the parameter {key!r} changed its shape "
+                    f"with the added axioms and is not indexed by the classes, object "
+                    f"properties or individuals; it was initialised again.", stacklevel=3)
+                del old_state[key]
+                continue
+            old_index, new_index = kinds[matches[0]]
+            common = old_index.keys() & new_index.keys()
+            old_ids = th.tensor([old_index[iri] for iri in common], device=source.device,
+                                dtype=th.long)
+            new_ids = th.tensor([new_index[iri] for iri in common], device=target.device,
+                                dtype=th.long)
+            target.index_copy_(0, new_ids, source.index_select(0, old_ids).to(target))
+            del old_state[key]
         new_state.update(old_state)
         self.module.load_state_dict(new_state)
         self.module.train(old_module.training)
@@ -1112,18 +1162,14 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         if not os.path.exists(model):
             raise FileNotFoundError("Pretrained model path does not exist")
 
-        #self._model_filepath = model
+        # self._model_filepath = model
 
-        
         self._is_pretrained = True
         if not isinstance(model, str):
             raise TypeError
 
         self.module.load_state_dict(th.load(model, weights_only=True))
-        #self._kge_method = kge_method
-    
-
-
+        # self._kge_method = kge_method
 
     def load_pairwise_eval_data(self):
 
@@ -1134,7 +1180,7 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         head_classes, tail_classes = self.dataset.evaluation_classes
         self._head_entities = head_classes.as_str
         self._tail_entities = tail_classes.as_str
-                        
+
         eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
                                            relations=[eval_property])
 
@@ -1142,7 +1188,6 @@ that override :meth:`train` with a loop of their own may ignore the regime.
         self._testing_set = eval_projector.project(self.dataset.testing)
 
         self._loaded_eval = True
-
 
     @property
     def training_set(self):

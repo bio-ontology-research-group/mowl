@@ -29,6 +29,7 @@ dependencies:
     - sphinx-rtd-theme
     - pytest
     - pytest-faulthandler
+    - cvxpy
     - numpy
     - class-resolver==0.6.1
     - coverage

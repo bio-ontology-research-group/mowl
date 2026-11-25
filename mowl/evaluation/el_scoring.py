@@ -23,10 +23,12 @@ All scorers take rows in mOWL's column layout (``gci0``: ``[C, D]``; ``gci1``:
 ``[a, C]``) and return one score per row, lower is better. Centre-distance scorers are
 registered per module class in :data:`CENTRE_DISTANCE_SCORERS`; to add one for a new
 module, register a function ``f(module, gci_name, rows) -> tensor`` under the module's
-class name.
+qualified class name (``"package.module.Class"``).
 """
 
 import torch as th
+
+from mowl.representation.adapters import qualified_name
 
 
 def loss_scores(model, gci_name, rows):
@@ -189,21 +191,29 @@ def boxel_overlap_scores(module, gci_name, rows):
 
 #: Centre-distance scorers of Jackermeier et al. (WWW 2024, Appendix F), by module class
 #: name. Box2EL uses its bump-vector formulas, ELBE and ELEm the translational ones.
+# Reference formulas by definition: each entry is the published score of one module class.
 CENTRE_DISTANCE_SCORERS = {
-    "BoxSquaredELModule": _box2el_scores,
-    "ELBEModule": _elbe_scores,
-    "ELEmModule": _elem_scores,
-    "TransBoxModule": _transbox_scores,
-    "BoxELModule": boxel_overlap_scores,
+    "mowl.nn.el.boxsquaredel.module.BoxSquaredELModule": _box2el_scores,
+    "mowl.nn.el.elbe.module.ELBEModule": _elbe_scores,
+    # (a combination of parts, not a subclass of ELBEModule)
+    "mowl.nn.el.regd.module.RegDELBEModule": _elbe_scores,
+    "mowl.nn.el.elem.module.ELEmModule": _elem_scores,
+    "mowl.nn.el.transbox.module.TransBoxModule": _transbox_scores,
+    "mowl.nn.el.boxel.module.BoxELModule": boxel_overlap_scores,
 }
+
+
+#: Scorers whose score already treats empty intersections in the way of their own paper.
+_OWN_EMPTY_INTERSECTION_RULE = (_transbox_scores, boxel_overlap_scores)
 
 
 def _scorer_of(model):
     """The scorer registered for the module's class or the nearest base class (EmEL++
     is scored like ELEm, as in the Box2EL code)."""
     for cls in type(getattr(model, "module", None)).__mro__:
-        if cls.__name__ in CENTRE_DISTANCE_SCORERS:
-            return CENTRE_DISTANCE_SCORERS[cls.__name__]
+        scorer = CENTRE_DISTANCE_SCORERS.get(qualified_name(cls))
+        if scorer is not None:
+            return scorer
     return None
 
 
@@ -226,40 +236,20 @@ def centre_distance_scores(model, gci_name, rows):
     return scorer(model.module, gci_name, rows)
 
 
-def _box2el_boxes(module):
-    return module.class_center.weight, module.class_offset.weight.abs()
-
-
-def _elbe_boxes(module):
-    return module.class_embed.weight, module.class_offset.weight.abs()
-
-
-def _elem_boxes(module):
-    centre = module.class_embed.weight
-    return centre, module.class_rad.weight.abs().expand(-1, centre.shape[1])
-
-
-#: ``(centres, half-widths)`` of the class boxes by module class name, for the models
-#: whose :math:`C \\sqcap D \\sqsubseteq E` score depends on whether the boxes of
-#: :math:`C` and :math:`D` intersect. Balls count as boxes, as in the Box2EL code.
-CLASS_BOXES = {
-    "BoxSquaredELModule": _box2el_boxes,
-    "ELBEModule": _elbe_boxes,
-    "ELEmModule": _elem_boxes,
-}
-
-
 def empty_intersection(model, rows):
     """For rows ``[C, D, ...]``: whether the boxes of ``C`` and ``D`` are disjoint (in at
-    least one dimension), or ``None`` if mOWL has no box reader for the module."""
-    reader = None
-    for cls in type(getattr(model, "module", None)).__mro__:
-        if cls.__name__ in CLASS_BOXES:
-            reader = CLASS_BOXES[cls.__name__]
-            break
-    if reader is None:
+    least one dimension), or ``None`` if the classes of the model are not boxes or balls
+    or it has no geometry yet. The regions are those of the geometry of the model
+    (:func:`mowl.representation.geometry_of`); balls count as boxes with the radius as
+    half-width in every dimension, as in the Box2EL code."""
+    from mowl.evaluation.region_access import all_class_regions, centre_and_size
+    try:
+        region, _ = all_class_regions(model, "The empty-intersection rule")
+        centre, half, is_ball = centre_and_size(region, "The empty-intersection rule")
+    except (NotImplementedError, TypeError):
         return None
-    centre, half = reader(model.module)
+    if is_ball:
+        half = half[:, None].expand(-1, centre.shape[1])
     c, d = rows[:, 0], rows[:, 1]
     lower = th.maximum(centre[c] - half[c], centre[d] - half[d])
     upper = th.minimum(centre[c] + half[c], centre[d] + half[d])
@@ -272,11 +262,11 @@ def centre_distance_zero_empty_scores(model, gci_name, rows):
     :math:`C \\sqcap D \\sqsubseteq E`, every candidate gets score 0 when the boxes of
     :math:`C` and :math:`D` do not intersect. All candidates then tie, and the rank of
     the true answer is its position in the candidate list. Models with a scorer that
-    handles empty intersections itself (TransBox masks the empty dimensions) and models
-    without a box reader in :data:`CLASS_BOXES` are scored as by
+    handles empty intersections itself (TransBox masks the empty dimensions; BoxEL's is a
+    volume) and models whose classes are not boxes or balls are scored as by
     :func:`centre_distance_scores`."""
     scores = centre_distance_scores(model, gci_name, rows)
-    if gci_name != "gci1":
+    if gci_name != "gci1" or _scorer_of(model) in _OWN_EMPTY_INTERSECTION_RULE:
         return scores
     empty = empty_intersection(model, rows)
     if empty is None:
@@ -289,7 +279,12 @@ def resolve_scorer(model, scoring):
 
     :param scoring: ``"loss"``, ``"centre_distance"``, ``"centre_distance_zero_empty"``
         (see :func:`centre_distance_zero_empty_scores`), ``"auto"`` (centre distance if a
-        scorer is registered for the module, otherwise loss) or a callable
+        scorer is registered for the module; otherwise what the model declares with its
+        ``axiom_scoring`` attribute, see :mod:`mowl.evaluation.model_scoring`: the loss of
+        its module, its own axiom costs, or a classifier head on its vectors),
+        ``"model"`` (what the model declares, never the centre distance),
+        ``"pair_classifier"`` (a :class:`~mowl.evaluation.model_scoring.PairClassifierHead`
+        on the class vectors, for any model with ``class_embeddings``) or a callable
         ``f(model, gci_name, rows)``.
     :return: The function and the name of the scoring actually used (recorded in results).
     """
@@ -306,5 +301,15 @@ def resolve_scorer(model, scoring):
     if scoring == "auto":
         if has_centre_distance_scorer(model):
             return centre_distance_scores, "centre_distance"
-        return loss_scores, "loss"
+        if getattr(model, "axiom_scoring", None) in (None, "module") \
+                and getattr(model, "module", None) is not None:
+            return loss_scores, "loss"
+        from mowl.evaluation.model_scoring import resolve_model_scorer
+        return resolve_model_scorer(model)
+    if scoring == "model":
+        from mowl.evaluation.model_scoring import resolve_model_scorer
+        return resolve_model_scorer(model)
+    if scoring == "pair_classifier":
+        from mowl.evaluation.model_scoring import pair_classifier_scores
+        return pair_classifier_scores, "pair_classifier"
     raise ValueError(f"Unknown scoring {scoring!r}.")

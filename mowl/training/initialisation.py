@@ -9,6 +9,9 @@ radius (or offset) in one vector and normalises that vector *jointly*: with dime
 :math:`n = 200`) and the centre slightly inside the unit sphere.
 """
 
+import contextlib
+
+import numpy as np
 import torch as th
 
 from mowl.training.regime import TrainingRegime
@@ -30,25 +33,18 @@ def _box_groups(module):
     return groups
 
 
-#: Module class name -> function returning the ``(centre, size)`` embedding pairs that are
-#: normalised together. Base classes count (EmEL++ is an ELEm module).
-JOINT_GROUPS = {
-    "ELEmModule": _ball_groups,
-    "ELBEModule": _box_groups,
-}
-
-#: Module class name -> role embeddings, normalised on their own.
-ROLE_EMBEDDINGS = {
-    "ELEmModule": "rel_embed",
-    "ELBEModule": "rel_embed",
-}
+#: The ``(centre, size)`` embedding pairs of a module that are normalised together, by the
+#: kind the module declares in ``joint_init`` (``"ball"``: ``class_embed`` and ``class_rad``,
+#: ``"box"``: ``class_embed`` and ``class_offset``, and the same for individuals). A module of
+#: another kind declares its own kind here, or the regime takes ``strict=False``. The role
+#: embeddings that are drawn and normalised on their own are the attribute the module names in
+#: ``joint_init_roles``.
+JOINT_GROUPS = {"ball": _ball_groups, "box": _box_groups}
 
 
-def _lookup(table, module):
-    for cls in type(module).__mro__:
-        if cls.__name__ in table:
-            return table[cls.__name__]
-    return None
+def _groups(module):
+    """The pairs the module's declared ``joint_init`` names, or ``None``."""
+    return JOINT_GROUPS.get(getattr(module, "joint_init", None))
 
 
 class JointNormalisedInitialisation(TrainingRegime):
@@ -81,13 +77,14 @@ class JointNormalisedInitialisation(TrainingRegime):
     def attach(self, model):
         super().attach(model)
         module = getattr(model, "module", None)
-        groups = _lookup(JOINT_GROUPS, module)
+        groups = _groups(module)
         if groups is None:
             if not self.strict:
                 return
             raise TypeError(
-                f"{type(module).__name__} has no registered (centre, size) embeddings; "
-                f"register them in mowl.training.initialisation.JOINT_GROUPS.")
+                f"{type(module).__name__} does not declare (centre, size) embeddings to "
+                f"normalise together (its attribute joint_init: one of "
+                f"{sorted(JOINT_GROUPS)}).")
         gen = None
         if self.seed is not None:
             gen = th.Generator(device="cpu").manual_seed(int(self.seed))
@@ -102,7 +99,50 @@ class JointNormalisedInitialisation(TrainingRegime):
                 joint = joint / th.linalg.norm(joint, dim=1, keepdim=True)
                 w_c.copy_(joint[:, :w_c.shape[1]].to(w_c))
                 w_s.copy_(joint[:, w_c.shape[1]:].to(w_s))
-            rel = getattr(module, _lookup(ROLE_EMBEDDINGS, module) or "", None)
+            rel = getattr(module, getattr(module, "joint_init_roles", None) or "", None)
             if rel is not None:
                 w = th.rand(*rel.weight.shape, generator=gen) * 2 - 1
                 rel.weight.copy_((w / th.linalg.norm(w, dim=1, keepdim=True)).to(rel.weight))
+
+
+def extend_embeddings(previous, keys, dim):
+    """The ``(len(keys), dim)`` table whose row for a key in ``previous`` (a dict key ->
+    vector) is the old vector and whose row for a new key is drawn from the standard normal
+    distribution (NumPy's global generator, in the order of ``keys``). Used when axioms are
+    added to a trained model: old entities keep their embedding, new ones start at random."""
+    return np.asarray([previous[key] if key in previous else np.random.normal(size=dim)
+                       for key in keys])
+
+
+def margin_embedding_range(gamma, dim, slack=2.0):
+    """The half-width ``(gamma + slack) / dim`` of the uniform initialisation of the embedding
+    tables of the query embeddings (Query2Box, BetaE, ConE: the reference code initialises
+    every table in ``[-r, r]`` with ``r`` tied to the margin ``gamma`` of the score so that a
+    random point starts inside the margin)."""
+    return (float(gamma) + slack) / dim
+
+
+def redraw_after(build, redraw):
+    """Make something with ``build()``, then run ``redraw()`` from the state the random
+    generator had before ``build``: the initial values ``redraw`` draws are those a module that
+    drew them in a different order (or in a different place) would have drawn under the same
+    seed. Returns what ``build`` returns. The generator is in the state ``redraw`` leaves it in
+    afterwards."""
+    state = th.get_rng_state()
+    result = build()
+    th.set_rng_state(state)
+    redraw()
+    return result
+
+
+@contextlib.contextmanager
+def seeded_scope(seed):
+    """Run a block with the torch generator seeded with ``seed`` and put the generator back as
+    it was afterwards: a deterministic draw (a fixed sample, a probe head) that does not touch
+    the stream of random numbers of the run."""
+    state = th.random.get_rng_state()
+    th.manual_seed(seed)
+    try:
+        yield
+    finally:
+        th.random.set_rng_state(state)

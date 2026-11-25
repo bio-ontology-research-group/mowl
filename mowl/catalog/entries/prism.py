@@ -60,7 +60,7 @@ CARD = MethodCard(
             "normal forms with every satisfiable class and listed conjunction non-empty.",
             "mOWL (original): docs/source/geometric/index.rst, 'Structural objective'",
             condition="zero structural loss, margin 0",
-            verified_in_mowl="tests/nn/test_prism_structural.py::"
+            verified_in_mowl="tests/baselines/test_prism_structural_losses.py::"
                              "test_prism_structural_zero_at_exact_t3"),
     ),
     limitations=(
@@ -68,10 +68,16 @@ CARD = MethodCard(
         "for future work'); the training objective is mOWL's (ELBE-style MSE on support "
         "coordinate losses, or the structural objective).",
         "Under the structural objective, a defined class that is empty only in its box "
-        "part becomes a phantom non-empty box in gci2, gci3 and class_assertion scores, and "
-        "gci3_bot shrinks C itself, which conflicts with the existence term "
-        "(mOWL geometric documentation, 'Prism non-guarantees').",
+        "part is read as empty (gated by non-emptiness, as in MultiBoxEL; "
+        "empty_box_reading='signed', the default). empty_box_reading='absolute' is the "
+        "earlier reading that sees a phantom non-empty box in gci2, gci3, gci3_bot and "
+        "class_assertion. gci3_bot still shrinks the triangle of C, which conflicts with "
+        "the existence term (mOWL geometric documentation, 'Prism non-guarantees').",
         "The objective is non-convex; reaching a zero-loss model is not guaranteed.",
+        "The negative loss of C ⊑ ∃r.D uses the exact triangle overlap test (zero iff the "
+        "translated triangle and that of D overlap); gci2_negative_triangle='inradius' is "
+        "the earlier per-direction test on the inscribed discs. gci3 (∃r.C ⊑ D) only asks "
+        "for overlap, as in ELBE, not inclusion.",
     ),
     intersection_closed=True,
     helly=("3. Derived: the triangle factor consists of convex sets in R^2 (Helly number "

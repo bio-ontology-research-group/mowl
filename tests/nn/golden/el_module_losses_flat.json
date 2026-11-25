@@ -1,0 +1,4228 @@
+{
+"BoxELModule|class_assertion|0": {
+"shape": [
+5
+],
+"values": [
+0.20489,
+0.152351,
+0.249087,
+0.216158,
+0.249104
+]
+},
+"BoxELModule|class_assertion|1": {
+"shape": [
+5
+],
+"values": [
+0.20489,
+0.152351,
+0.249087,
+0.216158,
+0.249104
+]
+},
+"BoxELModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.140735,
+0.150266,
+0.15523,
+0.209204,
+0.215698
+]
+},
+"BoxELModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.140735,
+0.150266,
+0.15523,
+0.209204,
+0.215698
+]
+},
+"BoxELModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+0.140735,
+0.150266,
+0.15523,
+0.209204,
+0.215698
+]
+},
+"BoxELModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.140735,
+0.150266,
+0.15523,
+0.209204,
+0.215698
+]
+},
+"BoxELModule|gci1_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.207953,
+0.191103,
+0.189986,
+0.177688,
+0.189068
+]
+},
+"BoxELModule|gci1_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.207953,
+0.191103,
+0.189986,
+0.177688,
+0.189068
+]
+},
+"BoxELModule|gci1|0": {
+"shape": [
+5
+],
+"values": [
+0.132525,
+0.0,
+0.181053,
+0.142158,
+0.0603573
+]
+},
+"BoxELModule|gci1|1": {
+"shape": [
+5
+],
+"values": [
+0.132525,
+0.0,
+0.181053,
+0.142158,
+0.0603573
+]
+},
+"BoxELModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+0.222621,
+0.243597,
+0.180547,
+0.280801,
+0.290162
+]
+},
+"BoxELModule|gci2|1": {
+"shape": [
+5
+],
+"values": [
+0.777379,
+0.756403,
+0.819453,
+0.719199,
+0.709838
+]
+},
+"BoxELModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.247253,
+0.165684,
+0.219376,
+0.285263,
+0.178356
+]
+},
+"BoxELModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.247253,
+0.165684,
+0.219376,
+0.285263,
+0.178356
+]
+},
+"BoxELModule|gci3|0": {
+"shape": [
+5
+],
+"values": [
+0.247253,
+0.165684,
+0.219376,
+0.285263,
+0.178356
+]
+},
+"BoxELModule|gci3|1": {
+"shape": [
+5
+],
+"values": [
+0.247253,
+0.165684,
+0.219376,
+0.285263,
+0.178356
+]
+},
+"BoxELModule|object_property_assertion|0": {
+"shape": [
+5
+],
+"values": [
+0.204714,
+0.246892,
+0.177892,
+0.232514,
+0.187436
+]
+},
+"BoxELModule|object_property_assertion|1": {
+"shape": [
+5
+],
+"values": [
+0.795286,
+0.753108,
+0.822108,
+0.767486,
+0.812564
+]
+},
+"BoxELModule|role_chain|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.527447,
+0.15073,
+0.241176,
+0.39416,
+0.241176
+]
+},
+"BoxELModule|role_chain|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.527447,
+0.15073,
+0.241176,
+0.39416,
+0.241176
+]
+},
+"BoxELModule|role_inclusion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.310787,
+0.310787,
+0.26102,
+0.310787
+]
+},
+"BoxELModule|role_inclusion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.310787,
+0.310787,
+0.26102,
+0.310787
+]
+},
+"BoxLatticeModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+2.10544,
+0.470684,
+3.06568,
+1.88463,
+3.6551
+]
+},
+"BoxLatticeModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.12987,
+0.979694,
+0.0477429,
+0.164738,
+0.0261981
+]
+},
+"BoxSELModule|class_assertion|0": {
+"shape": [
+5
+],
+"values": [
+0.20489,
+0.152351,
+0.249087,
+0.216158,
+0.249104
+]
+},
+"BoxSELModule|class_assertion|1": {
+"shape": [
+5
+],
+"values": [
+0.20489,
+0.152351,
+0.249087,
+0.216158,
+0.249104
+]
+},
+"BoxSELModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.140735,
+0.150266,
+0.15523,
+0.209204,
+0.215698
+]
+},
+"BoxSELModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.140735,
+0.150266,
+0.15523,
+0.209204,
+0.215698
+]
+},
+"BoxSELModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+0.140735,
+0.150266,
+0.15523,
+0.209204,
+0.215698
+]
+},
+"BoxSELModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.140735,
+0.150266,
+0.15523,
+0.209204,
+0.215698
+]
+},
+"BoxSELModule|gci1_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.207953,
+0.191103,
+0.189986,
+0.177688,
+0.189068
+]
+},
+"BoxSELModule|gci1_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.207953,
+0.191103,
+0.189986,
+0.177688,
+0.189068
+]
+},
+"BoxSELModule|gci1|0": {
+"shape": [
+5
+],
+"values": [
+0.132525,
+0.0,
+0.181053,
+0.142158,
+0.0603573
+]
+},
+"BoxSELModule|gci1|1": {
+"shape": [
+5
+],
+"values": [
+0.132525,
+0.0,
+0.181053,
+0.142158,
+0.0603573
+]
+},
+"BoxSELModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+0.222621,
+0.243597,
+0.180547,
+0.280801,
+0.290162
+]
+},
+"BoxSELModule|gci2|1": {
+"shape": [
+5
+],
+"values": [
+0.777379,
+0.756403,
+0.819453,
+0.719199,
+0.709838
+]
+},
+"BoxSELModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.247253,
+0.165684,
+0.219376,
+0.285263,
+0.178356
+]
+},
+"BoxSELModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.247253,
+0.165684,
+0.219376,
+0.285263,
+0.178356
+]
+},
+"BoxSELModule|gci3|0": {
+"shape": [
+5
+],
+"values": [
+0.247253,
+0.165684,
+0.219376,
+0.285263,
+0.178356
+]
+},
+"BoxSELModule|gci3|1": {
+"shape": [
+5
+],
+"values": [
+0.247253,
+0.165684,
+0.219376,
+0.285263,
+0.178356
+]
+},
+"BoxSELModule|object_property_assertion|0": {
+"shape": [
+5
+],
+"values": [
+0.204714,
+0.246892,
+0.177892,
+0.232514,
+0.187436
+]
+},
+"BoxSELModule|object_property_assertion|1": {
+"shape": [
+5
+],
+"values": [
+0.795286,
+0.753108,
+0.822108,
+0.767486,
+0.812564
+]
+},
+"BoxSELModule|role_chain|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.527447,
+0.15073,
+0.241176,
+0.39416,
+0.241176
+]
+},
+"BoxSELModule|role_chain|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.527447,
+0.15073,
+0.241176,
+0.39416,
+0.241176
+]
+},
+"BoxSELModule|role_inclusion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.310787,
+0.310787,
+0.26102,
+0.310787
+]
+},
+"BoxSELModule|role_inclusion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.310787,
+0.310787,
+0.26102,
+0.310787
+]
+},
+"BoxSquaredELModule|class_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.48021,
+1.40779,
+1.23012,
+1.22699,
+1.61903
+]
+},
+"BoxSquaredELModule|class_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.48021,
+1.40779,
+1.23012,
+1.22699,
+1.61903
+]
+},
+"BoxSquaredELModule|gci0_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"BoxSquaredELModule|gci0_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"BoxSquaredELModule|gci0|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.06129,
+0.750436,
+1.97272,
+2.63784,
+1.68892
+]
+},
+"BoxSquaredELModule|gci0|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.06129,
+0.750436,
+1.97272,
+2.63784,
+1.68892
+]
+},
+"BoxSquaredELModule|gci1_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.0542,
+2.23927,
+1.68721,
+1.4132,
+1.68642
+]
+},
+"BoxSquaredELModule|gci1_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+2.0542,
+2.23927,
+1.68721,
+1.4132,
+1.68642
+]
+},
+"BoxSquaredELModule|gci1|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.88606,
+2.22045e-16,
+2.10458,
+2.81159,
+4.49204
+]
+},
+"BoxSquaredELModule|gci1|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.88606,
+2.22045e-16,
+2.10458,
+2.81159,
+4.49204
+]
+},
+"BoxSquaredELModule|gci2|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.56563,
+2.19813,
+1.95367,
+1.10721,
+1.48703
+]
+},
+"BoxSquaredELModule|gci2|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.74086,
+3.3779,
+3.84899,
+7.77441,
+3.55094
+]
+},
+"BoxSquaredELModule|gci3_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"BoxSquaredELModule|gci3_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"BoxSquaredELModule|gci3|0": {
+"shape": [
+5,
+1
+],
+"values": [
+3.15061,
+0.798429,
+2.39916,
+5.17191,
+0.982394
+]
+},
+"BoxSquaredELModule|gci3|1": {
+"shape": [
+5,
+1
+],
+"values": [
+3.15061,
+0.798429,
+2.39916,
+5.17191,
+0.982394
+]
+},
+"BoxSquaredELModule|object_property_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.31332,
+1.57928,
+2.0342,
+2.10126,
+1.74299
+]
+},
+"BoxSquaredELModule|object_property_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.87566,
+3.74295,
+1.95641,
+1.085,
+4.58649
+]
+},
+"BoxSquaredELModule|role_chain|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.74534,
+0.672418,
+0.881418,
+1.54589,
+0.881418
+]
+},
+"BoxSquaredELModule|role_chain|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.74534,
+0.672418,
+0.881418,
+1.54589,
+0.881418
+]
+},
+"BoxSquaredELModule|role_inclusion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+1.4136,
+1.4136,
+1.54941,
+1.4136
+]
+},
+"BoxSquaredELModule|role_inclusion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+1.4136,
+1.4136,
+1.54941,
+1.4136
+]
+},
+"CanonicalMixtureModule|class_assertion|0": {
+"shape": [
+5
+],
+"values": [
+1.19209e-07,
+1.19209e-07,
+1.19209e-07,
+16.1181,
+16.1181
+]
+},
+"CanonicalMixtureModule|class_assertion|1": {
+"shape": [
+5
+],
+"values": [
+15.9424,
+15.9424,
+15.9424,
+1.19209e-07,
+1.19209e-07
+]
+},
+"CanonicalMixtureModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci1_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+0.0,
+1.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci1_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+0.0,
+1.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci1|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+0.0,
+1.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci1|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+0.0,
+1.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci2|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci3|0": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci3|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|object_property_assertion|0": {
+"shape": [
+5
+],
+"values": [
+16.1181,
+16.1181,
+16.1181,
+16.1181,
+16.1181
+]
+},
+"CanonicalMixtureModule|object_property_assertion|1": {
+"shape": [
+5
+],
+"values": [
+1.19209e-07,
+1.19209e-07,
+1.19209e-07,
+1.19209e-07,
+1.19209e-07
+]
+},
+"Concept2BoxModule|class_assertion|0": {
+"shape": [
+5
+],
+"values": [
+0.214724,
+0.187473,
+0.297911,
+0.307576,
+0.222104
+]
+},
+"Concept2BoxModule|class_assertion|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"Concept2BoxModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+0.996601,
+0.997223,
+0.996854,
+0.995892,
+0.996481
+]
+},
+"Concept2BoxModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+2.8935e-06,
+1.93064e-06,
+2.47802e-06,
+4.22837e-06,
+3.1021e-06
+]
+},
+"Concept2BoxModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+0.996874,
+0.995801,
+0.996376,
+0.996909,
+0.99655
+]
+},
+"Concept2BoxModule|gci2|1": {
+"shape": [
+5
+],
+"values": [
+2.44697e-06,
+4.41718e-06,
+3.29022e-06,
+2.39282e-06,
+2.98048e-06
+]
+},
+"Concept2BoxModule|object_property_assertion|0": {
+"shape": [
+5
+],
+"values": [
+1.76941,
+3.21784,
+2.44595,
+2.5618,
+2.26629
+]
+},
+"Concept2BoxModule|object_property_assertion|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"DiskEmbeddingsModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+0.223844,
+0.16196,
+0.185912,
+0.206234,
+0.273311
+]
+},
+"DiskEmbeddingsModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"EIKEModule|class_assertion|0": {
+"shape": [
+5
+],
+"values": [
+0.478962,
+0.978158,
+1.8446,
+1.09056,
+1.0447
+]
+},
+"EIKEModule|class_assertion|1": {
+"shape": [
+5
+],
+"values": [
+-0.521038,
+-0.0218423,
+0.8446,
+0.090561,
+0.0446993
+]
+},
+"EIKEModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+1.01127,
+1.34037,
+1.82357,
+1.83449,
+2.39665
+]
+},
+"EIKEModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.0112723,
+0.340374,
+0.823573,
+0.83449,
+1.39665
+]
+},
+"EIKEModule|object_property_assertion|0": {
+"shape": [
+5
+],
+"values": [
+2.1551,
+2.40008,
+1.2822,
+0.801961,
+0.947273
+]
+},
+"EIKEModule|object_property_assertion|1": {
+"shape": [
+5
+],
+"values": [
+1.1551,
+1.40008,
+0.282199,
+-0.198039,
+-0.0527271
+]
+},
+"ELBEModule|class_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.13047,
+1.24299,
+1.28341,
+2.1905,
+1.72085
+]
+},
+"ELBEModule|class_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+2.13047,
+1.24299,
+1.28341,
+2.1905,
+1.72085
+]
+},
+"ELBEModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"ELBEModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"ELBEModule|gci0|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.21902,
+1.03343,
+1.58472,
+1.82809,
+1.49843
+]
+},
+"ELBEModule|gci0|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.21902,
+1.03343,
+1.58472,
+1.82809,
+1.49843
+]
+},
+"ELBEModule|gci1_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.65658,
+1.70955,
+1.48797,
+1.38547,
+1.49712
+]
+},
+"ELBEModule|gci1_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.65658,
+1.70955,
+1.48797,
+1.38547,
+1.49712
+]
+},
+"ELBEModule|gci1|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.57415,
+0.223607,
+1.6355,
+1.86289,
+2.31387
+]
+},
+"ELBEModule|gci1|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.57415,
+0.223607,
+1.6355,
+1.86289,
+2.31387
+]
+},
+"ELBEModule|gci2|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.04637,
+1.56201,
+1.69598,
+1.97585,
+2.78616
+]
+},
+"ELBEModule|gci2|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.207475,
+0.311824,
+0.374134,
+0.311177,
+1.56723
+]
+},
+"ELBEModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"ELBEModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"ELBEModule|gci3|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.15613,
+0.406245,
+0.463463,
+0.213955,
+0.554925
+]
+},
+"ELBEModule|gci3|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.15613,
+0.406245,
+0.463463,
+0.213955,
+0.554925
+]
+},
+"ELBEModule|object_property_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.4413,
+2.65173,
+1.88356,
+1.96114,
+2.17303
+]
+},
+"ELBEModule|object_property_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.722625,
+0.880779,
+0.46295,
+0.624218,
+0.536518
+]
+},
+"ELEmModule|class_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.81497,
+0.18148,
+1.33036,
+1.24546,
+1.49346
+]
+},
+"ELEmModule|class_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.81497,
+0.18148,
+1.33036,
+1.24546,
+1.49346
+]
+},
+"ELEmModule|gci0_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+-1.0,
+1.0,
+1.0,
+-1.0
+]
+},
+"ELEmModule|gci0_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+-1.0,
+1.0,
+1.0,
+-1.0
+]
+},
+"ELEmModule|gci0|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.436218,
+0.704452,
+1.03825,
+1.32375,
+1.31959
+]
+},
+"ELEmModule|gci0|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.436218,
+0.704452,
+1.03825,
+1.32375,
+1.31959
+]
+},
+"ELEmModule|gci1_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.56378,
+1.29555,
+0.961751,
+0.676253,
+0.680414
+]
+},
+"ELEmModule|gci1_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.56378,
+1.29555,
+0.961751,
+0.676253,
+0.680414
+]
+},
+"ELEmModule|gci1|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.09465,
+0.0,
+0.971139,
+0.42672,
+0.635067
+]
+},
+"ELEmModule|gci1|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.09465,
+0.0,
+0.971139,
+0.42672,
+0.635067
+]
+},
+"ELEmModule|gci2|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.554,
+1.51632,
+1.76817,
+1.41914,
+1.3272
+]
+},
+"ELEmModule|gci2|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.446007,
+0.483688,
+0.231835,
+0.580869,
+0.67281
+]
+},
+"ELEmModule|gci3_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+-1.0,
+1.0,
+1.0,
+-1.0,
+1.0
+]
+},
+"ELEmModule|gci3_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+-1.0,
+1.0,
+1.0,
+-1.0,
+1.0
+]
+},
+"ELEmModule|gci3|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.182556,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"ELEmModule|gci3|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.182556,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"ELEmModule|object_property_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.72949,
+0.84501,
+2.19336,
+2.19776,
+1.69154
+]
+},
+"ELEmModule|object_property_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.184647,
+0.0,
+0.0,
+0.0
+]
+},
+"ELKEmModule|class_assertion|0": {
+"shape": [
+5
+],
+"values": [
+0.444538,
+0.228483,
+0.514416,
+0.420266,
+0.436694
+]
+},
+"ELKEmModule|class_assertion|1": {
+"shape": [
+5
+],
+"values": [
+0.471753,
+0.687808,
+0.401875,
+0.496024,
+0.479597
+]
+},
+"ELKEmModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.154925,
+0.158677,
+0.16728,
+0.135737,
+0.14603
+]
+},
+"ELKEmModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.154925,
+0.158677,
+0.16728,
+0.135737,
+0.14603
+]
+},
+"ELKEmModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+0.25769,
+0.305558,
+0.404514,
+0.413772,
+0.399583
+]
+},
+"ELKEmModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.25769,
+0.305558,
+0.404514,
+0.413772,
+0.399583
+]
+},
+"ELKEmModule|gci1_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"ELKEmModule|gci1_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"ELKEmModule|gci1|0": {
+"shape": [
+5
+],
+"values": [
+0.147839,
+0.188348,
+0.269955,
+0.342299,
+0.307524
+]
+},
+"ELKEmModule|gci1|1": {
+"shape": [
+5
+],
+"values": [
+0.147839,
+0.188348,
+0.269955,
+0.342299,
+0.307524
+]
+},
+"ELKEmModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+0.704172,
+0.477298,
+0.633998,
+0.37853,
+0.515101
+]
+},
+"ELKEmModule|gci2|1": {
+"shape": [
+5
+],
+"values": [
+0.704172,
+0.477298,
+0.633998,
+0.37853,
+0.515101
+]
+},
+"ELKEmModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"ELKEmModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"ELKEmModule|gci3|0": {
+"shape": [
+5
+],
+"values": [
+0.450718,
+0.283356,
+0.283356,
+0.290527,
+0.328672
+]
+},
+"ELKEmModule|gci3|1": {
+"shape": [
+5
+],
+"values": [
+0.450718,
+0.283356,
+0.283356,
+0.290527,
+0.328672
+]
+},
+"ELKEmModule|object_property_assertion|0": {
+"shape": [
+5
+],
+"values": [
+0.756105,
+0.867508,
+1.05533,
+0.866187,
+0.652891
+]
+},
+"ELKEmModule|object_property_assertion|1": {
+"shape": [
+5
+],
+"values": [
+0.160186,
+0.0487828,
+0.0,
+0.0501034,
+0.263399
+]
+},
+"ELKEmModule|role_chain|0": {
+"shape": [
+5
+],
+"values": [
+1.19489,
+0.892973,
+0.572226,
+1.04296,
+0.572226
+]
+},
+"ELKEmModule|role_chain|1": {
+"shape": [
+5
+],
+"values": [
+1.19489,
+0.892973,
+0.572226,
+1.04296,
+0.572226
+]
+},
+"ELKEmModule|role_inclusion|0": {
+"shape": [
+5
+],
+"values": [
+0.3,
+0.871931,
+0.871931,
+0.855368,
+0.871931
+]
+},
+"ELKEmModule|role_inclusion|1": {
+"shape": [
+5
+],
+"values": [
+0.3,
+0.871931,
+0.871931,
+0.855368,
+0.871931
+]
+},
+"EmELPPModule|class_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.81497,
+0.18148,
+1.33036,
+1.24546,
+1.49346
+]
+},
+"EmELPPModule|class_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.81497,
+0.18148,
+1.33036,
+1.24546,
+1.49346
+]
+},
+"EmELPPModule|gci0_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"EmELPPModule|gci0_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"EmELPPModule|gci0|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.436218,
+0.704452,
+1.03825,
+1.32375,
+1.31959
+]
+},
+"EmELPPModule|gci0|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.436218,
+0.704452,
+1.03825,
+1.32375,
+1.31959
+]
+},
+"EmELPPModule|gci1_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.56378,
+1.29555,
+0.961751,
+0.676253,
+0.680414
+]
+},
+"EmELPPModule|gci1_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.56378,
+1.29555,
+0.961751,
+0.676253,
+0.680414
+]
+},
+"EmELPPModule|gci1|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.09465,
+5.96046e-08,
+0.971139,
+0.42672,
+0.635067
+]
+},
+"EmELPPModule|gci1|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.09465,
+5.96046e-08,
+0.971139,
+0.42672,
+0.635067
+]
+},
+"EmELPPModule|gci2|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.55399,
+1.51631,
+1.76816,
+1.41913,
+1.32719
+]
+},
+"EmELPPModule|gci2|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.446007,
+0.483688,
+0.231835,
+0.580869,
+0.67281
+]
+},
+"EmELPPModule|gci3_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"EmELPPModule|gci3_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"EmELPPModule|gci3|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.182556,
+0.0,
+5.96046e-08,
+1.19209e-07,
+5.96046e-08
+]
+},
+"EmELPPModule|gci3|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.182556,
+0.0,
+5.96046e-08,
+1.19209e-07,
+5.96046e-08
+]
+},
+"EmELPPModule|object_property_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.72948,
+0.845,
+2.19335,
+2.19775,
+1.69153
+]
+},
+"EmELPPModule|object_property_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+5.96046e-08,
+0.184647,
+0.0,
+5.96046e-08,
+5.96046e-08
+]
+},
+"EmELPPModule|role_chain|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.91721,
+1.06474,
+1.06474,
+3.27023,
+1.06474
+]
+},
+"EmELPPModule|role_chain|1": {
+"shape": [
+5,
+1
+],
+"values": [
+2.91721,
+1.06474,
+1.06474,
+3.27023,
+1.06474
+]
+},
+"EmELPPModule|role_inclusion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+1.60437,
+1.60437,
+1.60437,
+1.60437
+]
+},
+"EmELPPModule|role_inclusion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+1.60437,
+1.60437,
+1.60437,
+1.60437
+]
+},
+"EmELVarModule|class_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.81497,
+0.18148,
+1.33036,
+1.24546,
+1.49346
+]
+},
+"EmELVarModule|class_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.81497,
+0.18148,
+1.33036,
+1.24546,
+1.49346
+]
+},
+"EmELVarModule|gci0_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"EmELVarModule|gci0_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"EmELVarModule|gci0|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.436218,
+0.704452,
+1.03825,
+1.32375,
+1.31959
+]
+},
+"EmELVarModule|gci0|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.436218,
+0.704452,
+1.03825,
+1.32375,
+1.31959
+]
+},
+"EmELVarModule|gci1_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.56378,
+1.29555,
+0.961751,
+0.676253,
+0.680414
+]
+},
+"EmELVarModule|gci1_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.56378,
+1.29555,
+0.961751,
+0.676253,
+0.680414
+]
+},
+"EmELVarModule|gci1|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.09465,
+5.96046e-08,
+0.971139,
+0.42672,
+0.635067
+]
+},
+"EmELVarModule|gci1|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.09465,
+5.96046e-08,
+0.971139,
+0.42672,
+0.635067
+]
+},
+"EmELVarModule|gci2|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.55399,
+1.51631,
+1.76816,
+1.41913,
+1.32719
+]
+},
+"EmELVarModule|gci2|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.446007,
+0.483688,
+0.231835,
+0.580869,
+0.67281
+]
+},
+"EmELVarModule|gci3_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"EmELVarModule|gci3_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"EmELVarModule|gci3|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.182556,
+0.1,
+0.1,
+0.1,
+0.1
+]
+},
+"EmELVarModule|gci3|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.182556,
+0.1,
+0.1,
+0.1,
+0.1
+]
+},
+"EmELVarModule|object_property_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.72948,
+0.845,
+2.19335,
+2.19775,
+1.69153
+]
+},
+"EmELVarModule|object_property_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+5.96046e-08,
+0.184647,
+0.0,
+5.96046e-08,
+5.96046e-08
+]
+},
+"EmELVarModule|role_chain|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.91721,
+1.06474,
+1.06474,
+3.27023,
+1.06474
+]
+},
+"EmELVarModule|role_chain|1": {
+"shape": [
+5,
+1
+],
+"values": [
+2.91721,
+1.06474,
+1.06474,
+3.27023,
+1.06474
+]
+},
+"EmELVarModule|role_inclusion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+1.60437,
+1.60437,
+1.60437,
+1.60437
+]
+},
+"EmELVarModule|role_inclusion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+1.60437,
+1.60437,
+1.60437,
+1.60437
+]
+},
+"GumbelBoxModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+2.15851,
+0.485121,
+3.50819,
+1.96484,
+3.79424
+]
+},
+"GumbelBoxModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.122729,
+0.956131,
+0.0304089,
+0.15103,
+0.0227569
+]
+},
+"HyperbolicConesModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+1.91039,
+0.782344,
+1.81486,
+2.65749,
+2.40253
+]
+},
+"HyperbolicConesModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"MultiBoxELModule|class_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.35911,
+1.76961,
+1.26984,
+1.4635,
+1.70085
+]
+},
+"MultiBoxELModule|class_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.35911,
+1.76961,
+1.26984,
+1.4635,
+1.70085
+]
+},
+"MultiBoxELModule|gci0_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"MultiBoxELModule|gci0_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"MultiBoxELModule|gci0|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.30479,
+1.40578,
+1.32796,
+1.52444,
+2.70212
+]
+},
+"MultiBoxELModule|gci0|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.30479,
+1.40578,
+1.32796,
+1.52444,
+2.70212
+]
+},
+"MultiBoxELModule|gci1_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.53846,
+1.16691,
+1.33583,
+1.71296,
+0.778947
+]
+},
+"MultiBoxELModule|gci1_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.53846,
+1.16691,
+1.33583,
+1.71296,
+0.778947
+]
+},
+"MultiBoxELModule|gci1|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.343582,
+0.0584393,
+0.484182,
+1.76753,
+1.07028
+]
+},
+"MultiBoxELModule|gci1|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.343582,
+0.0584393,
+0.484182,
+1.76753,
+1.07028
+]
+},
+"MultiBoxELModule|gci2|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.0089,
+1.75795,
+1.70239,
+1.84999,
+1.83487
+]
+},
+"MultiBoxELModule|gci2|1": {
+"shape": [
+5,
+1
+],
+"values": [
+3.68701,
+4.32868,
+4.22949,
+3.85471,
+2.7419
+]
+},
+"MultiBoxELModule|gci3_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"MultiBoxELModule|gci3_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"MultiBoxELModule|gci3|0": {
+"shape": [
+5,
+1
+],
+"values": [
+3.22585,
+4.26159,
+2.97767,
+4.23244,
+5.32201
+]
+},
+"MultiBoxELModule|gci3|1": {
+"shape": [
+5,
+1
+],
+"values": [
+3.22585,
+4.26159,
+2.97767,
+4.23244,
+5.32201
+]
+},
+"MultiBoxELModule|object_property_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.95939,
+1.69866,
+1.56228,
+2.105,
+1.76781
+]
+},
+"MultiBoxELModule|object_property_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+3.16254,
+2.20485,
+3.35761,
+0.83565,
+2.41042
+]
+},
+"MultiELBEModule|class_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.13047,
+1.24299,
+1.28341,
+2.1905,
+1.72085
+]
+},
+"MultiELBEModule|class_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+2.13047,
+1.24299,
+1.28341,
+2.1905,
+1.72085
+]
+},
+"MultiELBEModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"MultiELBEModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"MultiELBEModule|gci0|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.21902,
+1.03343,
+1.58472,
+1.82809,
+1.49843
+]
+},
+"MultiELBEModule|gci0|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.21902,
+1.03343,
+1.58472,
+1.82809,
+1.49843
+]
+},
+"MultiELBEModule|gci1_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.65658,
+1.70955,
+1.48797,
+1.38547,
+1.49712
+]
+},
+"MultiELBEModule|gci1_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.65658,
+1.70955,
+1.48797,
+1.38547,
+1.49712
+]
+},
+"MultiELBEModule|gci1|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.57415,
+0.223607,
+1.6355,
+1.86289,
+2.31387
+]
+},
+"MultiELBEModule|gci1|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.57415,
+0.223607,
+1.6355,
+1.86289,
+2.31387
+]
+},
+"MultiELBEModule|gci2|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.04637,
+1.56201,
+1.69598,
+1.97585,
+2.78616
+]
+},
+"MultiELBEModule|gci2|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.207475,
+0.311824,
+0.374134,
+0.311177,
+1.56723
+]
+},
+"MultiELBEModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"MultiELBEModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"MultiELBEModule|gci3|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.15613,
+0.406245,
+0.463463,
+0.213955,
+0.554925
+]
+},
+"MultiELBEModule|gci3|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.15613,
+0.406245,
+0.463463,
+0.213955,
+0.554925
+]
+},
+"MultiELBEModule|object_property_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.4413,
+2.65173,
+1.88356,
+1.96114,
+2.17303
+]
+},
+"MultiELBEModule|object_property_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.722625,
+0.880779,
+0.46295,
+0.624218,
+0.536518
+]
+},
+"OctagonELModule|class_assertion|0": {
+"shape": [
+5
+],
+"values": [
+3.22175,
+2.57173,
+2.74387,
+3.3729,
+4.02462
+]
+},
+"OctagonELModule|class_assertion|1": {
+"shape": [
+5
+],
+"values": [
+3.22175,
+2.57173,
+2.74387,
+3.3729,
+4.02462
+]
+},
+"OctagonELModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.107783,
+0.162958,
+0.120019,
+0.0230569,
+0.0961191
+]
+},
+"OctagonELModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.107783,
+0.162958,
+0.120019,
+0.0230569,
+0.0961191
+]
+},
+"OctagonELModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+1.83514,
+2.4946,
+3.29721,
+3.10263,
+3.59259
+]
+},
+"OctagonELModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+1.83514,
+2.4946,
+3.29721,
+3.10263,
+3.59259
+]
+},
+"OctagonELModule|gci1_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"OctagonELModule|gci1_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"OctagonELModule|gci1|0": {
+"shape": [
+5
+],
+"values": [
+4.47636,
+2.59532,
+6.96646,
+8.16432,
+9.4878
+]
+},
+"OctagonELModule|gci1|1": {
+"shape": [
+5
+],
+"values": [
+4.47636,
+2.59532,
+6.96646,
+8.16432,
+9.4878
+]
+},
+"OctagonELModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+3.22406,
+2.58274,
+4.67848,
+1.70915,
+3.40796
+]
+},
+"OctagonELModule|gci2|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"OctagonELModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.0961191,
+0.107783,
+0.107783,
+0.162958,
+0.120019
+]
+},
+"OctagonELModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.0961191,
+0.107783,
+0.107783,
+0.162958,
+0.120019
+]
+},
+"OctagonELModule|gci3|0": {
+"shape": [
+5
+],
+"values": [
+3.64016,
+0.167932,
+3.06062,
+4.4643,
+1.95472
+]
+},
+"OctagonELModule|gci3|1": {
+"shape": [
+5
+],
+"values": [
+3.64016,
+0.167932,
+3.06062,
+4.4643,
+1.95472
+]
+},
+"OctagonELModule|object_property_assertion|0": {
+"shape": [
+5
+],
+"values": [
+1.40667,
+1.67711,
+2.83523,
+2.63691,
+1.32864
+]
+},
+"OctagonELModule|object_property_assertion|1": {
+"shape": [
+5
+],
+"values": [
+1.40667,
+1.67711,
+2.83523,
+2.63691,
+1.32864
+]
+},
+"OrderEmbeddingsModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+0.343289,
+0.110443,
+0.836518,
+0.987807,
+0.318521
+]
+},
+"OrderEmbeddingsModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.656711,
+0.889557,
+0.163482,
+0.0121934,
+0.681479
+]
+},
+"PrismModule|class_assertion|0": {
+"shape": [
+5
+],
+"values": [
+1.29358,
+1.60552,
+0.831222,
+0.672174,
+0.951624
+]
+},
+"PrismModule|class_assertion|1": {
+"shape": [
+5
+],
+"values": [
+1.29358,
+1.60552,
+0.831222,
+0.672174,
+0.951624
+]
+},
+"PrismModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.955117,
+2.28579,
+1.70129,
+2.65516,
+3.09208
+]
+},
+"PrismModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.955117,
+2.28579,
+1.70129,
+2.65516,
+3.09208
+]
+},
+"PrismModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+1.97046,
+1.97299,
+2.87594,
+1.9153,
+2.30621
+]
+},
+"PrismModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+1.97046,
+1.97299,
+2.87594,
+1.9153,
+2.30621
+]
+},
+"PrismModule|gci1_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.559423
+]
+},
+"PrismModule|gci1_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.559423
+]
+},
+"PrismModule|gci1|0": {
+"shape": [
+5
+],
+"values": [
+2.25093,
+1.15353,
+2.16005,
+1.34759,
+1.60288
+]
+},
+"PrismModule|gci1|1": {
+"shape": [
+5
+],
+"values": [
+2.25093,
+1.15353,
+2.16005,
+1.34759,
+1.60288
+]
+},
+"PrismModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+1.45756,
+2.16915,
+2.79133,
+2.314,
+2.47767
+]
+},
+"PrismModule|gci2|1": {
+"shape": [
+5
+],
+"values": [
+0.0891562,
+0.831517,
+0.400854,
+0.676865,
+0.774817
+]
+},
+"PrismModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+3.09208,
+0.955117,
+0.955117,
+2.28579,
+1.70129
+]
+},
+"PrismModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+3.09208,
+0.955117,
+0.955117,
+2.28579,
+1.70129
+]
+},
+"PrismModule|gci3|0": {
+"shape": [
+5
+],
+"values": [
+1.02005,
+0.375757,
+0.492356,
+0.227741,
+0.887298
+]
+},
+"PrismModule|gci3|1": {
+"shape": [
+5
+],
+"values": [
+1.02005,
+0.375757,
+0.492356,
+0.227741,
+0.887298
+]
+},
+"PrismModule|object_property_assertion|0": {
+"shape": [
+5
+],
+"values": [
+1.80358,
+2.09931,
+2.27082,
+1.76666,
+1.79245
+]
+},
+"PrismModule|object_property_assertion|1": {
+"shape": [
+5
+],
+"values": [
+1.48738,
+1.71236,
+1.93931,
+1.42986,
+1.43097
+]
+},
+"RegDELBEModule|class_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.13047,
+1.24299,
+1.28341,
+2.1905,
+1.72085
+]
+},
+"RegDELBEModule|class_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+2.13047,
+1.24299,
+1.28341,
+2.1905,
+1.72085
+]
+},
+"RegDELBEModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"RegDELBEModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"RegDELBEModule|gci0|0": {
+"shape": [
+5,
+1
+],
+"values": [
+4.28896,
+3.01064,
+5.18491,
+5.4833,
+4.80136
+]
+},
+"RegDELBEModule|gci0|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"RegDELBEModule|gci1_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.65658,
+1.70955,
+1.48797,
+1.38547,
+1.49712
+]
+},
+"RegDELBEModule|gci1_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.65658,
+1.70955,
+1.48797,
+1.38547,
+1.49712
+]
+},
+"RegDELBEModule|gci1|0": {
+"shape": [
+5,
+1
+],
+"values": [
+11.3088,
+2.65999,
+8.85558,
+7.98093,
+7.55057
+]
+},
+"RegDELBEModule|gci1|1": {
+"shape": [
+5,
+1
+],
+"values": [
+11.3088,
+2.65999,
+8.85558,
+7.98093,
+7.55057
+]
+},
+"RegDELBEModule|gci2|0": {
+"shape": [
+5,
+1
+],
+"values": [
+6.19563,
+4.94332,
+4.97683,
+6.89178,
+10.3973
+]
+},
+"RegDELBEModule|gci2|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"RegDELBEModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"RegDELBEModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"RegDELBEModule|gci3|0": {
+"shape": [
+5,
+1
+],
+"values": [
+8.46918,
+3.25863,
+5.44739,
+4.8977,
+7.02934
+]
+},
+"RegDELBEModule|gci3|1": {
+"shape": [
+5,
+1
+],
+"values": [
+8.46918,
+3.25863,
+5.44739,
+4.8977,
+7.02934
+]
+},
+"RegDELBEModule|object_property_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+2.4413,
+2.65173,
+1.88356,
+1.96114,
+2.17303
+]
+},
+"RegDELBEModule|object_property_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.722625,
+0.880779,
+0.46295,
+0.624218,
+0.536518
+]
+},
+"RegDELEmModule|class_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.81497,
+0.18148,
+1.33036,
+1.24546,
+1.49346
+]
+},
+"RegDELEmModule|class_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.81497,
+0.18148,
+1.33036,
+1.24546,
+1.49346
+]
+},
+"RegDELEmModule|gci0_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+-1.0,
+1.0,
+1.0,
+-1.0
+]
+},
+"RegDELEmModule|gci0_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.0,
+-1.0,
+1.0,
+1.0,
+-1.0
+]
+},
+"RegDELEmModule|gci0|0": {
+"shape": [
+5,
+1
+],
+"values": [
+0.823747,
+1.4516,
+2.43386,
+3.4508,
+3.43481
+]
+},
+"RegDELEmModule|gci0|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"RegDELEmModule|gci1_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.56378,
+1.29555,
+0.961751,
+0.676253,
+0.680414
+]
+},
+"RegDELEmModule|gci1_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.56378,
+1.29555,
+0.961751,
+0.676253,
+0.680414
+]
+},
+"RegDELEmModule|gci1|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.09465,
+0.0,
+0.971139,
+0.42672,
+0.635067
+]
+},
+"RegDELEmModule|gci1|1": {
+"shape": [
+5,
+1
+],
+"values": [
+1.09465,
+0.0,
+0.971139,
+0.42672,
+0.635067
+]
+},
+"RegDELEmModule|gci2|0": {
+"shape": [
+5,
+1
+],
+"values": [
+4.38968,
+4.22878,
+5.3582,
+3.82689,
+3.46406
+]
+},
+"RegDELEmModule|gci2|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"RegDELEmModule|gci3_bot|0": {
+"shape": [
+5,
+1
+],
+"values": [
+-1.0,
+1.0,
+1.0,
+-1.0,
+1.0
+]
+},
+"RegDELEmModule|gci3_bot|1": {
+"shape": [
+5,
+1
+],
+"values": [
+-1.0,
+1.0,
+1.0,
+-1.0,
+1.0
+]
+},
+"RegDELEmModule|gci3|0": {
+"shape": [
+5,
+1
+],
+"values": [
+7.49262,
+2.0,
+3.66345,
+4.07804,
+3.82689
+]
+},
+"RegDELEmModule|gci3|1": {
+"shape": [
+5,
+1
+],
+"values": [
+7.49262,
+2.0,
+3.66345,
+4.07804,
+3.82689
+]
+},
+"RegDELEmModule|object_property_assertion|0": {
+"shape": [
+5,
+1
+],
+"values": [
+1.72949,
+0.84501,
+2.19336,
+2.19776,
+1.69154
+]
+},
+"RegDELEmModule|object_property_assertion|1": {
+"shape": [
+5,
+1
+],
+"values": [
+0.0,
+0.184647,
+0.0,
+0.0,
+0.0
+]
+},
+"ShadowConesModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+0.00754032,
+0.0134114,
+0.0174212,
+0.020197,
+0.0208419
+]
+},
+"ShadowConesModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+0.00245968,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"TransBoxModule|class_assertion|0": {
+"shape": [
+5
+],
+"values": [
+0.848381,
+0.247928,
+0.750514,
+0.884049,
+0.998242
+]
+},
+"TransBoxModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.21902,
+1.03343,
+1.58472,
+1.82809,
+1.49843
+]
+},
+"TransBoxModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+1.21902,
+1.03343,
+1.58472,
+1.82809,
+1.49843
+]
+},
+"TransBoxModule|gci1_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.18737,
+0.223607,
+1.12904,
+1.31835,
+1.48429
+]
+},
+"TransBoxModule|gci1|0": {
+"shape": [
+5
+],
+"values": [
+1.18737,
+0.223607,
+1.12904,
+1.31835,
+1.48429
+]
+},
+"TransBoxModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+2.95112,
+2.21565,
+3.60828,
+2.12459,
+1.6274
+]
+},
+"TransBoxModule|gci2|1": {
+"shape": [
+5
+],
+"values": [
+0.722361,
+0.208789,
+0.810744,
+0.66029,
+5.5994e-06
+]
+},
+"TransBoxModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+3.16838,
+2.15103,
+3.08169,
+3.12977,
+2.32732
+]
+},
+"TransBoxModule|gci3|0": {
+"shape": [
+5
+],
+"values": [
+3.16838,
+2.15103,
+3.08169,
+3.12977,
+2.32732
+]
+},
+"TransBoxModule|object_property_assertion|0": {
+"shape": [
+5
+],
+"values": [
+1.4271,
+1.15808,
+1.37924,
+1.36445,
+1.19309
+]
+},
+"TransBoxModule|role_chain|0": {
+"shape": [
+5
+],
+"values": [
+3.91872,
+1.99205,
+2.15103,
+3.2909,
+2.15103
+]
+},
+"TransBoxModule|role_inclusion|0": {
+"shape": [
+5
+],
+"values": [
+0.244949,
+1.94,
+1.94,
+1.95617,
+1.94
+]
+},
+"VolumeMultiBoxELModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+0.971843,
+0.822148,
+0.930828,
+0.803958,
+0.973702
+]
+},
+"VolumeMultiBoxELModule|gci1|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+2.44379e-06,
+0.673235,
+0.663833,
+1.0
+]
+},
+"VolumeMultiBoxELModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+0.805372,
+0.93137,
+0.806486,
+0.996063,
+0.952102
+]
+},
+"VolumeMultiBoxELModule|gci3|0": {
+"shape": [
+5
+],
+"values": [
+0.935784,
+0.767588,
+1.0,
+0.723724,
+0.968984
+]
+},
+"VolumeMultiBoxELModule|role_chain|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+0.517687,
+0.779382,
+0.995604,
+0.779382
+]
+},
+"VolumeMultiBoxELModule|role_inclusion|0": {
+"shape": [
+5
+],
+"values": [
+1.4782e-05,
+1.0,
+1.0,
+1.0,
+1.0
+]
+}
+}

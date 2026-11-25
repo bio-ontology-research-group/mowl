@@ -42,14 +42,17 @@ class FilteredRankingRegime(EvaluationRegime):
     with raw and filtered metrics.
 
     :param gci_name: Normal form of the test axioms (``"gci0"``, ``"gci2"``,
-        ``"class_assertion"``).
+        ``"class_assertion"``, ``"object_property_assertion"``).
     :param target: ``"tail"`` (rank :math:`D` in :math:`C \\sqsubseteq D` /
-        :math:`C \\sqsubseteq \\exists r.D`, or :math:`C` in :math:`C(a)`) or ``"head"``
-        (rank :math:`C`).
-    :param relation: For ``gci2``: only test axioms with this role IRI are queries.
+        :math:`C \\sqsubseteq \\exists r.D`, or :math:`C` in :math:`C(a)`, or :math:`b` in
+        :math:`r(a, b)`) or ``"head"`` (rank :math:`C`, or :math:`a`).
+    :param relation: For ``gci2`` and ``object_property_assertion``: only test axioms with
+        this role IRI are queries.
     :param candidates: ``"evaluation_classes"`` (the dataset's
         ``evaluation_classes``: tails for ``target="tail"``, heads otherwise),
-        ``"classes"`` (all classes of the dataset) or an iterable of IRIs.
+        ``"classes"`` (all classes of the dataset), ``"individuals"`` (all individuals of
+        the model, for ``object_property_assertion``), ``"dataset:<attribute>"`` (the class
+        IRIs in that attribute of the dataset) or an iterable of IRIs.
     :param filter_by: Which known positives are filtered for the filtered metrics, any of
         ``"train"`` (training axioms of the same normal form), ``"valid"``, ``"test"``
         (the other test axioms) and ``"closure"`` (the deductive closure, see
@@ -81,7 +84,7 @@ class FilteredRankingRegime(EvaluationRegime):
                  ties="ordinal", auc="mowl", hits=(1, 10, 100), micro=False, raw=True,
                  scoring="loss", split="test", key="", max_rows=2 ** 22,
                  strict_hits=False, queries=None, exclude_head=False):
-        if gci_name not in ("gci0", "gci2", "class_assertion"):
+        if gci_name not in ("gci0", "gci2", "class_assertion", "object_property_assertion"):
             raise ValueError(f"Unsupported normal form {gci_name!r}.")
         if target not in ("head", "tail"):
             raise ValueError("target must be 'head' or 'tail'.")
@@ -120,6 +123,8 @@ class FilteredRankingRegime(EvaluationRegime):
         return 0 if self.target_col != 0 else len(COLUMNS[self.gci_name]) - 1
 
     def candidate_iris(self, dataset):
+        if isinstance(self.candidates, str) and self.candidates.startswith("dataset:"):
+            return list(getattr(dataset, self.candidates.split(":", 1)[1]))
         if self.candidates == "classes":
             return list(dataset.classes.as_str)
         if self.candidates == "evaluation_classes":
@@ -128,7 +133,8 @@ class FilteredRankingRegime(EvaluationRegime):
         return list(self.candidates)
 
     def _restrict(self, model, rows):
-        if rows is None or self.relation is None or self.gci_name != "gci2":
+        if rows is None or self.relation is None \
+                or self.gci_name not in ("gci2", "object_property_assertion"):
             return rows
         rel = model.object_property_index_dict.get(self.relation)
         if rel is None:
@@ -183,6 +189,13 @@ class FilteredRankingRegime(EvaluationRegime):
         return rows, dropped
 
     def evaluate(self, model, dataset):
+        declared = getattr(model, "scored_forms", None)
+        if declared is not None and self.gci_name not in declared \
+                and not callable(self.scoring):
+            from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+            raise UnsupportedAxiomForm(
+                f"{type(model).__name__} has no score for {self.gci_name!r} axioms "
+                f"(it scores: {', '.join(declared)}).")
         scorer, scoring_name = resolve_scorer(model, self.scoring)
         onto = dataset.testing if self.split == "test" else dataset.validation
         width = len(COLUMNS[self.gci_name])
@@ -193,7 +206,10 @@ class FilteredRankingRegime(EvaluationRegime):
         else:
             rows, dropped = self._explicit_rows(model, dataset)
             skipped = dropped
-        cands = candidate_indices(model, self.candidate_iris(dataset))
+        if self.candidates == "individuals":
+            cands = th.arange(len(model.individual_index_dict), dtype=th.long)
+        else:
+            cands = candidate_indices(model, self.candidate_iris(dataset))
         filters = None
         if self.filter_by:
             filters = build_filter(self._filter_rows(model, dataset), self.target_col)
@@ -324,8 +340,143 @@ class CatePPIRankingRegime(EvaluationRegime):
         return {"all": {m: out[m] for m in self.metrics}}
 
 
+class KGLinkPredictionRegime(EvaluationRegime):
+    """Filtered link prediction as in the knowledge graph completion literature
+    (Bordes et al., 2013), on axioms :math:`h \\sqsubseteq \\exists r.t`: every test axiom is
+    ranked twice, :math:`t` among all classes with :math:`h` and :math:`r` fixed and
+    :math:`h` among all classes with :math:`r` and :math:`t` fixed; the candidates known
+    to be correct (training, validation and test axioms) are removed; MR, MRR and
+    Hits@\\ :math:`k` over both directions. Tied candidates share the average rank (the
+    "realistic" rank of PyKEEN). Scores are what the model declares
+    (:mod:`mowl.evaluation.model_scoring`).
+
+    :param relation: Restrict the queries to one role IRI (default: all roles).
+    :param candidates: See :class:`FilteredRankingRegime` (default: all classes).
+    :param hits: Values of :math:`k`.
+    :param ties: ``"average"`` or ``"ordinal"``.
+    """
+
+    def __init__(self, relation=None, candidates="classes", hits=(1, 3, 10), ties="average",
+                 filter_by=("train", "valid", "test"), scoring="auto",
+                 key="kg-filtered-link-prediction", **kwargs):
+        self.hits, self.key = tuple(hits), key
+        common = dict(gci_name="gci2", relation=relation, candidates=candidates,
+                      filter_by=tuple(filter_by), ties=ties, auc="mowl", hits=self.hits,
+                      raw=False, scoring=scoring, key="", **kwargs)
+        self.tail = FilteredRankingRegime(target="tail", **common)
+        self.head = FilteredRankingRegime(target="head", **common)
+        self.metrics = tuple(f"f_{m}" for m in ("mrr", "mr",
+                                                 *[f"hits@{k}" for k in self.hits]))
+        self.subsets = ("all", "tail", "head")
+        self.info = {}
+
+    def prepare(self, dataset):
+        self.tail.prepare(dataset)
+        self.head.prepare(dataset)
+        return dataset
+
+    def evaluate(self, model, dataset):
+        out, ranks = {}, []
+        for name, part in (("tail", self.tail), ("head", self.head)):
+            result = part.evaluate(model, dataset)["all"]
+            out[name] = {m: result[m] for m in self.metrics}
+            filt = part.last_ranks["filtered"]
+            ranks.extend(filt.tolist() if filt is not None else [])
+        n = self.tail.info.get("num_candidates")
+        both = summarise_ranks(ranks, n, hits=self.hits, auc="mowl", prefix="f_")
+        out["all"] = {m: both[m] for m in self.metrics}
+        self.info = {"scoring": self.tail.info.get("scoring"), "num_candidates": n,
+                     "queries": int(len(ranks) / 2), "directions": 2}
+        return out
+
+
+class AssertionLinkPredictionRegime(EvaluationRegime):
+    """Raw and filtered link prediction on role assertions :math:`r(a, b)` between
+    individuals, as in TransE, TransC and EIKE (Wang et al., 2024, Section 5.4): every test
+    assertion is ranked as the object of :math:`r(a, ?)` and, if ``"head"`` is among the
+    ``directions``, as the subject of :math:`r(?, b)`, among all individuals of the model;
+    the raw ranks are the ranks among all candidates, the filtered ranks are those after
+    the candidates known to be correct (training, validation and test assertions) are
+    removed. MRR, MR and Hits@k over all (assertion, direction) pairs. Tied candidates
+    share the average rank (the reference code orders ties by position).
+
+    Scores are what the model declares (:mod:`mowl.evaluation.model_scoring`), for the form
+    ``object_property_assertion``.
+
+    :param directions: ``("head", "tail")`` (default) or ``("tail",)``, the setting of the
+        Concept2Box paper (queries :math:`(h, r, ?t)`).
+    :param relation: Restrict the queries to one role IRI (default: all roles).
+    :param hits: Values of :math:`k` for Hits@\\ :math:`k`.
+    :param filter_by: Sets whose assertions are filtered, see :class:`FilteredRankingRegime`.
+    :param max_rows: Candidate axioms scored at a time.
+    """
+
+    key = "assertion-link-prediction"
+    FORM = "object_property_assertion"
+
+    def __init__(self, directions=("head", "tail"), relation=None, hits=(1, 3, 10),
+                 ties="average", filter_by=("train", "valid", "test"), scoring="auto",
+                 split="test", max_rows=2 ** 22, key=None):
+        directions = tuple(directions)
+        if not directions or set(directions) - {"head", "tail"}:
+            raise ValueError("directions must be a subset of ('head', 'tail').")
+        if key:
+            self.key = key
+        self.directions, self.hits = directions, tuple(hits)
+        self.parts = {d: FilteredRankingRegime(
+            gci_name=self.FORM, target=d, relation=relation, candidates="individuals",
+            filter_by=tuple(filter_by), ties=ties, hits=self.hits, raw=True, scoring=scoring,
+            split=split, max_rows=max_rows) for d in directions}
+        names = ["mrr", "mr"] + [f"hits@{k}" for k in self.hits]
+        self.metrics = tuple(names + [f"f_{n}" for n in names])
+        self.subsets = ("all",) + (directions if len(directions) > 1 else ())
+        self.info = {}
+
+    def prepare(self, dataset):
+        for part in self.parts.values():
+            part.prepare(dataset)
+        return dataset
+
+    def evaluate(self, model, dataset):
+        out, raw, filt = {}, [], []
+        for name, part in self.parts.items():
+            result = part.evaluate(model, dataset)["all"]
+            if len(self.directions) > 1:
+                out[name] = {m: result[m] for m in self.metrics}
+            raw.extend(part.last_ranks["raw"].tolist())
+            filt.extend(part.last_ranks["filtered"].tolist())
+        n = next(iter(self.parts.values())).info.get("num_candidates")
+        both = summarise_ranks(raw, n, hits=self.hits, auc="mowl")
+        both.update(summarise_ranks(filt, n, hits=self.hits, auc="mowl", prefix="f_"))
+        out["all"] = {m: both[m] for m in self.metrics}
+        first = next(iter(self.parts.values())).info
+        self.info = {"scoring": first.get("scoring"), "num_candidates": n,
+                     "queries": int(len(raw) / len(self.parts)),
+                     "directions": list(self.directions)}
+        return out
+
+
 def cate_ppi_ranking(relation, **kwargs):
     """The PPI evaluation of CatE (Zhapa-Camacho and Hoehndorf, Table 4, left, and the
     reference ``src/evaluators.py``): both directions of every test interaction, ranked
     among the proteins; filtered MR, MRR, Hits@1/3/10/100, AUC."""
     return CatePPIRankingRegime(relation, **kwargs)
+
+
+def common_ranking(gci_name="gci0", relation=None, candidates="classes", target="tail",
+                   filter_by=("train", "valid", "test"), scoring="auto", **kwargs):
+    """The ranking of the joint mOWL benchmarks, the same for every model family.
+
+    For every test axiom :math:`C \\sqsubseteq D` (``gci0``) or
+    :math:`C \\sqsubseteq \\exists r.D` (``gci2``), the class :math:`D` is ranked among all
+    candidates (:math:`C` itself removed). Only filtered metrics are reported: the other
+    classes known to be correct for the query (training, validation and test axioms of
+    the same form) are removed. Tied candidates share the average rank, so a model that
+    gives every candidate the same score gets chance-level ranks. Scores come from
+    ``scoring="auto"``: what each model declares
+    (:mod:`mowl.evaluation.model_scoring`), recorded with the result.
+    """
+    return FilteredRankingRegime(
+        gci_name=gci_name, target=target, relation=relation, candidates=candidates,
+        filter_by=filter_by, ties="average", auc="mowl", hits=(1, 10, 100), raw=False,
+        scoring=scoring, exclude_head=True, key="common-filtered-ranking", **kwargs)

@@ -30,10 +30,11 @@ class TransBox(EmbeddingELModel):
     .. note::
         ``formulation="reference"`` switches to the loss functions and the
         initialisation of the authors' code (see :class:`~mowl.nn.TransBoxModule` and
-        :mod:`mowl.nn.el.transbox.code_losses`). Train it with the regime
+        :mod:`mowl.baselines.nn.el.transbox.code_losses`). Train it with the regime
         :class:`~mowl.training.TransBoxCodeTraining`, which squares the losses per axiom
         and pushes negatives to a target; the default ``"mowl"`` formulation is
-        unchanged.
+        unchanged. ``strict_negatives`` and ``reference_bottom_losses`` select the
+        earlier behaviour of two details, see :class:`~mowl.nn.TransBoxModule`.
 
     """
 
@@ -49,7 +50,9 @@ class TransBox(EmbeddingELModel):
                  use_enhancement=True,
                  reg_factor=0.1,
                  load_role_axioms=False,
-                 formulation="mowl"
+                 formulation="mowl",
+                 strict_negatives=True,
+                 reference_bottom_losses="code"
                  ):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
@@ -67,6 +70,8 @@ class TransBox(EmbeddingELModel):
         self.use_enhancement = use_enhancement
         self.reg_factor = reg_factor
         self.formulation = formulation
+        self.strict_negatives = strict_negatives
+        self.reference_bottom_losses = reference_bottom_losses
         self.init_module()
 
     def init_module(self):
@@ -79,4 +84,6 @@ class TransBox(EmbeddingELModel):
             use_enhancement=self.use_enhancement,
             reg_factor=self.reg_factor,
             formulation=self.formulation,
+            strict_negatives=self.strict_negatives,
+            reference_bottom_losses=self.reference_bottom_losses,
         ).to(self.device)

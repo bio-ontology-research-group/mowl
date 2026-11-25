@@ -1,7 +1,8 @@
 Octagon embeddings (OctagonEL)
 ==============================
 
-:class:`OctagonEL <mowl.models.octagon.model.OctagonEL>` represents every concept as a
+:class:`OctagonEL <mowl.models.octagon.model.OctagonEL>` (the combination of parts called
+``octagon``: :doc:`/representation/combine`) represents every concept as a
 product of axis-aligned 2-D octagons. The octagons come from Charpenay & Schockaert,
 *Capturing Knowledge Graphs and Rules with Octagon Embeddings* (IJCAI 2024,
 `arXiv:2401.16270 <https://arxiv.org/abs/2401.16270>`_), where they are **relation**
@@ -41,7 +42,7 @@ below :math:`180^\circ`; the tight bound is
 One pass suffices: for a non-empty octagon :math:`T(h)_k` equals the support function
 :math:`\max_{p \in O(h)} n_k \cdot p` (an optimal dual solution of a two-variable linear
 programme has at most two non-zero multipliers). Hence :math:`O(T(h)) = O(h)` and
-:math:`T` is idempotent. The function :func:`mowl.nn.el.octagon.geometry.tighten`
+:math:`T` is idempotent. The function :func:`mowl.representation.library.octagon_geometry.tighten`
 implements it, and a test checks it against a transcription of the paper's proposition and
 against a linear programme.
 
@@ -186,7 +187,7 @@ The exact :math:`T_3` configuration and its losses:
 
    import torch as th
    from mowl.datasets.builtin import FamilyDataset
-   from mowl.nn.el.octagon import geometry as G
+   from mowl.representation.library import octagon_geometry as G
    from mowl.nn.el.octagon.module import OctagonELModule
 
    x1 = G.from_box(th.tensor([0.5, 0.05]), th.tensor([0.5, 0.05]))

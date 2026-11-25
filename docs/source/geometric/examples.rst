@@ -20,12 +20,12 @@ aliased as :meth:`~mowl.geometric.completion.CanonicalModel.entails_assertion`)
 and assertion contradiction
 (:meth:`~mowl.geometric.completion.CanonicalModel.assertion_contradicted`,
 testing :math:`\mathcal{O} \models N_a \sqcap C \sqsubseteq \bot`).
-:attr:`~mowl.geometric.completion.CanonicalModel.individuals` maps each
+``CanonicalModel.individuals`` maps each
 individual IRI to its nominal name :math:`N_a`,
 :meth:`~mowl.geometric.completion.CanonicalModel.role_instances` returns the
 pairs of individual IRIs connected by a role in the canonical model, and
 :attr:`~mowl.geometric.completion.CanonicalModel.concept_names` returns only the
-non-nominal concept names while :attr:`~mowl.geometric.completion.CanonicalModel.names`
+non-nominal concept names while ``CanonicalModel.names``
 keeps all satisfiable concept and nominal names (so constructive region builders
 assign every satisfiable individual a non-empty region). If any individual is
 unsatisfiable (:math:`\mathcal{O} \models N_a \sqsubseteq \bot`), constructing
@@ -180,7 +180,7 @@ model:
    assert cm.entails(NS + "A", NS + "X1") and cm.entails(NS + "A", NS + "X2")
    assert not cm.joint_satisfiable((NS + "X1", NS + "X2", NS + "X3"))
 
-   # 2. 1-D interval-union model is an exact, non-degenerate, strongly faithful model
+   # 2. 1-D interval-union model is an exact, non-degenerate model, faithful on concept names
    ivl = IntervalUnionModel.from_canonical_model(cm)
    assert ivl.is_model()
    assert ivl.is_nondegenerate()
@@ -568,7 +568,7 @@ represents each individual :math:`a` as a probability distribution
 support
 :math:`S_a = \{x \in S : x \in C^{\mathcal{I}} \text{ for every training-entailed class } C \text{ of } a\}`,
 where :math:`S` and the sparse membership matrix
-:attr:`~mowl.geometric.membership.MembershipStructure.M` come from the
+``MembershipStructure.M`` come from the
 :class:`~mowl.geometric.completion.CanonicalModel` of the training ontology. By
 construction, every training-entailed class assertion (including assertions
 entailed through role assertions) has empty complement in :math:`S_a` and scores
@@ -659,6 +659,28 @@ on :math:`S_a` and scores ``+inf``:
 
    tmpdir.cleanup()
 
+The method is a combination of parts (:mod:`mowl.representation.library.mixture_methods`):
+the canonical model is constructed (a source and a reading of
+:mod:`mowl.representation.construction`), classes and roles are its sets of elements and
+pairs, and only the individual model is trained. Any part can be replaced, here the training
+regime (minibatches of assertions instead of batches of individuals); the guarantees hold
+whatever is trained:
+
+.. testcode::
+
+   from mowl.representation.library.mixture_training import AssertionBatches
+
+   print(model.module.parts["source"], "/", model.module.parts["reading"], "/",
+         model.module.parts["individuals"])
+   model.training = AssertionBatches(batch_size=2)
+   model.train(epochs=1, validate_every=0)
+   assert float(model.module.class_assertion_score(
+       torch.tensor([[bob_idx, parent_idx]], dtype=torch.long)).item()) == 0.0
+
+.. testoutput::
+
+   canonical completion / membership / distribution
+
 
 Soft component aggregation and diversity regularisation
 -------------------------------------------------------
@@ -666,13 +688,14 @@ Soft component aggregation and diversity regularisation
 Under hard aggregation (``component_aggregation="hard"``), taking ``amin`` over
 target components and ``argmin`` over pairwise emptiness routes gradient only to
 the single nearest component, leaving non-nearest components dead from random
-initialisation. Soft component aggregation (implemented in :mod:`mowl.nn.el.softagg` and
-available on both :class:`~mowl.models.MultiBoxEL` and
+initialisation. Soft component aggregation (an option of the measure of unions of boxes,
+:class:`~mowl.representation.library.multibox_parts.UnionMeasure`, available on both
+:class:`~mowl.models.MultiBoxEL` and
 :class:`~mowl.models.MultiELBE`) sets ``component_aggregation="soft"`` to
 replace every target minimum by the normalised log-mean-exp soft-minimum
-:func:`~mowl.nn.el.softagg.softmin`
+:func:`~mowl.representation.library.multibox_parts.soft_minimum`
 (:math:`\text{softmin}_\tau(v) = -\tau(\log\sum_{j=1}^K \exp(-v_j/\tau) - \log K)`)
-and ``gci1``'s designated pair by :func:`~mowl.nn.el.softagg.soft_gci1_terms`
+and ``gci1``'s designated pair by soft-argmin weights
 (softmax emptiness weights :math:`w_{ij} = \text{softmax}(-\text{empt}_{ij}/\tau)`
 with a detached selection gate
 :math:`g_{ij} = \max(\text{non\_empty}_{ij}^{\text{det}}, w_{ij}^{\text{det}})`).
@@ -684,7 +707,8 @@ softmax weights :math:`\exp(-\Delta/\tau)` underflow to exact ``0.0`` once the
 score gap :math:`\Delta` exceeds :math:`\approx 100\tau`. Because
 :math:`\text{softmin}_\tau(v) \le \text{mean}(v)` pulls all target components
 together at finite :math:`\tau > 0`, ``diversity_reg`` adds the log-space
-pairwise soft containment ratio :func:`~mowl.nn.el.softagg.diversity_penalty`,
+pairwise soft containment ratio
+:class:`~mowl.representation.library.multibox_objective.DiversityPenalty`,
 which evaluates to ``1.0`` on identical boxes at any ambient dimension :math:`d`
 and to :math:`\le 10^{-3}` when components are disjoint:
 
@@ -696,7 +720,10 @@ and to :math:`\le 10^{-3}` when components are disjoint:
    import torch
    from mowl.datasets.builtin import FamilyDataset
    from mowl.models import MultiBoxEL, MultiELBE
-   from mowl.nn.el.softagg import diversity_penalty, softmin
+   from types import SimpleNamespace
+
+   from mowl.representation.library.multibox_objective import DiversityPenalty
+   from mowl.representation.library.multibox_parts import UnionClasses, soft_minimum
 
    ds = FamilyDataset()
 
@@ -730,15 +757,17 @@ and to :math:`\le 10^{-3}` when components are disjoint:
    me.train(epochs=3, validate_every=10)
    assert abs(float(me.module.tau.item()) - 0.05) < 1e-6
 
-   # 2. Shared helpers in mowl.nn.el.softagg: softmin and log-space diversity_penalty
+   # 2. The parts: the soft minimum and the log-space diversity penalty
    v = torch.tensor([[0.0, 2.0]])
-   assert float(softmin(v, tau=1e-4, dim=-1).item()) < 1e-3
-   ident_c = torch.zeros((1, 2, 50), requires_grad=True)
-   ident_o = torch.full((1, 2, 50), 0.2)
-   pen = diversity_penalty(ident_c, ident_o)
+   assert float(soft_minimum(v, 1e-4, dim=-1).item()) < 1e-3
+   classes = UnionClasses(1, 50, components=2)  # one class, two identical boxes
+   with torch.no_grad():
+       classes.centres.weight.zero_()
+       classes.offsets.weight.fill_(0.2)
+   pen = DiversityPenalty(1.0).penalty(SimpleNamespace(class_model=classes))
    pen.backward()
    assert abs(float(pen.item()) - 1.0) < 1e-5
-   assert float(ident_c.grad.norm().item()) > 0.0
+   assert float(classes.centres.weight.grad.norm().item()) > 0.0
 
 
 Canonical-element point supervision
@@ -757,7 +786,8 @@ and canonical role edges :math:`(x_C, r, x_D)`, while rejection-sampling
 non-entailed random negative pairs on the fly against ``pos_pairs`` (weighted by
 ``neg_weight``, default ``0.1``, with nothing per-element stored),
 sampling up to ``points_per_epoch`` (default ``100_000``) pairs per epoch. In
-:mod:`mowl.nn.el.pointloss`, soft coordinate-minimum box membership
+:class:`~mowl.representation.library.structural_points.SoftMembership`, soft
+coordinate-minimum box membership
 :math:`m(x; c, o) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` (with
 temperature ``beta``, default ``0.1``) is combined across components via
 noisy-OR :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` (evaluating individual
@@ -845,7 +875,7 @@ Setting ``objective="structural"`` on :class:`~mowl.models.MultiBoxEL` (default
 ``margin=0.02``, ``reseed_every=0``) or :class:`~mowl.models.PrismEL` (default
 ``margin=0.1``) compiles acyclic binary conjunction definitions
 :math:`A \equiv X \sqcap Y` from the normalised ``gci0`` and ``gci1`` axioms into
-:attr:`~mowl.nn.MultiBoxELModule.definition_table`
+``MultiBoxELModule.definition_table``
 (:class:`~mowl.nn.el.structural.DefinitionTable`), materialises every class as
 :math:`K = \text{max\_components}` component slots with signed half-widths in
 :class:`~mowl.nn.el.structural.Regions` via
@@ -853,8 +883,8 @@ Setting ``objective="structural"`` on :class:`~mowl.models.MultiBoxEL` (default
 :meth:`~mowl.nn.MultiBoxELModule.all_class_regions` (with inactive slots padded
 as ``cen = 0, w = -1``), masks the defining ``gci0``/``gci1`` rows to exact
 ``0.0`` loss, and supervises satisfiable classes and conjunction pairs with
-:func:`~mowl.nn.el.structural.existence_loss` and single-coordinate separation
-in :func:`~mowl.nn.el.structural.gci1_bot_structural`. On the :math:`T_3`
+:func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss` and single-coordinate separation
+in :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural`. On the :math:`T_3`
 fixture, the three pairwise definitions :math:`A \equiv X_1 \sqcap X_2`,
 :math:`B \equiv X_2 \sqcap X_3`, and :math:`C \equiv X_1 \sqcap X_3` are
 compiled into ``n_defined == 3`` defined classes:
@@ -904,3 +934,48 @@ compiled into ``n_defined == 3`` defined classes:
 
    3
    (9, 16, 2)
+
+
+Strongly faithful models and the convex model of a finite model
+---------------------------------------------------------------
+
+:class:`~mowl.geometric.faithfulness.StronglyFaithfulModel` builds the canonical model of
+Definition 26 of Lacerda, Ozaki & Guimarães (TGDK 2024), which has an element for every
+conjunction of two concept names and every existential restriction, and its geometric
+interpretation with unions of intervals in one dimension or with convex regions. The
+check compares, for every candidate axiom of the forms :math:`A \sqsubseteq B`,
+:math:`A \sqcap B \sqsubseteq C`, :math:`A \sqsubseteq \exists r.B`,
+:math:`\exists r.A \sqsubseteq B` and :math:`r \sqsubseteq s` over the signature, whether the
+geometric model satisfies it with whether the ontology entails it (decided by the
+completion on the ontology extended with fresh names). mOWL's plain
+:class:`~mowl.geometric.completion.CanonicalModel` has one element per name and is
+faithful on concept names only. :class:`~mowl.geometric.convex_regions.ConvexRegionModel`
+is the construction of Gutiérrez-Basulto & Schockaert (KR 2018, Proposition 3): it takes
+any finite interpretation, not an ontology.
+
+.. testcode::
+
+   import mowl
+   mowl.init_jvm("2g")
+   from mowl.geometric.convex_regions import ConvexRegionModel, FiniteInterpretation
+   from mowl.geometric.faithfulness import StronglyFaithfulModel
+   from mowl.geometric.normal_forms import NF1, NF3, NormalisedOntology
+
+   A, B, C, r = "http://x.org/A", "http://x.org/B", "http://x.org/C", "http://x.org/r"
+   no = NormalisedOntology(axioms=[NF1(A, B), NF3(B, r, C)],
+                           concept_names={A, B, C}, role_names={r}, dropped_axioms=0)
+
+   for regions in ("intervals", "convex"):
+       model = StronglyFaithfulModel(no, regions=regions)
+       report = model.check_strong_faithfulness()
+       print(regions, model.dimension > 0, report.is_strongly_faithful)
+
+   finite = FiniteInterpretation(2, {A: {0}, B: {0, 1}}, {r: {(0, 1)}})
+   eta = ConvexRegionModel(finite)
+   print(eta.dimension, eta.phi().same_as(finite), eta.satisfies(NF1(A, B)))
+
+.. testoutput::
+
+   intervals True True
+   convex True True
+   1 True True

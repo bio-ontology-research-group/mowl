@@ -1,6 +1,7 @@
 """Constructive geometric models of EL++ ontologies.
 
 Guarantees:
+
 - Provides normal-form extraction (:func:`normalise`, :class:`NormalisedOntology`),
   ELK-style completion and canonical models, exact region models (convex
   polyhedral and 1-D interval unions), an exact geometric model checker,
@@ -8,6 +9,7 @@ Guarantees:
   MILP-based axis-aligned box-model construction.
 
 References:
+
 - Gutiérrez-Basulto & Schockaert, KR 2018 (arXiv:1805.10461), Props. 3, 4.
 - Lacerda, Ozaki & Guimarães, TGDK 2(3):2, 2024, Defs. 2, 8, 12, Thms. 13, 16, 18, 25.
 - Leemhuis & Kutz, NeSy 2025 (PMLR 284:303–321), Defs. 1, 3, 6, Props. 4, 5, 8.
@@ -19,6 +21,7 @@ from __future__ import annotations
 from mowl.geometric import (
     boxes,
     checker,
+    convex_regions,
     export,
     helly,
     init,
@@ -32,6 +35,7 @@ from mowl.geometric.checker import (
     GeometricInterpretation,
     ModelChecker,
 )
+from mowl.geometric.convex_regions import ConvexRegionModel, FiniteInterpretation
 from mowl.geometric.errors import (
     BoxModelNotFound,
     GeometricError,
@@ -55,6 +59,14 @@ from mowl.geometric.helly import (
     helly_check,
 )
 from mowl.geometric.init import ExactBoxInit
+from mowl.geometric.least_model import (
+    IntervalRealisation,
+    LeastModel,
+    check_model,
+    interval_realisation,
+    least_model,
+    least_model_from_model,
+)
 from mowl.geometric.intervals import IntervalUnionModel
 from mowl.geometric.normal_forms import (
     BOTTOM,
@@ -94,6 +106,10 @@ def __getattr__(name: str) -> object:
         import importlib
 
         return importlib.import_module("mowl.geometric.completion")
+    if name == "faithfulness":
+        import importlib
+
+        return importlib.import_module("mowl.geometric.faithfulness")
     if name in _COMPLETION_NAMES:
         from mowl.geometric import completion
 
@@ -112,10 +128,12 @@ __all__ = [
     "Completion",
     "CompletionResult",
     "ConvexPolyhedralModel",
+    "ConvexRegionModel",
     "DictInterpretation",
     "EMPTY_1D",
     "ExactBoxInit",
     "Face",
+    "FiniteInterpretation",
     "GeometricError",
     "GeometricInterpretation",
     "HellyCertificate",
@@ -124,6 +142,8 @@ __all__ = [
     "InternalConsistencyError",
     "IntervalUnion",
     "IntervalUnionModel",
+    "IntervalRealisation",
+    "LeastModel",
     "MissingDependency",
     "ModelChecker",
     "NF1",
@@ -146,18 +166,23 @@ __all__ = [
     "boxes_as_tensors",
     "certificate_triangles",
     "checker",
+    "check_model",
     "class_points",
     "completion",
+    "convex_regions",
     "export",
     "helly",
     "helly_check",
     "individual_of_name",
     "init",
+    "interval_realisation",
     "intervals",
     "is_nominal_name",
     "nominal_name",
     "normal_forms",
     "normalise",
+    "least_model",
+    "least_model_from_model",
     "polyhedral",
     "simplex_points",
     "to_bounding_boxes",

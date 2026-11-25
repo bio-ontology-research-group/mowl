@@ -61,6 +61,9 @@ CARD = MethodCard(
         "(Mashkova & Hoehndorf 2026, Section 6.2; empirical).",
         "The authors' implementation defines the 'intersection' of disjoint intervals as "
         "the gap between them (yang2025, Section 4.4).",
+        "∃r.C ⊑ ⊥ (gci3_bot) shrinks the head box of r, while its DELE negative "
+        "(all_negative_losses=True, DELE Eq. 17) uses the offset of the filler C; both are "
+        "kept as published. Every per-axiom loss is a column (B, 1) (per_axiom_column).",
     ),
     intersection_closed=True,
     helly="2 (axis-parallel boxes, any dimension; eckhoff1988, as stated in leemhuis2025, "

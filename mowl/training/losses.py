@@ -47,6 +47,36 @@ import torch as th
 import torch.nn.functional as F
 
 from mowl.training.regime import TrainingRegime
+from mowl.training.terms import pearson_correlation
+
+
+def weighted_mean_loss(pos_scores, neg_scores=None, pos_weight=1.0, neg_weight=1.0):
+    """The neutral objective: ``pos_weight`` times the mean positive loss plus ``neg_weight``
+    times the mean negative loss (the negatives are optional). It is the default loss of the
+    EL models (:meth:`~mowl.base_models.elmodel.EmbeddingELModel.compute_loss`) and the
+    combination of :class:`SumLoss`."""
+    loss = pos_scores.mean() if pos_weight == 1.0 else pos_weight * pos_scores.mean()
+    if neg_scores is not None:
+        loss = loss + (neg_scores.mean() if neg_weight == 1.0
+                       else neg_weight * neg_scores.mean())
+    return loss
+
+
+def ranking_hinge_loss(pos_scores, neg_scores):
+    """Mean of :math:`[\\mathrm{pos}_i - \\mathrm{neg}_{ij}]_+` over every positive ``i`` and
+    each of its ``K`` corrupted axioms ``j``; ``neg_scores`` holds ``K`` blocks of
+    ``len(pos_scores)`` rows (the layout of :mod:`mowl.training.negatives`)."""
+    pos = pos_scores.reshape(-1)
+    neg = neg_scores.reshape(-1)
+    if neg.numel() % pos.numel():
+        raise ValueError("The ranking loss needs a whole number of negatives per positive.")
+    return th.relu(pos.unsqueeze(0) - neg.reshape(-1, pos.numel())).mean()
+
+
+def collapsed_to_chance(loss, chance=math.log(2), tolerance=0.02):
+    """Whether a logistic loss sits at its chance level :math:`\\log 2` (every score is 0): a
+    model whose loss ends there has collapsed and its embeddings carry no information."""
+    return abs(loss - chance) < tolerance
 
 
 def _flat(x):
@@ -71,6 +101,13 @@ class _ScoreLoss(TrainingRegime):
     def filter_negatives(self, gci_name, gci_dataset, negatives):
         self._last_negatives[gci_name] = negatives
         return negatives
+
+    def scores_negatives_like_positives(self, gci_name):
+        # The loss re-scores the negatives with the ordinary score anyway; the loop must not
+        # ask the module for a negative loss it may not have (and would not use).
+        if self.normal_forms is not None and gci_name not in self.normal_forms:
+            return None
+        return self.neg_scores == "positive" and self.needs_positive_form
 
     def _negative_scores(self, gci_name, neg_scores):
         if neg_scores is None:
@@ -114,21 +151,26 @@ class SumLoss(_ScoreLoss):
     EmEL++ (Section 3.3) and DELE (Mashkova et al., Eq. 23). BoxEL (Xiong et al.,
     Section 5.2) multiplies its non-subsumption loss by :math:`\\phi = 0.05`
     (``neg_weight=0.05``). Attach it to ELBE to replace ELBE's MSE loss by the plain sum.
-    Negatives are scored by the module's negative loss.
+    Negatives are scored by the module's negative loss. ``pos_weight`` weights the mean
+    positive loss (ELK-Em weights its assertion losses, ``abox_pos_weight``).
+    ``positive_floor=True`` takes the hinge :math:`\\max(0, s^+)` of every positive score
+    first, for modules whose score of a stated axiom is a signed energy (disk embeddings,
+    Eq. 10 and 11).
     """
 
     key = "loss-sum"
     needs_positive_form = False
 
-    def __init__(self, neg_weight=1.0, normal_forms=None):
+    def __init__(self, neg_weight=1.0, normal_forms=None, pos_weight=1.0, positive_floor=False):
         super().__init__(normal_forms=normal_forms, neg_scores="module")
         self.neg_weight = float(neg_weight)
+        self.pos_weight = float(pos_weight)
+        self.positive_floor = bool(positive_floor)
 
     def combine(self, gci_name, pos, neg):
-        loss = pos.mean()
-        if neg is not None:
-            loss = loss + self.neg_weight * neg.mean()
-        return loss
+        if self.positive_floor:
+            pos = th.relu(pos)
+        return weighted_mean_loss(pos, neg, self.pos_weight, self.neg_weight)
 
 
 class MSETargetLoss(_ScoreLoss):
@@ -382,6 +424,53 @@ class SoftmaxEnergyContrastiveLoss(_ScoreLoss):
         return F.cross_entropy(logits, target)
 
 
+class GroupedLogSumExpContrastiveLoss(_ScoreLoss):
+    r"""Each positive against its own group of negatives: the mean over the positives of
+    :math:`\max(E^+, \gamma) + \log\sum_k \exp(h_k)`, where :math:`h_k` is the module's
+    negative loss of the :math:`k`-th corruption of that positive (a hinge, for example
+    :math:`\max(0, \gamma_1 - E^-_k)`). It is Eq. 1 of the shadow cones paper (the softmax
+    cross-entropy of a positive against ``K`` negatives, with :math:`\gamma = \gamma_2`)
+    and Eq. 10 of RegD (with :math:`\gamma = \gamma_1`), and differs from
+    :class:`LogSumExpContrastiveLoss`, which pools all negatives of the step.
+
+    The negatives of a form must be grouped as the corrupting regimes produce them: ``K``
+    blocks of one corruption per positive (a number of rows that is a multiple of the number
+    of positives); otherwise the loss refuses.
+
+    :param gamma: Clamp of the positive score from below.
+    :param negative_form: ``"module"``: the module's negative loss is the hinge :math:`h_k`;
+        ``"energy"``: the module returns raw energies :math:`E^-` and the hinge
+        :math:`\max(0, \gamma_{neg} - E^-)` is taken here.
+    :param gamma_neg: The margin of the hinge for ``negative_form="energy"``.
+    :param normal_forms: The forms trained with this loss; the others fall back to the
+        model's loss (RegD: ``gci0`` and ``gci2``).
+    """
+
+    key = "grouped-logsumexp-contrastive"
+    needs_positive_form = False
+
+    def __init__(self, gamma=0.0, negative_form="module", gamma_neg=0.0, normal_forms=None):
+        super().__init__(normal_forms=normal_forms, neg_scores="module")
+        if negative_form not in ("module", "energy"):
+            raise ValueError("negative_form must be 'module' or 'energy'.")
+        self.gamma = float(gamma)
+        self.negative_form = negative_form
+        self.gamma_neg = float(gamma_neg)
+
+    def combine(self, gci_name, pos, neg):
+        pos = th.clamp(pos, min=self.gamma)
+        if neg is None:
+            return pos.mean()
+        paired = self._paired(pos, neg)
+        if paired is None:
+            raise ValueError(
+                f"{type(self).__name__} needs a whole number of negatives per positive "
+                f"({len(neg)} negatives for {len(pos)} positives of {gci_name!r}).")
+        if self.negative_form == "energy":
+            paired = F.relu(self.gamma_neg - paired)
+        return (pos + th.logsumexp(paired, dim=1)).mean()
+
+
 class PearsonCorrelationLoss(_ScoreLoss):
     """ELK-Em's contrastive loss (Singh et al. 2026, Section 4.2, Eq. 5):
     :math:`1 - \\frac{(\\sigma - \\bar\\sigma)^\\top (t - \\bar t)}
@@ -469,9 +558,7 @@ class PearsonCorrelationLoss(_ScoreLoss):
         scores = th.cat([pos, neg])
         sigma = th.exp(-scores) if self.score_transform == "exp_neg" else -scores
         t = th.cat([th.ones_like(pos), th.zeros_like(neg)])
-        sc = sigma - sigma.mean()
-        tc = t - t.mean()
-        return (sc * tc).sum() / (sc.norm() * tc.norm() + self.eps)
+        return pearson_correlation(sigma, t, self.eps)
 
     def combine(self, gci_name, pos, neg):
         loss = self._positive_term(pos)

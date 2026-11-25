@@ -35,6 +35,7 @@ exact check per candidate pair is both sound and complete and requires no outer
 fixpoint loop.
 
 Guarantees:
+
 - Element table contains one row per satisfiable named concept in
   ``class_index_dict`` (excluding ``TOP``, ``BOTTOM``, and normaliser auxiliary
   classes) followed by one row per satisfiable individual in
@@ -61,6 +62,7 @@ Guarantees:
   :data:`POINTS_CODE_TAG` and (when supplied) the ontology SHA-256 digest.
 
 Non-guarantees:
+
 - For file-backed datasets with an existing ``ontology_path``,
   :func:`ontology_sha256` hashes the ontology file on disk rather than iterating
   over in-memory ``OWLOntology`` axioms; in-memory edits to ``dataset.ontology``
@@ -464,6 +466,7 @@ def ontology_sha256(
     """Compute a deterministic SHA-256 hex digest for an ontology/dataset, its index dicts, ``rng_seed``, and ``hard_neg_cap``.
 
     Guarantees:
+
     - Produces an identical 64-character hex string for identical ontology files
       (or axioms when no file path exists), entity-to-index mappings,
       ``rng_seed``, and ``hard_neg_cap``.
@@ -471,6 +474,7 @@ def ontology_sha256(
       and in-memory ``OWLOntology`` / :class:`~mowl.datasets.Dataset` objects.
 
     Non-guarantees:
+
     - When ``ontology_or_dataset`` has an existing ``ontology_path`` file on disk,
       hashes the raw file bytes directly for speed; in-memory modifications to
       ``dataset.ontology`` (such as ``add_axioms``) are not detected unless
@@ -515,6 +519,7 @@ class PointSupervision:
     """Precomputed canonical-element supervision pairs for point-based training.
 
     Guarantees:
+
     - Stores only flat index tensors (:attr:`pos_pairs`, :attr:`hard_neg_pairs`,
       :attr:`role_pairs`, :attr:`element_class_index`, :attr:`element_is_individual`,
       :attr:`candidate_class_indices`) with no per-element Python sets or dense
@@ -524,6 +529,7 @@ class PointSupervision:
       slices can be queried in :math:`O(\\log P)` via :func:`torch.searchsorted`.
 
     Non-guarantees:
+
     - Does not store negative pools; random negatives are drawn on the fly in
       :meth:`sample` by rejection against :attr:`pos_pairs`.
 
@@ -652,6 +658,7 @@ class PointSupervision:
         :attr:`hard_neg_capped`.
 
         Guarantees:
+
         - Scales in time and memory with ``nnz(M)`` and the number of disjointness /
           conjunction pairs rather than :math:`|\\text{elements}| \\times |\\text{classes}|`.
         - Bounds step (b) exact checks at ``max_exact_checks = 4 * hard_neg_cap``
@@ -660,6 +667,7 @@ class PointSupervision:
           :attr:`hard_neg_capped` to ``True`` iff either bound was hit.
 
         Non-guarantees:
+
         - When ``cm`` is ``None``, only one-step pairs arising from ``disjoint_pairs``
           (:math:`A \\sqcap B \\sqsubseteq \\bot`) and ``bot_classes``
           (:math:`A \\sqsubseteq \\bot`) are included in ``hard_neg_pairs``.
@@ -1163,6 +1171,7 @@ class PointSupervision:
         outer iteration.
 
         Guarantees:
+
         - When ``hard_neg_capped`` is ``False``, :attr:`hard_neg_pairs` equals
           the exact set :math:`\\{(x_D, C) : \\neg \\text{cm.joint\\_satisfiable}(\\{D, C\\})\\}`.
         - Never calls ``cm.entails`` or ``cm.joint_satisfiable`` in an
@@ -1172,6 +1181,7 @@ class PointSupervision:
           ``allow_absent_individuals=False``).
 
         Non-guarantees:
+
         - Individuals absent from ``cm.individuals`` are skipped when
           ``allow_absent_individuals=True``.
 
@@ -1456,6 +1466,7 @@ class PointSupervision:
         """Sample at most ``n`` pairs in total across positive, hard-negative, random-negative, and role pairs.
 
         Guarantees:
+
         - Total returned pairs satisfy
           ``pos.shape[0] + hard.shape[0] + rand.shape[0] + roles.shape[0] <= max(n, 0)``.
         - For each sampled positive ``(x_D, C)`` (when ``n >= 3``), draws one hard
@@ -1464,6 +1475,7 @@ class PointSupervision:
           rejection sampling against ``x_D``'s positive set in :attr:`pos_pairs`.
 
         Non-guarantees:
+
         - When ``n`` is smaller than the total available pairs, positives and
           roles are subsampled without replacement to stay within the total
           budget ``n``.

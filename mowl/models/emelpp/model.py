@@ -104,7 +104,7 @@ class EmELVar(EmELPP):
     .. note::
         As published, the :math:`+\sigma(r)` term of Eq. 7 and 8 has weight 1 in every
         axiom, which cancels the effect of the variance on the hinge (see
-        :class:`~mowl.nn.el.emelpp.module.EmELVarModule`). ``sigma_reg_weight`` below is an
+        :class:`~mowl.nn.EmELVarModule`). ``sigma_reg_weight`` below is an
         option that is **not part of the paper**; the default (1) is the paper's loss.
 
     :param sigma_init: Initial :math:`\sigma` (not given in the paper).

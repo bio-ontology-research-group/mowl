@@ -93,6 +93,16 @@ class Edge:
         return (entities, relations)
 
     @staticmethod
+    def sort(edges):
+        """The edges in the canonical order: sorted by ``(src, rel, dst, weight)``. Projectors
+        whose Java implementation yields the edges in the order of a hash set return their
+        edges in this order, so that the same ontology gives the same edge list on every run.
+
+        :rtype: list of :class:`Edge`
+        """
+        return sorted(edges, key=lambda e: (e.src, e.rel, e.dst, e.weight))
+
+    @staticmethod
     def zip(edges):
         return tuple(zip(*[x.astuple() for x in edges]))
 

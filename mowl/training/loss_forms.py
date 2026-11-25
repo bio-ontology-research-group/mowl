@@ -18,15 +18,17 @@ regimes here sets.
 from mowl.training.regime import TrainingRegime
 
 
-def _is(module, name):
-    return any(cls.__name__ == name for cls in type(module).__mro__)
+# These regimes switch options that a module declares (``negative_loss_form``, ``norm_penalty``,
+# ``intersection_radius_term``, ``positive_scale``) to reproduce one publication's
+# implementation; a module without the option is refused.
+def _declares(module, option):
+    return hasattr(module, option)
 
 
-def _set(model, attribute, value, families):
+def _set(model, attribute, value):
     module = model.module
-    if not any(_is(module, f) for f in families):
-        raise TypeError(f"{type(module).__name__} has no option '{attribute}' "
-                        f"(supported: {', '.join(families)} and subclasses).")
+    if not _declares(module, attribute):
+        raise TypeError(f"{type(module).__name__} has no option '{attribute}'.")
     setattr(module, attribute, value)
 
 
@@ -44,7 +46,7 @@ class UnboundedNegativeLoss(TrainingRegime):
 
     def attach(self, model):
         super().attach(model)
-        _set(model, "negative_loss_form", "linear", ("ELEmModule",))
+        _set(model, "negative_loss_form", "linear")
 
 
 class PerAxiomNormPenalty(TrainingRegime):
@@ -60,9 +62,9 @@ class PerAxiomNormPenalty(TrainingRegime):
 
     def attach(self, model):
         super().attach(model)
-        if _is(model.module, "EmELPPModule"):
+        if _declares(model.module, "intersection_radius_term"):    # always per axiom
             return
-        _set(model, "norm_penalty", "per_axiom", ("ELEmModule",))
+        _set(model, "norm_penalty", "per_axiom")
 
 
 class Box2ELBaselineLosses(TrainingRegime):
@@ -77,7 +79,7 @@ class Box2ELBaselineLosses(TrainingRegime):
       :math:`E` (it is commented out in the code);
     * BoxEL: the losses of a batch are *summed* (not averaged) and the regulariser is the
       code's ``l2_side_regularizer`` of every box of every batch
-      (:func:`mowl.nn.el.boxel.losses.box2el_code_side_regularizer`).
+      (:class:`~mowl.training.box_regularization.BoxBatchRegulariser`).
 
     Other modules (Box2EL, ELBE) are left unchanged.
 
@@ -96,21 +98,41 @@ class Box2ELBaselineLosses(TrainingRegime):
         self.radius_term = bool(radius_term)
         self.boxel = bool(boxel)
         self._sum = False
+        self._side = None
 
     def attach(self, model):
         super().attach(model)
         module = model.module
         self._sum = False
-        if _is(module, "ELEmModule"):
+        if _declares(module, "negative_loss_form"):
             if self.negative_loss:
                 UnboundedNegativeLoss().attach(model)
             if self.norm_penalty:
                 PerAxiomNormPenalty().attach(model)
-            if _is(module, "EmELPPModule"):
+            if _declares(module, "intersection_radius_term"):
                 module.intersection_radius_term = self.radius_term
-        elif _is(module, "BoxELModule") and self.boxel:
-            module.regulariser = "box2el_code"
+        elif _declares(module, "positive_scale") and self.boxel:
+            module.positive_scale = False  # the code's signed role scale
             self._sum = True
+            self._side = None
+            if hasattr(module, "relation_model"):
+                # a geometry: the regulariser of the batches is a regime of its own
+                from mowl.training.box_regularization import BoxBatchRegulariser
+                self._side = BoxBatchRegulariser()
+                self._side.attach(model)
+            else:
+                # the direct implementation records the batches itself
+                module.regulariser = "box2el_code"
+
+    def filter_negatives(self, gci_name, gci_dataset, negatives):
+        if self._side is not None:
+            return self._side.filter_negatives(gci_name, gci_dataset, negatives)
+        return negatives
+
+    def regularization(self, default):
+        if self._side is not None:
+            return self._side.regularization(default)
+        return NotImplemented
 
     def loss(self, gci_name, pos_scores, neg_scores):
         if not self._sum:
@@ -176,9 +198,10 @@ class EmELppCodeObjective(TrainingRegime):
         import torch as th
         super().attach(model)
         module = model.module
-        if not _is(module, "ELEmModule"):
-            raise TypeError(f"{type(module).__name__} is not an ELEm/EmEL++ module.")
-        self._emelpp = _is(module, "EmELPPModule")
+        if not _declares(module, "negative_loss_form"):
+            raise TypeError(f"{type(module).__name__} has no option 'negative_loss_form' "
+                            f"(not an ELEm/EmEL++ module).")
+        self._emelpp = _declares(module, "intersection_radius_term")
         module.negative_loss_form = "linear"
         if self._emelpp:
             module.radius_form = "relu"

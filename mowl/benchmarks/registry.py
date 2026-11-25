@@ -62,6 +62,21 @@ def _results():
     return _RESULTS
 
 
+def register_benchmark(benchmark, replace=False):
+    """Add a :class:`~mowl.benchmarks.Benchmark` to the registry at run time (for
+    benchmarks defined outside :mod:`mowl.benchmarks.entries`, e.g. by a plugin of the
+    command line). Re-registering the same key replaces it only with ``replace=True``
+    or when the new benchmark is equal to the old one."""
+    if not isinstance(benchmark, Benchmark):
+        raise TypeError("register_benchmark takes a Benchmark.")
+    known = _benchmarks()
+    old = known.get(benchmark.key)
+    if old is not None and old != benchmark and not replace:
+        raise ValueError(f"Duplicate benchmark key {benchmark.key!r}.")
+    known[benchmark.key] = benchmark
+    return benchmark
+
+
 def get_benchmark(key):
     """Return the benchmark registered under ``key``."""
     benchmarks = _benchmarks()
@@ -70,11 +85,124 @@ def get_benchmark(key):
     return benchmarks[key]
 
 
-def list_benchmarks(task=None):
-    """Return all benchmarks, optionally only those of one :class:`Task`."""
-    task = Task(task) if task is not None else None
-    return sorted((b for b in _benchmarks().values() if task is None or b.task is task),
-                  key=lambda b: b.key)
+def list_benchmarks(task=None, completion_task=None, inference_task=None, target=None,
+                    assumption=None,
+                    method=None):
+    """Return the benchmarks, optionally only those that match every given filter.
+
+    :param task: A :class:`Task` (coarse group) or its value. For convenience, the key of
+        a completion task or of an inference task is accepted here as well.
+    :param completion_task: Key of a completion task (:data:`mowl.logic.COMPLETION_TASKS`)
+        the benchmark scores, directly or in another form.
+    :param inference_task: Key of an inference task (:data:`mowl.logic.TASKS`).
+    :param target: A :class:`mowl.logic.Target` or its value.
+    :param assumption: A :class:`mowl.logic.WorldAssumption` or its value: keep the
+        benchmarks whose evaluation regime makes this assumption.
+    :param method: Catalogue key of a method: only benchmarks whose inference tasks the
+        method declares (:func:`supports`).
+    """
+    from mowl.logic.tasks import COMPLETION_TASKS, TASKS, Target
+    group = None
+    if task is not None:
+        try:
+            group = Task(task)
+        except ValueError:
+            if task in COMPLETION_TASKS:
+                completion_task = task
+            elif task in TASKS:
+                inference_task = task
+            else:
+                raise ValueError(
+                    f"Unknown task {task!r}. Benchmark groups: {[t.value for t in Task]}; "
+                    f"completion tasks: {sorted(COMPLETION_TASKS)}; inference tasks: "
+                    f"{sorted(TASKS)}") from None
+    if completion_task is not None and completion_task not in COMPLETION_TASKS:
+        raise ValueError(f"Unknown completion task {completion_task!r}.")
+    if inference_task is not None and inference_task not in TASKS:
+        raise ValueError(f"Unknown inference task {inference_task!r}.")
+    target = Target(target) if target is not None else None
+    if assumption is not None:
+        from mowl.logic import WorldAssumption
+        assumption = WorldAssumption(assumption)
+    out = []
+    for b in _benchmarks().values():
+        if group is not None and b.task is not group:
+            continue
+        if completion_task is not None and not b.measures(completion_task):
+            continue
+        if inference_task is not None and not b.measures(inference_task):
+            continue
+        if target is not None and b.target is not target:
+            continue
+        if assumption is not None and b.assumption is not assumption:
+            continue
+        if method is not None and not supports(method, b):
+            continue
+        out.append(b)
+    return sorted(out, key=lambda b: b.key)
+
+
+def missing_support(method, benchmark):
+    """What a method lacks for a benchmark, as a list of strings (empty: nothing).
+
+    Compares data only: the ``tasks`` and the expressivity of the method card with the
+    :attr:`~mowl.benchmarks.Benchmark.inference_tasks` of the benchmark and the constructs
+    its candidates use (``needs`` of its completion tasks). Whether the benchmark's
+    protocol can obtain scores from the model is a property of the protocol. Tasks a
+    method reaches only through a scoring head on its vectors (``head_tasks``) count.
+
+    :param method: A :class:`mowl.catalog.MethodCard` or its key.
+    :param benchmark: A :class:`Benchmark` or its key.
+    """
+    from mowl.catalog import get_method
+    from mowl.logic import Construct
+    from mowl.logic.tasks import COMPLETION_TASKS
+    card = get_method(method) if isinstance(method, str) else method
+    if isinstance(benchmark, str):
+        benchmark = get_benchmark(benchmark)
+    tasks = tuple(card.tasks) + tuple(card.head_tasks)
+    if not tasks:
+        return ["the method card declares no inference task"]
+    out = [f"inference task {t!r}" for t in benchmark.inference_tasks if t not in tasks]
+    try:
+        expressivity = card.supported_expressivity
+    except ValueError:
+        expressivity = None
+    if expressivity is not None:
+        for t in benchmark.completion_tasks:
+            for name in COMPLETION_TASKS[t].needs:
+                if Construct[name] not in expressivity:
+                    out.append(f"construct {Construct[name].value} (for {t})")
+    for ability in benchmark.requires:
+        if ability == "unseen names":
+            rep = card.representation
+            if rep is None or not rep.inductive:
+                out.append("embeddings for names not seen in training (the method looks "
+                           "its embeddings up in a table)")
+        else:
+            out.append(f"ability {ability!r}")
+    return list(dict.fromkeys(out))
+
+
+def supports(method, benchmark):
+    """Whether a method declares every inference task of a benchmark and has the
+    constructs its candidates use (:func:`missing_support` is empty)."""
+    return not missing_support(method, benchmark)
+
+
+def methods_for(benchmark, implemented=True):
+    """The method cards that declare every inference task of a benchmark.
+
+    :param implemented: Only methods that have an implementation in mOWL.
+    """
+    from mowl.catalog import list_methods
+    return [m for m in list_methods()
+            if supports(m, benchmark) and (not implemented or m.implemented)]
+
+
+def benchmarks_for(method):
+    """The benchmarks whose inference tasks a method declares."""
+    return list_benchmarks(method=method)
 
 
 def published_results(benchmark=None, method=None, subset=None):

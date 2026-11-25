@@ -57,6 +57,11 @@ CARD = MethodCard(
         "intersections over (R ∪ {∅})^n during training. Federico et al. (2026, multibox "
         "paper, Section 3.1) describe this as an approximated intersection that loosens "
         "the link to classical semantics.",
+        "With formulation='reference', C ⊑ ⊥ and ∃r.C ⊑ ⊥ use the code's losses for a "
+        "bottom class (reference_bottom_losses='code'; 'mowl' is the earlier mix); "
+        "assertions have no counterpart in the code and use mOWL's formulas. Negatives "
+        "exist for C ⊑ ∃r.D only: neg=True on other forms raises "
+        "(strict_negatives=False returns the positive loss).",
     ),
     intersection_closed=True,
     helly="2 (axis-parallel boxes, any dimension; eckhoff1988, as stated in leemhuis2025, "

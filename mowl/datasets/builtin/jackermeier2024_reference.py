@@ -96,16 +96,30 @@ def reference_class_order(ontology, iri_of_index=None, data_root=None, zip_path=
     return out
 
 
+def _complete(line):
+    """Whether a line of functional syntax is a complete axiom (balanced brackets). The
+    training file of the human PPI data in the release ends in the middle of an axiom."""
+    return line.count("(") == line.count(")") and line.count("<") == line.count(">")
+
+
 def _write_ontology(path, iri, axiom_lines):
+    """Write the axioms as an ontology in functional syntax; incomplete lines are dropped.
+    Returns the number of dropped lines."""
     tmp = f"{path}.{os.getpid()}.part"
+    dropped = 0
     with open(tmp, "w") as out:
         out.write(_HEADER.format(iri=iri))
         for line in axiom_lines:
             line = line.strip()
-            if line:
-                out.write(line + "\n")
+            if not line:
+                continue
+            if not _complete(line):
+                dropped += 1
+                continue
+            out.write(line + "\n")
         out.write(")\n")
     os.replace(tmp, path)
+    return dropped
 
 
 _EMPTY_CHAIN = re.compile(r"ObjectPropertyChain\(\s*\)")
@@ -121,6 +135,114 @@ def _lines(zf, member):
             if _EMPTY_CHAIN.search(line):
                 continue
             yield line
+
+
+#: Prefix of the IRIs given to normalisation helper classes by
+#: :func:`separate_normalisation_helpers`.
+HELPER_PREFIX = "http://mowl.borg/jackermeier2024/helper#"
+
+
+def _named(expression):
+    return not expression.isAnonymous() and not expression.isOWLThing() \
+        and not expression.isOWLNothing()
+
+
+def find_normalisation_helpers(ontologies):
+    """The classes that the normalisation of the Box\\ :sup:`2`\\ EL release introduced as
+    helpers, recognised by their pattern of use.
+
+    A definition :math:`D \\equiv B \\sqcap \\exists r.C` is normalised to
+    :math:`\\exists r.C \\sqsubseteq X` and :math:`B \\sqcap X \\sqsubseteq D` with a new
+    class :math:`X`. In the release, :math:`X` carries the IRI of an existing, unrelated
+    class (`issue 178 <https://github.com/bio-ontology-research-group/mowl/issues/178>`_).
+    A class is taken to be such a helper if, over all the given ontologies, it is the
+    superclass of exactly one axiom :math:`\\exists r.C \\sqsubseteq X` and a conjunct of
+    exactly one axiom :math:`A \\sqcap B \\sqsubseteq D` (:math:`D \\neq \\bot`).
+
+    :param ontologies: The training, validation and testing ontologies (``None`` entries
+        are skipped).
+    :return: ``(helpers, occurrences)``: the set of IRIs, and for every ontology the list
+        of ``(axiom, kind)`` with ``kind`` in ``("head", "conjunct")`` in which a helper
+        occurs in its helper role.
+    """
+    from org.semanticweb.owlapi.model import AxiomType, ClassExpressionType
+    heads, conjuncts, found = {}, {}, []
+    for ontology in ontologies:
+        rows = []
+        if ontology is not None:
+            for axiom in ontology.getAxioms(AxiomType.SUBCLASS_OF):
+                sub, sup = axiom.getSubClass(), axiom.getSuperClass()
+                if not sub.isAnonymous() or sup.isAnonymous():
+                    continue
+                kind = sub.getClassExpressionType()
+                if kind == ClassExpressionType.OBJECT_SOME_VALUES_FROM and _named(sup):
+                    iri = str(sup.asOWLClass().toStringID())
+                    heads[iri] = heads.get(iri, 0) + 1
+                    rows.append((axiom, "head", (iri,)))
+                elif kind == ClassExpressionType.OBJECT_INTERSECTION_OF \
+                        and not sup.isOWLNothing():
+                    iris = tuple(str(c.asOWLClass().toStringID())
+                                 for c in sub.getOperandsAsList() if _named(c))
+                    for iri in iris:
+                        conjuncts[iri] = conjuncts.get(iri, 0) + 1
+                    rows.append((axiom, "conjunct", iris))
+        found.append(rows)
+    helpers = {iri for iri, n in heads.items() if n == 1 and conjuncts.get(iri, 0) == 1
+               and not iri.startswith(HELPER_PREFIX)}       # already separated
+    occurrences = [[(axiom, kind) for axiom, kind, iris in rows
+                    if any(i in helpers for i in iris)] for rows in found]
+    return helpers, occurrences
+
+
+def separate_normalisation_helpers(ontologies):
+    """Give every normalisation helper of the Box\\ :sup:`2`\\ EL release an IRI of its
+    own, in place.
+
+    In the two axioms that use a class as a helper (see
+    :func:`find_normalisation_helpers`) its IRI is replaced by
+    :data:`HELPER_PREFIX` followed by the original IRI; every other axiom keeps the
+    original class. The number of axioms and the split do not change.
+
+    Checked with ELK on the training ontologies including the disjointness axioms: after
+    the separation 19 of 53,730 classes of GO, 0 of 33,734 of GALEN and 22 of 102,574 of
+    Anatomy are unsatisfiable, against 25,710 (GO) and 74,917 (Anatomy) before.
+
+    :return: The set of helper IRIs (the original ones).
+    """
+    from java.util import HashSet
+    from org.semanticweb.owlapi.model import IRI
+    helpers, occurrences = find_normalisation_helpers(ontologies)
+    for ontology, rows in zip(ontologies, occurrences):
+        if ontology is None or not rows:
+            continue
+        manager = ontology.getOWLOntologyManager()
+        factory = manager.getOWLDataFactory()
+
+        def fresh(cls):
+            if cls.isAnonymous():
+                return cls
+            iri = str(cls.asOWLClass().toStringID())
+            return factory.getOWLClass(IRI.create(HELPER_PREFIX + iri)) \
+                if iri in helpers else cls
+
+        removed, added = HashSet(), HashSet()
+        for axiom, kind in rows:
+            sub, sup = axiom.getSubClass(), axiom.getSuperClass()
+            if kind == "head":
+                new = factory.getOWLSubClassOfAxiom(sub, fresh(sup))
+            else:
+                operands = HashSet()
+                for operand in sub.getOperandsAsList():
+                    operands.add(fresh(operand))
+                if operands.size() < 2:
+                    continue
+                new = factory.getOWLSubClassOfAxiom(
+                    factory.getOWLObjectIntersectionOf(operands), sup)
+            removed.add(axiom)
+            added.add(new)
+        manager.removeAxioms(ontology, removed)
+        manager.addAxioms(ontology, added)
+    return helpers
 
 
 class _Box2ELReferenceDataset(PathDataset):

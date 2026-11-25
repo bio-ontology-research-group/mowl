@@ -448,119 +448,62 @@ def dele_regime(closure=None, epsilon=None, filter_negatives=True, reasoner="can
 # explicitly (DELECodeLosses) instead of being hidden in the modules.
 # ---------------------------------------------------------------------------------------
 
-def _elem_gci3_loss(module, data, neg=False):
-    import mowl.nn.el.elem.losses as L
-    if module._dele_neg(neg):
-        return L.gci3_loss_neg(data, module.class_embed, module.class_rad,
-                               module.rel_embed, module.margin)
-    return L.gci3_loss_reference(data, module.class_embed, module.class_rad,
-                                 module.rel_embed, module.margin)
+#: What the reference code reads differently from the papers and from mOWL's defaults, as
+#: options of the objective of a geometry built from parts
+#: (:class:`~mowl.representation.Objective`): ``(option, value, applies where the option
+#: currently has the value (or any value: ``None``))``. A module that is a geometry gets the
+#: options its objective has, whatever the method is.
+_REFERENCE_READING = (
+    # \exists r.C \sqsubseteq D is the inclusion of the translated region of C in D
+    ("gci3_reading", "inclusion", "overlap"),
+    # the margin of an inclusion is a slack, that of a negative reading a strict gap
+    ("slack", True, False),
+    ("negative_margin", "strict", None),
+    # the negative of C \sqsubseteq \exists r.D penalises the *separation* of the regions
+    ("gci2_negative", "apart", "overlap"),
+    # \exists r.C \sqsubseteq \bot shrinks the filler C, not the head region of r
+    ("gci3_bot_reading", "filler", "exists"),
+)
 
 
-def _elbe_gci0_loss(module, data, neg=False):
-    import mowl.nn.el.elbe.losses as L
-    if module._dele_neg(neg):
-        return L.gci0_loss_neg(data, module.class_embed, module.class_offset, module.margin)
-    return L.gci0_loss_dele(data, module.class_embed, module.class_offset, module.margin)
-
-
-def _elbe_gci1_loss(module, data, neg=False):
-    import mowl.nn.el.elbe.losses as L
-    if module._dele_neg(neg):
-        return L.gci1_loss_neg(data, module.class_embed, module.class_offset, module.margin)
-    return L.gci1_loss_dele(data, module.class_embed, module.class_offset, module.margin)
-
-
-def _elbe_gci2_loss(module, data, neg=False):
-    import mowl.nn.el.elbe.losses as L
-    return L.gci2_loss_dele(data, module.class_embed, module.class_offset, module.rel_embed,
-                            module.margin, neg=neg)
-
-
-def _elbe_gci3_loss(module, data, neg=False):
-    import mowl.nn.el.elbe.losses as L
-    if module._dele_neg(neg):
-        return L.gci3_loss_neg(data, module.class_embed, module.class_offset,
-                               module.rel_embed, module.margin)
-    return L.gci3_loss_dele(data, module.class_embed, module.class_offset,
-                            module.rel_embed, module.margin)
-
-
-def _box2el_positive(score_fn, original):
-    """A Box2EL positive loss returning the unsquared score, as the reference module does
-    (its training loop squares it); negatives keep the module's loss."""
-    def loss(module, data, neg=False):
-        if neg:
-            return original(data, neg=True)
-        return score_fn(module, data)
-    return loss
-
-
-def _b2_gci0(module, data):
-    import mowl.nn.el.boxsquaredel.losses as L
-    return L.gci0_score(data, module.class_center, module.class_offset, module.gamma)
-
-
-def _b2_gci1(module, data):
-    import mowl.nn.el.boxsquaredel.losses as L
-    return L.gci1_score(data, module.class_center, module.class_offset, module.gamma)
-
-
-def _b2_gci1_bot(module, data):
-    import mowl.nn.el.boxsquaredel.losses as L
-    return L.gci1_bot_score(data, module.class_center, module.class_offset, module.gamma)
-
-
-def _b2_gci3(module, data):
-    import mowl.nn.el.boxsquaredel.losses as L
-    return L.gci3_score(data, module.class_center, module.class_offset, module.head_center,
-                        module.head_offset, module.tail_center, module.tail_offset,
-                        module.bump_classes, module.gamma)
-
-
-def _b2_gci0_bot(module, data):
-    return th.linalg.norm(th.abs(module.class_offset(data[:, 0])), dim=1)
-
-
-def _b2_gci3_bot(module, data):
-    # the reference takes the offset of the filler class (column 1); mOWL's module takes
-    # the head offset of the role
-    return th.linalg.norm(th.abs(module.class_offset(data[:, 1])), dim=1)
-
-
-_B2_POSITIVES = {"gci0_loss": _b2_gci0, "gci1_loss": _b2_gci1,
-                 "gci1_bot_loss": _b2_gci1_bot, "gci3_loss": _b2_gci3,
-                 "gci0_bot_loss": _b2_gci0_bot, "gci3_bot_loss": _b2_gci3_bot}
-
-#: Methods to switch on the module, per module class. BoxSquaredEL: the positive losses
-#: return the unsquared scores of the reference module (mOWL squares them inside the
-#: module, the reference in its training loop, see DELECodeLoss); validation losses and
-#: the model selection then see the same quantity as in the reference.
-_DELE_LOSSES = {
-    "ELEmModule": {"gci3_loss": _elem_gci3_loss},
-    "ELBEModule": {"gci0_loss": _elbe_gci0_loss, "gci1_loss": _elbe_gci1_loss,
-                   "gci2_loss": _elbe_gci2_loss, "gci3_loss": _elbe_gci3_loss},
-    "BoxSquaredELModule": _B2_POSITIVES,
-}
+def _apply_reference_reading(objective, keep=()):
+    """Set the options of :data:`_REFERENCE_READING` the objective has and that read the
+    other way; return the names of the options changed. The options named in ``keep`` are
+    left as they are (a module whose losses are the reference's already names them in
+    ``reference_reading_keeps``)."""
+    changed = []
+    for name, value, replaces in _REFERENCE_READING:
+        if name in keep:
+            continue
+        current = getattr(objective, name, None)
+        if current is None and not hasattr(objective, name):
+            continue
+        if (replaces is None or current == replaces) and current != value:
+            setattr(objective, name, value)
+            changed.append(name)
+    return changed
 
 
 class DELECodeLosses(TrainingRegime):
-    """Train (and score) with the loss functions of the DELE reference code.
+    """Train (and score) with the loss readings of the DELE reference code.
 
     The reference implementation (bio-ontology-research-group/DELE, ``losses/*.py``)
     silently modifies the losses of the models it embeds, and the published numbers of
-    DELE's tables were produced with the modified losses. This regime switches an
-    attached module to them; the module's default losses are untouched:
+    DELE's tables were produced with the modified losses. This regime switches the
+    objective of an attached module (a geometry built from parts, any method) to those
+    readings; the default readings of the method are what the module had before:
 
-    * **ELEm**: the GCI3 positive loss adds the filler radius
-      (:math:`\\mathrm{relu}(\\|c - r - d\\| + r_c - r_d - \\gamma)`) instead of
-      subtracting it -- the corrected inclusion of the translated ball (Mashkova &
-      Hoehndorf 2026, Appendix C, call it "the corrected GCI3 loss").
-    * **ELBE**: the inclusion margins become slack (``- margin``, as in ELEmbeddings),
-      the GCI3 loss is corrected as for ELEm, and the GCI2 negative loss penalises
-      overlap of the translated box of :math:`C` and the box of :math:`D` instead of
-      their separation. The GCI1-BOT loss keeps its original form (``+ margin``).
-    * **Box2EL**: the loss functions agree with the reference, but mOWL's module squares
+    * **Inclusion of the translated region** for :math:`\\exists r.C \\sqsubseteq D`
+      (``gci3``): the filler's size is *added* (:math:`\\mathrm{relu}(\\|c - r - d\\| + r_c -
+      r_d - \\gamma)` for balls), where ELEmbeddings and ELBE subtract it (overlap), the
+      corrected inclusion (Mashkova & Hoehndorf 2026, Appendix C, "the corrected GCI3 loss").
+    * **ELBE**: the inclusion margins become slack (``- margin``, as in ELEmbeddings), and
+      the GCI2 negative loss penalises overlap of the translated box of :math:`C` and the box of
+      :math:`D` instead of their separation. The GCI1-BOT loss keeps its original form
+      (``+ margin``).
+    * **Box2EL**: the loss functions agree with the reference (the margin of its negative
+      and disjointness losses included: the module keeps it, ``reference_reading_keeps``),
+      but mOWL's objective squares
       the positive losses (other than GCI2) itself, whereas the reference module returns
       the unsquared scores and squares them in the training loop. The positives are
       switched to the unsquared scores (the GCI3-BOT one taking the offset of the filler
@@ -571,11 +514,12 @@ class DELECodeLosses(TrainingRegime):
 
     * **ELEm** (``elem_axiom_reg=True``): every loss of a normal form with class
       centres (GCI0, GCI1, GCI1-BOT, GCI2, GCI3; positive and negative) adds
-      :math:`|\|c\| - 1|` for each class of the axiom, the per-axiom regularisation of
+      :math:`|\\|c\\| - 1|` for each class of the axiom, the per-axiom regularisation of
       the reference (``class_reg``, as in mOWL 0.2.1's ELEmbeddings, on which the
       reference builds; the released reference code reads ``self.reg_norm``, which its
       module never sets, so it presumably ran with mOWL 0.2.1's ``reg_norm=1``), and
-      mOWL's global regularisation term is switched off. The ranking score omits the
+      mOWL's global regularisation term is switched off
+      (``module.norm_penalty = "per_axiom"``). The ranking score omits the
       regularisation, as the reference's ``eval_method`` does (``class_reg=None``): the
       module gets a ``ranking_score(data, gci_name)`` method that the DELE evaluation
       uses. The validation loss includes it, as in the reference.
@@ -584,7 +528,8 @@ class DELECodeLosses(TrainingRegime):
     ``eval_method`` does. Attach ``DELECodeLosses`` before regimes that inspect the
     module. The switch is re-applied if the model rebuilds its module.
 
-    :param elem_axiom_reg: Per-axiom norm regularisation of ELEm (see above).
+    :param elem_axiom_reg: Per-axiom norm regularisation of modules that offer it
+        (``norm_penalty``, ELEm; see above).
     """
 
     key = "dele-code-losses"
@@ -593,87 +538,52 @@ class DELECodeLosses(TrainingRegime):
         super().__init__()
         self.patched = None
         self.elem_axiom_reg = bool(elem_axiom_reg)
+        self._module = None
 
     def attach(self, model):
         super().attach(model)
         self._apply()
 
     def _apply(self):
-        from types import MethodType
         module = getattr(self.model, "module", None)
-        name = type(module).__name__
-        if name not in _DELE_LOSSES:
+        objective = getattr(module, "objective", None)
+        if objective is None or not hasattr(module, "measure"):
             raise TypeError(
-                f"DELECodeLosses switches ELEmModule, ELBEModule and BoxSquaredELModule; "
-                f"got {name}.")
-        for method, function in _DELE_LOSSES[name].items():
-            if name == "BoxSquaredELModule":
-                original = getattr(type(module), method).__get__(module)
-                function = _box2el_positive(function, original)
-            setattr(module, method, MethodType(function, module))
-        if name == "BoxSquaredELModule":
+                "DELECodeLosses switches the objective of a module that is a geometry built "
+                f"from parts (every method of the library); got {type(module).__name__}.")
+        had_squares = bool(objective.squared)
+        _apply_reference_reading(objective, getattr(module, "reference_reading_keeps", ()))
+        if had_squares:
+            # the reference module returns unsquared scores; DELECodeLoss squares them
+            objective.squared = ()
             module._dele_unsquared = True
-        if name == "ELEmModule" and self.elem_axiom_reg:
-            _elem_axiom_regularisation(module)
-        if name == "ELBEModule":
-            # Inclusions are slack in the reference code, whatever the module's
-            # convention; the margin value is used as published (Appendix D).
+        if hasattr(module, "margin_semantics") and objective.slack:
             module.margin_semantics = "slack"
-        self.patched = name
+        if self.elem_axiom_reg and hasattr(module, "norm_penalty"):
+            module.norm_penalty = "per_axiom"
+            _without_axiom_norms(module)
+        self.patched = type(module).__name__
+        self._module = module
 
     def on_epoch_start(self, epoch, epochs):
-        module = self.model.module
-        if type(module).__name__ != self.patched or \
-                not set(_DELE_LOSSES[self.patched]) <= set(module.__dict__) or (
-                    self.patched == "ELEmModule" and self.elem_axiom_reg
-                    and "ranking_score" not in module.__dict__):
+        # a model that rebuilds its module gets the switch again
+        if getattr(self.model, "module", None) is not self._module:
             self._apply()
 
 
-#: Class columns of every ELEm normal form whose loss uses class centres.
-_ELEM_REG_COLUMNS = {"gci0": (0, 1), "gci1": (0, 1, 2), "gci1_bot": (0, 1),
-                     "gci2": (0, 2), "gci3": (1, 2)}
-
-
-def _elem_axiom_regularisation(module):
-    """Add the reference's per-axiom |norm - 1| term to the ELEm losses of ``module``
-    (instance attributes wrapping whatever loss methods it has now) and switch its
-    global regularisation off; ``module.ranking_score`` scores without the term."""
+def _without_axiom_norms(module):
+    """Give ``module`` a ``ranking_score(data, gci_name)`` that is its loss without the
+    per-axiom norm terms (the reference ranks without them)."""
     from types import MethodType
-    module._dele_skip_reg = False
-    reg_norm = getattr(module, "reg_norm", 1) or 1
-
-    def wrap(gci_name, inner):
-        cols = _ELEM_REG_COLUMNS[gci_name]
-
-        def loss(self, data, neg=False):
-            value = inner(data, neg=neg)
-            if self._dele_skip_reg:
-                return value
-            reg = sum(th.abs(th.linalg.norm(self.class_embed(data[:, i]), dim=1,
-                                             keepdim=True) - reg_norm) for i in cols)
-            return value + reg.reshape(value.shape)
-        return loss
-
-    for gci_name in _ELEM_REG_COLUMNS:
-        attr = f"{gci_name}_loss"
-        inner = module.__dict__.get(attr)
-        inner = (lambda f: (lambda data, neg=False: f(module, data, neg=neg)))(
-            inner.__func__) if inner is not None else getattr(type(module), attr).__get__(
-                module)
-        setattr(module, attr, MethodType(wrap(gci_name, inner), module))
-
-    def regularization_loss(self):
-        return th.zeros((), device=self.class_embed.weight.device)
 
     def ranking_score(self, data, gci_name):
-        self._dele_skip_reg = True
+        norms = self.objective.unit_norm
+        self.objective.unit_norm = ()
         try:
             return self(data, gci_name)
         finally:
-            self._dele_skip_reg = False
+            self.objective.unit_norm = norms
 
-    module.regularization_loss = MethodType(regularization_loss, module)
     module.ranking_score = MethodType(ranking_score, module)
 
 
@@ -708,19 +618,19 @@ class DELECodeLoss(TrainingRegime):
     key = "dele-code-loss"
 
     def loss(self, gci_name, pos_scores, neg_scores):
-        name = type(self.model.module).__name__
+        form = getattr(self.model.module, "dele_code_form", None)
         pos = pos_scores.reshape(-1)
         neg = None if neg_scores is None or neg_scores.numel() == 0 else \
             neg_scores.reshape(-1)
-        if name == "ELEmModule":
+        if form == "ball":
             if gci_name == "gci2" and neg is not None:
                 return _sq_mean(pos) + _sq_mean(neg)
             loss = pos.mean()
             return loss if neg is None else loss + neg.mean()
-        if name == "ELBEModule":
+        if form == "box":
             loss = _sq_mean(pos)
             return loss if neg is None else loss + _sq_mean(neg)
-        if name == "BoxSquaredELModule":
+        if form == "box-with-bumps":
             # positives: DELECodeLosses makes the module return unsquared scores, as the
             # reference module does; without it mOWL's module squares all but GCI2
             squared = gci_name != "gci2" and not getattr(self.model.module,
@@ -731,8 +641,9 @@ class DELECodeLoss(TrainingRegime):
             if gci_name in ("gci2", "gci3"):
                 return loss + neg.mean() ** 2
             return loss + _sq_mean(neg)
-        raise TypeError(f"DELECodeLoss combines the losses of ELEmModule, ELBEModule and "
-                        f"BoxSquaredELModule; got {name}.")
+        raise TypeError(f"DELECodeLoss combines the losses of modules that declare their "
+                        f"form (dele_code_form: 'ball', 'box', 'box-with-bumps'); "
+                        f"{type(self.model.module).__name__} declares {form!r}.")
 
 
 class DELECodeTraining(ComposedRegime):

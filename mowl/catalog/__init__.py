@@ -4,7 +4,7 @@ Every method known to mOWL, whether it is implemented or only documented, has a
 :class:`MethodCard` that records its classification, the logic it covers, its proven
 theoretical guarantees and limitations, and where its implementation lives.
 
-.. code-block:: python
+.. testcode::
 
    from mowl.catalog import list_methods, get_method
 
@@ -14,6 +14,11 @@ theoretical guarantees and limitations, and where its implementation lives.
    card = get_method("elem")
    for g in card.guarantees:
        print(g.kind, g.statement, g.source)
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   ...ELEmbeddings ball...
 
 A publication usually bundles a representation with a way to train it and a way to
 evaluate it. mOWL catalogues the three separately: methods (:class:`MethodCard`),
@@ -28,13 +33,13 @@ from mowl.catalog.card import (Family, Status, Origin, GuaranteeKind, Reference,
                                MethodCard, RegimeKind, RegimeCard)
 from mowl.catalog.registry import (get_method, list_methods, load_method, get_regime,
                                    list_regimes, regimes_of, card_for)
-from mowl.catalog.render import (catalogue_to_rst, card_to_rst, overview_table_rst,
+from mowl.catalog.render import (catalogue_to_rst, card_to_rst, overview_table_rst, parts_table_rst,
                                  regime_to_rst, regimes_to_rst, rst_escape)
 
 __all__ = [
     "Family", "Status", "Origin", "GuaranteeKind", "Reference", "Guarantee", "MethodCard",
     "get_method", "list_methods", "load_method", "card_for",
     "RegimeKind", "RegimeCard", "get_regime", "list_regimes", "regimes_of",
-    "catalogue_to_rst", "card_to_rst", "overview_table_rst",
+    "catalogue_to_rst", "card_to_rst", "overview_table_rst", "parts_table_rst",
     "regime_to_rst", "regimes_to_rst", "rst_escape",
 ]

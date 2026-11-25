@@ -4,7 +4,7 @@ from uk.ac.manchester.cs.owl.owlapi import OWLSubClassOfAxiomImpl, OWLDisjointCl
 from org.semanticweb.owlapi.model import OWLClass
 from org.semanticweb.owlapi.reasoner import OWLReasoner
 
-from java.util import HashSet
+from java.util import ArrayList, HashSet
 from functools import wraps
 
 from mowl.owlapi.adapter import OWLAPIAdapter
@@ -90,7 +90,7 @@ org.semanticweb.owlapi.model.OWLClass")
             equiv_classes = self.reasoner.getEquivalentClasses(owl_class).getEntities()
             equiv_classes.add(owl_class)
 
-            new_axiom = OWLEquivalentClassesAxiomImpl(equiv_classes, [])
+            new_axiom = OWLEquivalentClassesAxiomImpl(ArrayList(equiv_classes), [])
             axioms.append(new_axiom)
         return axioms
 
@@ -113,6 +113,6 @@ org.semanticweb.owlapi.model.OWLClass")
         for owl_class in owl_classes:
             disjoint_classes = self.reasoner.getDisjointClasses(owl_class).getFlattened()
             disjoint_classes.add(owl_class)
-            new_axiom = OWLDisjointClassesAxiomImpl(disjoint_classes, HashSet())
+            new_axiom = OWLDisjointClassesAxiomImpl(ArrayList(disjoint_classes), HashSet())
             axioms.append(new_axiom)
         return axioms

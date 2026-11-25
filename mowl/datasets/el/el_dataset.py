@@ -4,6 +4,7 @@ from mowl.ontology.normalize import ELNormalizer, GCI, extract_role_axioms
 from mowl.datasets.gci import GCIDataset, ClassAssertionDataset, ObjectPropertyAssertionDataset
 import logging
 import random
+import numpy as np
 from org.semanticweb.owlapi.model import OWLOntology
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,20 @@ class ELDataset():
     <mowl.ontology.normalize.ELNormalizer.normalize>` for ``ontology``. If provided, the \
     normalization is not run again. Defaults to ``None``.
     :type normalized_gcis: dict, optional
+    :param shuffle: Row order of every axiom form. The normaliser yields the axioms in the \
+    order of a Java hash set, which differs from one build to the next in one process, so the \
+    rows of every form are first put in the *canonical order* (lexicographic by the integer \
+    indices of the row, which are fixed by the sorted index dictionaries). With ``True`` the \
+    canonical rows are then permuted once by a generator that is seeded with ``shuffle_seed`` \
+    and does not touch the global random state, so the same ontology gives the same rows on \
+    every build; the batches of a form then mix axioms of different parts of the ontology. \
+    With ``False`` the rows stay in the canonical order. Defaults to ``True``.
+    :type shuffle: bool, optional
+    :param shuffle_seed: Seed of the permutation above. ``None`` takes the permutation from \
+    the global :mod:`random` module instead (the behaviour before this option existed, except \
+    that it now starts from the canonical order, so it follows the global seed). Defaults to \
+    ``0``.
+    :type shuffle_seed: int, optional
 
     When index dictionaries are provided, axioms mentioning a class or object property that \
     is not in them (e.g. an auxiliary class the normalizer introduced for a validation or \
@@ -69,7 +84,9 @@ class ELDataset():
                  ontology_path=None,
                  use_cache=True,
                  load_role_axioms=False,
-                 normalized_gcis=None
+                 normalized_gcis=None,
+                 shuffle=True,
+                 shuffle_seed=0
                  ):
 
         if not isinstance(ontology, OWLOntology):
@@ -120,7 +137,9 @@ org.semanticweb.owlapi.model.OWLOntology.")
         self._role_chains = []
         self._normalized_gcis = normalized_gcis
         self._num_skipped_axioms = 0
-        
+        self.shuffle = shuffle
+        self.shuffle_seed = shuffle_seed
+
         self._gci0_dataset = None
         self._gci1_dataset = None
         self._gci2_dataset = None
@@ -219,10 +238,6 @@ org.semanticweb.owlapi.model.OWLOntology.")
             gci2 = gcis["gci2"]
             gci3 = gcis["gci3"] + gcis["gci3_bot"]
 
-            random.shuffle(gci0)
-            random.shuffle(gci1)
-            random.shuffle(gci2)
-            random.shuffle(gci3)
 
             self._gci0_dataset = GCI0Dataset(gci0, self._class_index_dict, device=self.device)
             self._gci1_dataset = GCI1Dataset(gci1, self._class_index_dict, device=self.device)
@@ -241,13 +256,6 @@ org.semanticweb.owlapi.model.OWLOntology.")
             gci3 = gcis["gci3"]
             gci3_bot = gcis["gci3_bot"]
 
-            random.shuffle(gci0)
-            random.shuffle(gci0_bot)
-            random.shuffle(gci1)
-            random.shuffle(gci1_bot)
-            random.shuffle(gci2)
-            random.shuffle(gci3)
-            random.shuffle(gci3_bot)
 
             self._gci0_dataset = GCI0Dataset(gci0, self._class_index_dict, device=self.device)
             self._gci0_bot_dataset = GCI0Dataset(
@@ -272,31 +280,53 @@ org.semanticweb.owlapi.model.OWLOntology.")
 
         if len(gcis["class_assertion"]) > 0:
             gci_class_assertion = gcis["class_assertion"]
-            random.shuffle(gci_class_assertion)
             self._class_assertion_dataset = ClassAssertionDataset(
                 gci_class_assertion, self._class_index_dict, self._individual_index_dict, device=self.device)
 
         if len(gcis["object_property_assertion"]) > 0:
             gci_object_property_assertion = gcis["object_property_assertion"]
-            random.shuffle(gci_object_property_assertion)
             self._object_property_assertion_dataset = ObjectPropertyAssertionDataset(
                 gci_object_property_assertion, self._object_property_index_dict, self._individual_index_dict, device=self.device)
 
         if len(self._role_inclusions) > 0:
-            random.shuffle(self._role_inclusions)
             self._role_inclusion_dataset = RoleInclusionDataset(
                 self._role_inclusions,
                 object_property_index_dict=self._object_property_index_dict,
                 device=self.device)
 
         if len(self._role_chains) > 0:
-            random.shuffle(self._role_chains)
             self._role_chain_dataset = RoleChainDataset(
                 self._role_chains,
                 object_property_index_dict=self._object_property_index_dict,
                 device=self.device)
 
+        self._arrange_rows()
         self._loaded = True
+
+    def _arrange_rows(self):
+        """Puts the rows of every axiom form in the canonical order and, if ``shuffle``,
+        permutes them with the seeded generator (see the class docstring)."""
+        if self.shuffle and self.shuffle_seed is not None:
+            generator = np.random.RandomState(self.shuffle_seed)
+        else:
+            generator = None
+        for name in ("_gci0_dataset", "_gci0_bot_dataset", "_gci1_dataset", "_gci1_bot_dataset",
+                     "_gci2_dataset", "_gci3_dataset", "_gci3_bot_dataset",
+                     "_class_assertion_dataset", "_object_property_assertion_dataset",
+                     "_role_inclusion_dataset", "_role_chain_dataset"):
+            dataset = getattr(self, name)
+            if dataset is None or len(dataset) == 0:
+                continue
+            rows = dataset._data
+            order = np.lexsort(rows.cpu().numpy().T[::-1])
+            if self.shuffle:
+                if generator is not None:
+                    order = order[generator.permutation(len(order))]
+                else:
+                    order = order.tolist()
+                    random.shuffle(order)
+                    order = np.asarray(order)
+            dataset._data = rows[th.as_tensor(order, device=rows.device)]
 
     def _drop_unindexed_axioms(self, gcis):
         """Removes the axioms that mention a class or object property missing from the index

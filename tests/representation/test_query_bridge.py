@@ -1,0 +1,133 @@
+"""The query parts inside ComposedEL. (The direct query models trained with parts that share
+their parameters: tests/baselines/test_query_bridge_direct.py.)"""
+from unittest import TestCase
+
+import torch as th
+
+from mowl.models import AConE, BetaE, ComposedEL, ConE, Query2Box
+from mowl.representation import (BoxClasses, ComposedGeometry, Bounds, Objective,
+                                 ConstructorUnavailable)
+from mowl.representation.library.query_methods import QueryClasses, query2box
+from mowl.representation.library.boxrel_relations import TranslationBoxes
+from tests.datasetFactory import FamilyDataset
+
+
+class TestQueryModelsTrain(TestCase):
+    """The classes users get (``mowl.models``): the loss of a fixed batch of queries falls
+    under Adam steps on it (the check that the bridge test makes for the direct classes)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = FamilyDataset()
+
+    def descend(self, cls, steps=60, lr=3e-3):
+        th.manual_seed(0)
+        model = cls(self.dataset, embed_dim=8, batch_size=24, negatives=4, seed=0)
+        groups = model.sampler.batch()
+        optimiser = th.optim.Adam(model.module.parameters(), lr=lr)
+        first = float(model.loss(groups))
+        for _ in range(steps):
+            optimiser.zero_grad()
+            loss = model.loss(groups)
+            loss.backward()
+            optimiser.step()
+        return first, float(model.loss(groups))
+
+    def test_the_loss_of_a_fixed_batch_falls_for_every_query_method(self):
+        for cls in (Query2Box, BetaE, ConE, AConE):
+            first, last = self.descend(cls)
+            self.assertLess(last, first, cls.__name__)
+
+    def test_the_loss_history_of_a_training_run_is_recorded_and_falls(self):
+        th.manual_seed(0)
+        model = Query2Box(self.dataset, embed_dim=8, batch_size=24, negatives=4, seed=0,
+                          learning_rate=1e-2, steps_per_epoch=10)
+        model.train(epochs=6)
+        self.assertEqual(len(model.loss_history), 6)
+        self.assertLess(model.loss_history[-1], model.loss_history[0])
+
+
+def _loss(model):
+    return sum(float(model.module(d[:], f).mean())
+               for f, d in model.training_datasets.items() if len(d))
+
+
+class TestPartsInComposedEL(TestCase):
+    """The parts of the query methods as parts of an EL model trained on normal-form
+    axioms."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = FamilyDataset()
+
+    def trains(self, model):
+        before = _loss(model)
+        model.train(epochs=40)
+        self.assertLess(_loss(model), before)
+
+    def test_box_of_translations_with_boxes_and_with_balls(self):
+        for classes in ("box", "ball"):
+            th.manual_seed(0)
+            model = ComposedEL(
+                self.dataset, classes=classes, embed_dim=8, margin=0.05,
+                relations=lambda n, d: TranslationBoxes(n, d, activation="relu",
+                                                        init_range=0.1))
+            self.assertEqual(model.module.parts["relations"], "box of translations")
+            self.trains(model)
+
+    def test_shift_and_widen_is_exists_as_image_under_the_inverse(self):
+        relation = TranslationBoxes(2, 3, activation="relu", init_range=0.1)
+        region = BoxClasses(4, 3)(th.tensor([0, 1]))
+        ids = th.tensor([0, 1])
+        image = relation.image(ids, region)
+        self.assertTrue(th.allclose(image.offset, region.offset + relation.offsets(ids)
+                                    .relu()))
+        back = relation.preimage(ids, image)
+        # widening is not undone: the preimage of the image contains the region
+        self.assertTrue(bool((back.offset >= region.offset - 1e-6).all()))
+        self.assertTrue(th.allclose(back.centre, region.centre, atol=1e-6))
+
+    def test_sector_cones_with_the_rotation(self):
+        th.manual_seed(0)
+        model = ComposedEL(self.dataset, classes="sector cone", relations="angle rotation",
+                           embed_dim=8, margin=0.05)
+        self.assertEqual(model.module.parts["classes"], "sector cone")
+        self.assertEqual(model.module.parts["measure"], "angle")
+        # no cone intersection: the axioms with a conjunction cannot be trained
+        with self.assertRaises(ConstructorUnavailable):
+            model.module(model.training_datasets["gci1"][:], "gci1")
+        for form in [f for f in model.training_datasets if "gci1" in f]:
+            model._training_datasets.pop(form)
+        self.trains(model)
+
+    def test_query_geometry_as_class_and_relation_model(self):
+        """The class model is the extension of an anchor and the relation model the box of
+        translations of a Query2Box geometry; the EL model trains, but the classes cannot
+        differ in size."""
+        th.manual_seed(0)
+        sizes = (len(self.dataset.classes), len(self.dataset.object_properties))
+        made = []
+
+        def classes(size, dim):
+            if not made:
+                made.append(query2box(sizes[0], sizes[1], 0, embed_dim=dim, gamma=2.0))
+                return QueryClasses(made[0])
+            return BoxClasses(size, dim)           # individuals: plain boxes
+
+        def relations(size, dim):
+            return made[0].relations
+
+        model = ComposedEL(self.dataset, classes=classes, relations=relations,
+                           objective=Objective(0.05), embed_dim=8)
+        self.assertIsInstance(model.module, ComposedGeometry)
+        offsets = model.module.classes(th.arange(sizes[0])).offset
+        self.assertTrue(th.allclose(offsets, offsets[:1].expand_as(offsets)))   # one size
+        before = [p.detach().clone() for p in made[0].entities.parameters()]
+        for form in [f for f in model.training_datasets if "gci1" in f]:
+            model._training_datasets.pop(form)
+        self.trains(model)
+        self.assertFalse(th.equal(before[0], made[0].entities.table.weight))
+        offsets = model.module.classes(th.arange(sizes[0])).offset
+        self.assertTrue(th.allclose(offsets, offsets[:1].expand_as(offsets)))   # still
+        self.assertTrue(model.module.measure.exact_intersection)
+        self.assertIsInstance(model.module.measure, Bounds)

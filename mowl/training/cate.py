@@ -2,17 +2,17 @@
 arXiv:2305.07163v3, ``src/cat.py``, ``src/cat_completion.py``, ``src/cat_membership.py``
 and ``src/cat_ppi_evaluator.py``).
 
-The design is implemented as options of :class:`mowl.models.cate.CatE` (whose own
-:class:`~mowl.models.cate.model.CatE.train` follows it); attaching this regime switches
-the model to the reference configuration. It exists so that a published number can be
-reproduced by naming one regime, as :class:`mowl.training.reference.Box2ELCodeTraining`
+The design is the combination of regimes that :class:`mowl.models.cate.CatE` names by
+default (:attr:`~mowl.models.cate.CatE.default_regimes`) with the options of the reference
+code; attaching this regime switches the model to it. It exists so that a published number can
+be reproduced by naming one regime, as :class:`mowl.training.reference.Box2ELCodeTraining`
 does for Box\\ :sup:`2`\\ EL.
 """
 
-from mowl.training.regime import TrainingRegime
+from mowl.training.regime import ComposedRegime
 
 
-class CateCodeTraining(TrainingRegime):
+class CateCodeTraining(ComposedRegime):
     """How the CatE code trains, and how the numbers of Zhapa-Camacho and Hoehndorf
     (arXiv:2305.07163v3, Tables 2-4) were obtained.
 
@@ -58,14 +58,18 @@ class CateCodeTraining(TrainingRegime):
     key = "cate-code-training"
 
     def __init__(self, interaction_loss=False):
+        super().__init__()
+        self.key = type(self).key
         self._interaction_loss = bool(interaction_loss)
 
     def attach(self, model):
-        from mowl.models.cate import CatE
-        if not isinstance(model, CatE):
-            raise TypeError(f"CateCodeTraining needs a CatE model, got {type(model).__name__}.")
-        self.model = model
-        # Eq. 7 as the reference code computes it.
+        if not callable(getattr(model, "_regimes", None)):
+            raise TypeError(f"CateCodeTraining needs a model that composes its regimes "
+                            f"(the hook _regimes, as CatE does), got {type(model).__name__}.")
+        # Eq. 7 as the reference code computes it; the options of the model read back it
         model.negative_aggregation = "mean"
         model.filter_negatives = False
         model.interaction_loss = self._interaction_loss
+        self.regimes = tuple(make() for make in model._regimes(
+            "mean", False, self._interaction_loss))
+        super().attach(model)

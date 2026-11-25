@@ -5,6 +5,7 @@ from mowl.catalog.regimes._benchmark_refs import LEEMHUIS2025
 
 REGIME = RegimeCard(
     key="exact-model-check",
+    assumption="open world",
     name="Exact-model and Helly check of trained regions",
     kind=RegimeKind.EVALUATION,
     summary=(

@@ -37,8 +37,11 @@ _PREDICTION = [
         key=f"box2el-{name}-prediction",
         name=f"Box2EL subsumption prediction ({label})",
         task=Task.AXIOM_PREDICTION,
+        evaluation_regime="box2el-normal-form-ranking",
+        completion_tasks=("subsumption-prediction", "existential-prediction"),
         description=_PREDICTION_DESCRIPTION,
         dataset=f"mowl.datasets.builtin.jackermeier2024.{cls}",
+        dataset_kwargs={"repaired": False},
         protocol=_P + "Box2ELPredictionProtocol",
         metrics=_RANK_METRICS,
         higher_is_better=_HIB,
@@ -70,9 +73,12 @@ _TRANSBOX_PREDICTION = [
         key=f"transbox-{name}-prediction",
         name=f"TransBox normalised-axiom prediction ({label})",
         task=Task.AXIOM_PREDICTION,
+        evaluation_regime="transbox-normal-form-ranking",
+        completion_tasks=("subsumption-prediction", "existential-prediction"),
         description=_PREDICTION_DESCRIPTION + (
             " Evaluation as re-implemented for TransBox (Yang et al. 2025, Appendix E)."),
         dataset=f"mowl.datasets.builtin.jackermeier2024.{cls}",
+        dataset_kwargs={"repaired": False},
         protocol=_P + "TransBoxPredictionProtocol",
         metrics=_RANK_METRICS,
         higher_is_better=_HIB,
@@ -92,6 +98,7 @@ _INFERENCE = [
         key=f"box2el-{name}-inference",
         name=f"Box2EL approximating deductive reasoning ({label})",
         task=Task.DEDUCTIVE_INFERENCE,
+        evaluation_regime="inferred-subsumption-ranking",
         description=(
             "Train on the full normalised ontology (all asserted axioms); rank the atomic "
             "subsumptions C ⊑ D inferred by an EL++ reasoner but not asserted (90% test, "
@@ -124,6 +131,9 @@ _PPI = [
         key=f"box2el-{org}-ppi",
         name=f"Box2EL PPI prediction ({org})",
         task=Task.LINK_PREDICTION,
+        evaluation_regime="ppi-ranking",
+        completion_tasks=("existential-prediction",),
+        encodes=("link-prediction",),
         description=(
             "For every test interaction P1 ⊑ ∃interacts.P2, rank P1 among all proteins of "
             "the dataset (scored with r and P2 fixed), ties by position. Filtered metrics "

@@ -9,6 +9,7 @@ BENCHMARKS = [
     Benchmark(
         key=f"emelpp-{name}-prediction", name=f"EmEL++ subsumption prediction ({label})",
         task=Task.AXIOM_PREDICTION,
+        evaluation_regime="emelpp-subsumee-ranking",
         description=("70/20/10 split of the atomic subclass pairs of the normalised "
                      "ontology. For every test pair C ⊑ D, all classes except D are ranked "
                      "by the distance of their centre from D's centre and the rank of C is "

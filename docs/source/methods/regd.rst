@@ -29,7 +29,8 @@ region :math:`v`,
 :math:`d_{bd} \le 0` exactly when the child is inside the parent. :math:`d_{dep}` grows
 without bound as the regions shrink, which gives room for many siblings and many levels in
 few dimensions (Theorems 1 and 2 of the paper). The functions are in
-:mod:`mowl.nn.el.regd.dissimilarity`.
+:mod:`mowl.representation.library.boundary_depth` (the ``boundary and depth`` measure,
+:class:`~mowl.representation.library.ballfam_parts.BoundaryDepth`, uses them).
 
 Normal forms
 ------------
@@ -77,6 +78,32 @@ column: the score of the class whose reference index equals the role's index, e.
 :math:`\{0, 0.5, 1\}`) but fixed to 1 in the released code; the recipes choose it by
 validation F1, which gives :math:`\lambda = 0` (no depth term) for boxes on the
 inference benchmarks.
+
+Made of parts
+-------------
+
+Both models are combinations of the parts of :mod:`mowl.representation`: their module is the
+:class:`~mowl.representation.ComposedGeometry` that the method ``regd`` (boxes) or
+``regd_elem`` (balls) builds. RegD is *one part*: the ``boundary and depth`` measure
+(:class:`~mowl.representation.library.ballfam_parts.BoundaryDepth`, which works on boxes and on
+balls) and the objective that reads the inclusion forms with it
+(:class:`~mowl.representation.library.ballfam_parts.RegDObjective`, over the objective of
+ELBE or of ELEmbeddings). The class model, the relation model and the regularisers are those of
+the host, and every one of them can be swapped. The earlier, hand-written modules are kept in
+``mowl.baselines`` as the reference of the tests.
+
+.. testcode::
+
+   from mowl.nn import RegDELBEModule, RegDELEmModule
+
+   for module in (RegDELBEModule(3, 2, embed_dim=4), RegDELEmModule(3, 2, embed_dim=4)):
+       parts = module.parts
+       print(parts["classes"], "|", parts["relations"], "|", parts["measure"])
+
+.. testoutput::
+
+   box | translation | boundary and depth
+   ball | translation | boundary and depth
 
 Example
 -------

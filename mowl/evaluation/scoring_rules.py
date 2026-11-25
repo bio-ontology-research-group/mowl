@@ -17,6 +17,8 @@ module attributes ``margin`` and ``gamma`` (the names used by mOWL's modules) to
 scoring and restores them afterwards.
 """
 
+import torch as th
+
 from mowl.evaluation.el_scoring import loss_scores
 
 MARGIN_ATTRIBUTES = ("margin", "gamma")
@@ -38,3 +40,9 @@ def margin_free_loss_scores(model, gci_name, rows):
     finally:
         for a, v in saved.items():
             setattr(module, a, v)
+
+
+def exp_negative_score(loss):
+    """Score :math:`e^{-\\ell} \\in (0, 1]` of a loss :math:`\\ell \\ge 0`: higher is better,
+    1 for an axiom that holds. A monotone map, so it ranks like the loss."""
+    return th.exp(-loss)

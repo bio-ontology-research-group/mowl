@@ -37,8 +37,8 @@ For this example, let's create random vectors:
    tsne = TSNE(name_to_embedding, name_to_label)
    tsne.generate_points(250, workers=4)
 
-.. code:: python
-	       
+.. testcode::
+
    tsne.show()
 
 

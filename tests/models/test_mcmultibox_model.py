@@ -40,7 +40,7 @@ class TestVolumeMultiBoxEL(TestCase):
         self.model.eval_gci_name = "gci0"
         data = self.model.training_datasets["gci0"][:][:20]
         dist = self.model.eval_method(data)
-        self.assertEqual(dist.shape, (len(data),))
+        self.assertEqual(dist.shape, (len(data), 1))
         self.assertTrue(((dist >= 0) & (dist <= 1)).all())
         same = th.stack([data[:, 0], data[:, 0]], dim=1)
         self.assertTrue((self.model.evaluation_model(same, "gci0") == 0).all())
@@ -60,3 +60,14 @@ class TestVolumeMultiBoxEL(TestCase):
             m.train(epochs=2)
             return m.module.class_embed.detach().clone()
         self.assertTrue(th.allclose(run(), run()))
+
+    def test_training_in_row_chunks_gives_the_same_model(self):
+        """Bounded memory (a few axioms at a time) trains the same model as whole batches."""
+        def run(budget):
+            m = VolumeMultiBoxEL(self.dataset, embed_dim=2, num_boxes=2, num_points=128,
+                                 num_batches=1, seed=4, max_chunk_elements=budget)
+            self.assertEqual(m.module.max_chunk_elements, budget)
+            m.train(epochs=2)
+            return m.module.class_embed.detach().clone()
+        # 128 points x 2 boxes x 2 coordinates: 3 axioms per chunk
+        self.assertTrue(th.allclose(run(None), run(3 * 128 * 2 * 2), atol=1e-6, rtol=0))

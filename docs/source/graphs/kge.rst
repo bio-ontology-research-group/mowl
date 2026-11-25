@@ -76,3 +76,19 @@ Although the embedding generations can be done step by step, we also provide a c
    class_embs = model.class_embeddings
    role_embs = model.object_property_embeddings
    ind_embs = model.individual_embeddings
+
+The parts of the model
+-------------------------------------------------
+
+The model is a combination of parts: the projection, the entity and relation representations of the PyKEEN model with its interaction function, the loss of the PyKEEN model as the objective, and the negative sampler. ``model.module`` is the :class:`~mowl.representation.Geometry` that names them, and the model trains on the triples of the graph with the loop of :class:`~mowl.models.graph_kge.triple_model.TripleGraphModel` (``num_negs_per_pos`` corrupted triples per positive, the optimiser, learning rate and batch size set above). As in the released class (mOWL 2.1.0), ``train`` takes the steps of PyKEEN's sLCWA loop: every call draws the parameters again (after PyKEEN's memory probe, which splits a batch that does not fit on the GPU into sub-batches) and trains on PyKEEN's batches and negatives. ``model.reinitialise = False`` continues from the current parameters instead (a second ``train`` goes on where the first stopped, pretrained parameters are kept), and ``model.batching = "mowl"`` uses mOWL's batches and sampler, which a training regime needs to change the negatives, the loss or the regularisation.
+
+.. testcode::
+
+   parts = model.module.parts
+   print(parts["measure"], "|", parts["negative sampler"], "|", parts["projection"])
+
+.. testoutput::
+
+   triple score | uniform corruption | DL2VecProjector
+
+:class:`~mowl.models.GraphKGEModel` builds the same combination from the registered methods of mOWL (``"boxe"``, ``"expressive"``, ``"reshuffle"``, ``"graph_kge"``, ``"gda_projection"``) with every part swappable, and :class:`~mowl.models.BoxE`, :class:`~mowl.models.ExpressivE` and :class:`~mowl.models.Reshuffle` are its named combinations.

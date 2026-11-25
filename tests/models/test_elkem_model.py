@@ -332,10 +332,10 @@ class TestTraining(TestCase):
                       k_neg=2, lr_decay_epoch=20, load_role_axioms=True,
                       model_filepath=os.path.join(self.tmp, "e2e.pt"))
         th.manual_seed(1)
-        before = model.training_loss(model._training_tensors()).item()
+        before = model.batch_loss(model._training_tensors()).item()
         model.train(40, validate_every=10)
         th.manual_seed(1)
-        after = model.training_loss(model._training_tensors()).item()
+        after = model.batch_loss(model._training_tensors()).item()
         self.assertLess(after, before)
         self.assertIsNotNone(model.best_validation_median_rank)
         self.assertTrue(os.path.exists(model.model_filepath))
@@ -387,3 +387,11 @@ class TestTraining(TestCase):
             neg = model.generate_negatives("class_assertion", pos)
             self.assertEqual(len(neg), 5 * len(pos))
             self.assertFalse(set(map(tuple, neg.tolist())) & observed)
+
+
+def test_model_passes_the_variant_to_its_module():
+    ont = build_ontology()
+    assert ELKEm(Dataset(ont), embed_dim=4).module.variant == "paper"
+    assert ELKEm(Dataset(ont), embed_dim=4, variant="reference").module.variant == "reference"
+    with pytest.raises(ValueError):
+        ELKEm(Dataset(ont), embed_dim=4, variant="other")

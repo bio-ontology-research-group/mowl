@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import LOURENCO2026
 
 REGIME = RegimeCard(
     key='existential-concept-negatives',
+    assumption="closed world over stated axioms",
     name='Negative concept regularisation on existential concepts (BoxLitE)',
     kind=RegimeKind.TRAINING,
     summary=('Instead of sampled corruptions, convex regularisation terms push individuals out of'

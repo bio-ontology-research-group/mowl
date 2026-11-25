@@ -1,0 +1,58 @@
+{
+ "owlapi": "5.5.1",
+ "value": {
+  "annotation_properties": [
+   "http://purl.obolibrary.org/obo/IAO_0000115",
+   "http://www.w3.org/2000/01/rdf-schema#comment",
+   "http://www.w3.org/2000/01/rdf-schema#label",
+   "http://www.w3.org/2000/01/rdf-schema#seeAlso"
+  ],
+  "classes": [
+   "http://mowl.borg/compat/rich#Adult",
+   "http://mowl.borg/compat/rich#BusyParent",
+   "http://mowl.borg/compat/rich#Cat",
+   "http://mowl.borg/compat/rich#Childless",
+   "http://mowl.borg/compat/rich#Dog",
+   "http://mowl.borg/compat/rich#DogOnlyOwner",
+   "http://mowl.borg/compat/rich#Father",
+   "http://mowl.borg/compat/rich#Man",
+   "http://mowl.borg/compat/rich#Mother",
+   "http://mowl.borg/compat/rich#Parent",
+   "http://mowl.borg/compat/rich#Person",
+   "http://mowl.borg/compat/rich#Pet",
+   "http://mowl.borg/compat/rich#PetOwner",
+   "http://mowl.borg/compat/rich#Weekday",
+   "http://mowl.borg/compat/rich#Woman",
+   "http://purl.obolibrary.org/obo/GO_0000001",
+   "http://purl.obolibrary.org/obo/GO_0000002",
+   "http://www.w3.org/2002/07/owl#Thing"
+  ],
+  "data_properties": [
+   "http://mowl.borg/compat/rich#hasAge",
+   "http://mowl.borg/compat/rich#hasName"
+  ],
+  "datatypes": [
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString",
+   "http://www.w3.org/2001/XMLSchema#integer",
+   "http://www.w3.org/2001/XMLSchema#string"
+  ],
+  "individuals": [
+   "http://mowl.borg/compat/rich#anna",
+   "http://mowl.borg/compat/rich#bob",
+   "http://mowl.borg/compat/rich#carl",
+   "http://mowl.borg/compat/rich#monday",
+   "http://mowl.borg/compat/rich#rex",
+   "http://mowl.borg/compat/rich#tuesday"
+  ],
+  "object_properties": [
+   "http://mowl.borg/compat/rich#hasAncestor",
+   "http://mowl.borg/compat/rich#hasChild",
+   "http://mowl.borg/compat/rich#hasMother",
+   "http://mowl.borg/compat/rich#hasParent",
+   "http://mowl.borg/compat/rich#hasPet",
+   "http://mowl.borg/compat/rich#hasSpouse",
+   "http://mowl.borg/compat/rich#knows"
+  ],
+  "ontology_iri": "http://mowl.borg/compat/rich"
+ }
+}

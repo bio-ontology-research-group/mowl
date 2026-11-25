@@ -26,6 +26,9 @@ class RegimeProtocol(Protocol):
     def prepare(self, dataset):
         return self.regime.prepare(dataset)
 
+    def initialise_model(self, model, dataset):
+        self.regime.initialise_model(model, dataset)
+
     def evaluate(self, model, dataset):
         results = self.regime.evaluate(model, dataset)
         self.info = dict(getattr(self.regime, "info", {}))
@@ -130,3 +133,100 @@ class ExactModelProtocol(RegimeProtocol):
     def build(self, **kwargs):
         from mowl.evaluation.exact_model import ExactModelRegime
         return ExactModelRegime(**kwargs)
+
+
+class CommonRankingProtocol(RegimeProtocol):
+    """:func:`mowl.evaluation.filtered_ranking.common_ranking`."""
+
+    def build(self, gci_name="gci0", relation=None, **kwargs):
+        from mowl.evaluation.filtered_ranking import common_ranking
+        return common_ranking(gci_name=gci_name, relation=relation, **kwargs)
+
+
+class EdgeClassificationProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.edge_classification.EdgeClassificationF1Regime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.edge_classification import EdgeClassificationF1Regime
+        return EdgeClassificationF1Regime(**kwargs)
+
+
+class KGLinkPredictionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.filtered_ranking.KGLinkPredictionRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.filtered_ranking import KGLinkPredictionRegime
+        return KGLinkPredictionRegime(**kwargs)
+
+
+class TripleClassificationProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.triple_classification.TripleClassificationRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.triple_classification import TripleClassificationRegime
+        return TripleClassificationRegime(**kwargs)
+
+
+class AssertionLinkPredictionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.filtered_ranking.AssertionLinkPredictionRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.filtered_ranking import AssertionLinkPredictionRegime
+        return AssertionLinkPredictionRegime(**kwargs)
+
+
+class FilteredRankingProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.filtered_ranking.FilteredRankingRegime` with the arguments
+    of ``protocol_kwargs`` (raw and filtered metrics of one side of one axiom form)."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.filtered_ranking import FilteredRankingRegime
+        return FilteredRankingRegime(**kwargs)
+
+
+class InductiveLinkPredictionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.inductive_ranking.InductiveSampledRankingRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.inductive_ranking import InductiveSampledRankingRegime
+        return InductiveSampledRankingRegime(**kwargs)
+
+
+class QueryAnsweringProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.query_answering.ReleasedQueryAnswering`: the released
+    validation or test queries of a query dataset. Subsets the model cannot answer (the
+    negation structures for a model without negation) are not reported."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.query_answering import ReleasedQueryAnswering
+        return ReleasedQueryAnswering(**kwargs)
+
+    def evaluate(self, model, dataset):
+        results = self.regime.evaluate(model, dataset)
+        self.info = dict(self.regime.info)
+        return {subset: {m: results[subset][m] for m in self.metrics}
+                for subset in self.subsets if subset in results}
+
+
+class AssertionQueryProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.assertion_queries.AssertionQueryHitsRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.assertion_queries import AssertionQueryHitsRegime
+        return AssertionQueryHitsRegime(**kwargs)
+
+
+class MaskedABoxRevisionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.abox_revision.MaskedABoxRevisionRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.abox_revision import MaskedABoxRevisionRegime
+        return MaskedABoxRevisionRegime(**kwargs)
+
+
+class SELProbabilityProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.sel_probability.SELProbabilityRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.sel_probability import SELProbabilityRegime
+        return SELProbabilityRegime(**kwargs)

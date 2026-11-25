@@ -10,6 +10,7 @@ BENCHMARK = Benchmark(
     key="helly-tk",
     name="Helly family T_k (exact model)",
     task=Task.EXACT_MODEL,
+    evaluation_regime="exact-model-check",
     description=(
         "Train on T_k (A_i ≡ ⊓_{j≠i} X_j, A_i ⊓ A_j ⊑ ⊥; k = 3 is the Leemhuis-Kutz "
         "counterexample of three pairwise compatible, jointly incompatible concepts) and "

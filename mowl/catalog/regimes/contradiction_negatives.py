@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import MASHKOVA2026, KULMANOV2019
 
 REGIME = RegimeCard(
     key='contradiction-negatives',
+    assumption="open world",
     name='Contradiction negatives from asserted disjointness',
     kind=RegimeKind.TRAINING,
     summary=("A fraction p⊥ of the negatives of C ⊑ D (and C(a)) uses a class D' that is disjoint"

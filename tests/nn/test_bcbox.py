@@ -7,7 +7,7 @@ import mowl.datasets  # noqa: F401,E402  (import order: avoids a circular import
 import pytest  # noqa: E402
 import torch as th  # noqa: E402
 
-from mowl.nn.graph.bcbox.losses import (  # noqa: E402
+from mowl.baselines.nn.graph.bcbox.losses import (  # noqa: E402
     bce_negative_sampling_loss,
     gumbel_box_log_score,
     lse,

@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import HE2024HIT
 
 REGIME = RegimeCard(
     key='sibling-hard-negatives',
+    assumption="closed world over stated axioms",
     name='Sibling hard negatives',
     kind=RegimeKind.TRAINING,
     summary=('For C ⊑ D, negatives C ⊑ S with S a sibling of C in the told hierarchy that is not '

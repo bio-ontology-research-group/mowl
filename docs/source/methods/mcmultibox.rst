@@ -97,4 +97,4 @@ hours per run on a GPU). The example below uses a tiny budget.
 .. testoutput::
    :options: +ELLIPSIS
 
-   ...torch.Size([5])
+   ...torch.Size([5, 1])

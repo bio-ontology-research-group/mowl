@@ -1,204 +1,105 @@
-from mowl.base_models.graph_model import RandomWalkModel
-from gensim.models import Word2Vec
-from gensim.models.word2vec import LineSentence
-import mowl.error.messages as msg
-import os
-import time
-import numpy as np
-import torch as th
+"""Random walks on a projection of the ontology, encoded with Word2Vec."""
 
-from deprecated.sphinx import versionadded, versionchanged
 import logging
+
+from deprecated.sphinx import versionchanged
+
+import mowl.error.messages as msg
+from mowl.base_models.graph_model import RandomWalkModel
+from mowl.models.composed.sequence import ComposedSequenceModel
+from mowl.models.composed.sequence import EvaluationModel  # noqa: F401  (a name of 2.1.0)
+from mowl.utils.device import default_device
+
 logger = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
 
 
 @versionchanged(version='1.0.0')
-class RandomWalkPlusW2VModel(RandomWalkModel):
+class RandomWalkPlusW2VModel(ComposedSequenceModel, RandomWalkModel):
     """
     Embedding model that combines graph projections + random walks.
+
+    It is the combination of parts (:mod:`mowl.representation.sequence`) of the methods
+    ``dl2vec``, ``owl2vec_star`` and ``taxonomy_walks``: the graph of a projector
+    (:meth:`set_projector`), the walks of a walker (:meth:`set_walker`) on it, a Word2Vec
+    encoder (:meth:`set_w2v_model`), the vector of every entity's token, the similarity
+    :math:`1 - \\sigma(x \\cdot y)` (:attr:`evaluation_model`) and a pair classifier for the
+    ranking of candidate axioms. Every part can be replaced through ``model.module``.
+
+    A new walk replaces the walks of an earlier one (the walkers append to their file), and
+    a Word2Vec model that has a vocabulary keeps its vectors when it is trained again
+    (after :meth:`from_pretrained` or a first :meth:`train`); pass ``restart=True`` to
+    :meth:`set_w2v_model` to start anew from the seed on every :meth:`train`.
     """
-    
+
+    # Word2Vec gives one vector per class; an asymmetric axiom score needs a scoring head
+    # (mowl.evaluation.model_scoring.PairClassifierHead): the scorer of the geometry.
+    axiom_scoring = "vectors"
+    scored_forms = ("gci0", "gci2")
+
     def __init__(self, *args, **kwargs):
-        super(RandomWalkPlusW2VModel, self).__init__(*args, **kwargs)
+        from mowl.representation.library.walks_views import Walks
+        super().__init__(*args, source=Walks(), device=default_device(), **kwargs)
 
-        self._edges = None
-        self.w2v_model = None
-        self.update_w2v_model = False
-        self.axioms_added = False
+    # -- parts --------------------------------------------------------------------------
+    def set_projector(self, projector):
+        """Sets the projector: the graph view of the walks
+        (:class:`~mowl.representation.library.graph_projection.ProjectionView`).
 
-        self.device = th.device("cuda" if th.cuda.is_available() else "cpu")
-        
-    @property
-    def class_embeddings(self):
-        if self.w2v_model is None:
-            raise AttributeError(msg.W2V_MODEL_NOT_SET)
-        if len(self.w2v_model.wv) == 0:
-            raise AttributeError(msg.RANDOM_WALK_MODEL_EMBEDDINGS_NOT_FOUND)
-        
-        cls_embeds = {}
-        for cls in self.dataset.classes.as_str:
-            if cls in self.w2v_model.wv:
-                cls_embeds[cls] = self.w2v_model.wv[cls]
-        return cls_embeds
+        :param projector: the projector to be set
+        :type projector: :class:`Projection <mowl.projection.base.ProjectionModel>` object
+        """
+        from mowl.representation.library.graph_projection import ProjectionView
+        super().set_projector(projector)
+        self.module.source.view = ProjectionView(projector)
+        self._written = False
 
-    @property
-    def object_property_embeddings(self):
-        if self.w2v_model is None:
-            raise AttributeError(msg.W2V_MODEL_NOT_SET)
-        if len(self.w2v_model.wv) == 0:
-            raise AttributeError(msg.RANDOM_WALK_MODEL_EMBEDDINGS_NOT_FOUND)
+    def set_walker(self, walker):
+        """Sets the walker of the walks.
 
-        obj_prop_embeds = {}
-        for obj_prop in self.dataset.object_properties.as_str:
-            if obj_prop in self.w2v_model.wv:
-                obj_prop_embeds[obj_prop] = self.w2v_model.wv[obj_prop]
-        return obj_prop_embeds
+        :param walker: the walker to be set
+        :type walker: :class:`WalkingModel <mowl.walking.walking.WalkingModel>` object
+        """
+        super().set_walker(walker)
+        self.module.source.walker = walker
+        self._written = False
 
-    @property
-    def individual_embeddings(self):
-        if self.w2v_model is None:
-            raise AttributeError(msg.W2V_MODEL_NOT_SET)
-        if len(self.w2v_model.wv) == 0:
-            raise AttributeError(msg.RANDOM_WALK_MODEL_EMBEDDINGS_NOT_FOUND)
-        
-        
-        ind_embeds = {}
-        for ind in self.dataset.individuals.as_str:
-            if ind in self.w2v_model.wv:
-                ind_embeds[ind] = self.w2v_model.wv[ind]
-        return ind_embeds
-
-
-    @property
-    def evaluation_model(self):
-        if self._evaluation_model is None:
-            self._evaluation_model = EvaluationModel(self.w2v_model, self.dataset, self.embed_dim, self.device)
-
-        return self._evaluation_model
-
-    
     def set_w2v_model(self, *args, **kwargs):
         """
-        Sets the Word2Vec model to be used for training. The set model will be a :class:`gensim.models.word2vec.Word2Vec` object.
+        Sets the Word2Vec model to be used for training. The set model will be a
+        :class:`gensim.models.word2vec.Word2Vec` object.
 
-        :param args: Arguments to be passed to the :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor.
-        :param kwargs: Keyword arguments to be passed to the :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor.
+        :param args: Arguments to be passed to the
+            :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor.
+        :param kwargs: Keyword arguments to be passed to the
+            :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor (and ``restart``,
+            see :class:`~mowl.representation.library.walks_encoders.Word2VecEncoder`).
         """
-        self.w2v_model = Word2Vec(*args, **kwargs)
-        self.embed_dim = self.w2v_model.vector_size
+        super().set_w2v_model(*args, **kwargs)
+
+    # -- training -----------------------------------------------------------------------
+    def _check_parts(self):
+        if self.projector is None:
+            raise AttributeError(msg.GRAPH_MODEL_PROJECTOR_NOT_SET)
+        if self.walker is None:
+            raise AttributeError(msg.RANDOM_WALK_MODEL_WALKER_NOT_SET)
+        super()._check_parts()
+
+    def _ensure_sequences(self):
+        renew = not self._written or self.axioms_added
+        super()._ensure_sequences()
+        if renew:
+            self._edges = self.module.source.edges
 
     def train(self, epochs=None):
         """
         Triggers the Word2Vec training process.
 
-        :param epochs: Number of epochs to train the model. If None, the value of the epochs parameter passed to the constructor will be used.
+        :param epochs: Number of epochs to train the model. If None, the value of the epochs
+            parameter passed to the constructor will be used.
         :type epochs: int
         """
-        if self.projector is None:
-            raise AttributeError(msg.GRAPH_MODEL_PROJECTOR_NOT_SET)
-        if self.walker is None:
-            raise AttributeError(msg.RANDOM_WALK_MODEL_WALKER_NOT_SET)
-        if self.w2v_model is None:
-            raise AttributeError(msg.W2V_MODEL_NOT_SET)
-        if epochs is None:
-            epochs = self.w2v_model.epochs
+        super().train(epochs)
 
-        if self._edges is None or self.axioms_added:
-            self.axioms_added = False
-            self._edges = self.projector.project(self.dataset.ontology)
-            
-            self.walker.walk(self._edges)
-            
-        sentences = LineSentence(self.walker.outfile)
-        self.w2v_model.build_vocab(sentences, update=self.update_w2v_model)
-        if epochs > 0:
-            self.w2v_model.train(sentences, total_examples=self.w2v_model.corpus_count, epochs=epochs)
-        
     def add_axioms(self, *axioms):
-        classes = set()
-        object_properties = set()
-        individuals = set()
-
-        for axiom in axioms:
-            classes |= set(axiom.getClassesInSignature())
-            object_properties |= set(axiom.getObjectPropertiesInSignature())
-            individuals |= set(axiom.getIndividualsInSignature())
-
-        new_entities = list(classes.union(object_properties).union(individuals))
-            
-        self.dataset.add_axioms(*axioms)
-        self._edges = self.projector.project(self.dataset.ontology)
-        self.walker.walk(self._edges, nodes_of_interest=new_entities)
-        self.update_w2v_model = True
-        #Rebuild vocab
-        sentences = LineSentence(self.walker.outfile)
-        self.w2v_model.build_vocab(sentences, update=self.update_w2v_model)
-        self.axioms_added = True
-        
-    def from_pretrained(self, model):
-        
-        if not isinstance(model, str):
-            raise TypeError("Parameter model must be a string pointing to the Word2Vec model file.")
-
-        if not os.path.exists(model):
-            raise FileNotFoundError("Pretrained model path does not exist")
-        
-        self._is_pretrained = True
-        if not isinstance(model, str):
-            raise TypeError
-
-        self.w2v_model = Word2Vec.load(model)
-    
-
-class EvaluationModel(th.nn.Module):
-    def __init__(self, w2v_model, dataset, embedding_size, device):
-        super().__init__()
-        self.embedding_size = embedding_size
-        self.device = device
-        
-        self.embeddings = self.init_module(w2v_model, dataset)
-
-
-    def init_module(self, w2v_model, dataset):
-        classes = dataset.classes.as_str
-        class_to_id = {class_: i for i, class_ in enumerate(classes)}
-
-        w2v_vectors = w2v_model.wv
-        embeddings_list = []
-        for class_ in classes:
-            if class_ in w2v_vectors:
-                embeddings_list.append(w2v_vectors[class_])
-            else:
-                logger.warning(f"Class {class_} not found in w2v model")
-                embeddings_list.append(np.random.rand(self.embedding_size))
-
-        embeddings_list = np.array(embeddings_list)
-        embeddings = th.tensor(embeddings_list).to(self.device)
-        return th.nn.Embedding.from_pretrained(embeddings)
-        
-        
-    def forward(self, data, *args, **kwargs):
-        if data.shape[1] == 2:
-            x = data[:, 0]
-            y = data[:, 1]
-        elif data.shape[1] == 3:
-            x = data[:, 0]
-            y = data[:, 2]
-        else:
-            raise ValueError("Data must have 2 or 3 columns")
-                
-        logger.debug(f"X shape: {x.shape}")
-        logger.debug(f"Y shape: {y.shape}")
-        
-        x = self.embeddings(x)
-        y = self.embeddings(y)
-
-        logger.debug(f"X shape: {x.shape}")
-        logger.debug(f"Y shape: {y.shape}")
-        
-        dot_product = th.sum(x * y, dim=1)
-        logger.debug(f"Dot product shape: {dot_product.shape}")
-        return 1 - th.sigmoid(dot_product)
+        super().add_axioms(*axioms)
+        self._edges = self.module.source.edges

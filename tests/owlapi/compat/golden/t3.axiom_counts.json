@@ -1,0 +1,12 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "by_type": {
+   "Declaration": 7,
+   "EquivalentClasses": 3,
+   "SubClassOf": 3
+  },
+  "logical": 6,
+  "total": 13
+ }
+}

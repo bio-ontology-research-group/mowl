@@ -24,6 +24,57 @@ method paper (like a particular negative sampling scheme).
 """
 
 
+#: The hooks of a :class:`TrainingRegime` a training loop can consult. A model lists the ones
+#: its loop consults in ``training_hooks``; a regime that overrides a hook the model does not
+#: consult is refused when it is assigned, instead of being ignored.
+HOOKS = ("training_datasets", "negatives", "filter_negatives", "loss", "optimizer",
+         "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss",
+         "regularization", "after_step", "step_loss")
+
+#: Hooks that concern the optimiser and the course of training only, not the data, the
+#: negatives or the loss. A loop with an objective of its own can still consult these.
+SCHEDULE_HOOKS = frozenset({"optimizer", "on_epoch_start", "on_epoch_end", "should_stop",
+                            "on_train_end", "additional_loss"})
+
+
+def unsupported_hooks(regime, model):
+    """The hooks ``regime`` overrides that the training loop of ``model`` (an instance or a
+    class) does not consult; empty if the two can be combined."""
+    return frozenset(regime.overridden_hooks()) - frozenset(getattr(model, "training_hooks", ()))
+
+
+def check_compatible(regime, model):
+    """Raise :class:`TypeError` if ``regime`` overrides hooks the training loop of ``model``
+    does not consult."""
+    missing = unsupported_hooks(regime, model)
+    if missing:
+        name = type(model).__name__
+        supported = sorted(getattr(model, "training_hooks", ()))
+        raise TypeError(
+            f"{type(regime).__name__} cannot be used with {name}: it changes "
+            f"{sorted(missing)}, which the training loop of {name} does not consult "
+            f"(it consults {supported if supported else 'no regime hooks'}). "
+            f"The regime would be ignored.")
+
+
+class Accumulated:
+    """What :meth:`TrainingRegime.step_loss` returns when the regime has computed the
+    gradient of a step itself, in as many backward passes as it needed (chunk by chunk, so
+    that a step never holds more than a bounded number of rows): the training loop then
+    only takes the optimiser step.
+
+    :param value: The loss of the step as a float (what the loop records).
+    :param terms: Optional ``{name: float}`` of the terms of the step, handed to
+        ``on_epoch_end`` (``"total"`` is added if missing).
+    """
+
+    __slots__ = ("value", "terms")
+
+    def __init__(self, value, terms=None):
+        self.value = float(value)
+        self.terms = terms
+
+
 class TrainingRegime:
     """Base class of training regimes.
 
@@ -34,8 +85,22 @@ class TrainingRegime:
     #: Key of the :class:`mowl.catalog.RegimeCard` describing this regime.
     key = ""
 
+    #: ``True`` for a regime that does the model selection itself: the generic loop then skips
+    #: its own validation (by the loss of ``eval_gci_name``, which saves a checkpoint).
+    replaces_validation = False
+
+    #: ``True`` for a regime whose batches can be empty for every normal form of a step (an
+    #: epoch of several steps over fewer axioms than steps): the generic loop then takes no
+    #: optimisation step instead of failing on a loss without gradient.
+    skips_empty_steps = False
+
     def __init__(self):
         self.model = None
+
+    def overridden_hooks(self):
+        """The :data:`HOOKS` this regime overrides (what it changes in a training loop)."""
+        return frozenset(h for h in HOOKS
+                         if getattr(type(self), h, None) is not getattr(TrainingRegime, h))
 
     def attach(self, model):
         """Bind the regime to ``model``. Called once, when the regime is assigned to the
@@ -90,6 +155,16 @@ class TrainingRegime:
     #: ranking, log-sigmoid, BPR, correlation) need.
     score_negatives_like_positives = False
 
+    def scores_negatives_like_positives(self, gci_name):
+        """Whether the negatives of ``gci_name`` are scored with the positive-form loss
+        (see :attr:`score_negatives_like_positives`) rather than the module's negative
+        loss. ``None`` means "this regime does not decide the loss of ``gci_name``" (in a
+        :class:`ComposedRegime` the next regime then does). The training loop asks this for
+        every axiom type, so that a negative loss is requested from the module only where
+        the loss in use needs one: a module has none for most axiom types, and refuses to
+        compute it (:class:`~mowl.nn.ELModule`)."""
+        return self.score_negatives_like_positives
+
     def should_stop(self, epoch):
         """Called at the end of every epoch. Return ``True`` to end training (early
         stopping)."""
@@ -106,15 +181,62 @@ class TrainingRegime:
         """Extra loss term added once per epoch, or ``None``."""
         return None
 
+    def regularization(self, default):
+        """The regularisation term of one optimisation step.
+
+        :param default: The term the model would use (its module's
+            ``regularization_loss``; ``0`` if it has none).
+        :return: The term to use instead, or ``NotImplemented`` to keep ``default``. See
+            :mod:`mowl.training.regularization`.
+        """
+        return NotImplemented
+
+    def after_step(self):
+        """Called after every optimisation step, before :meth:`on_epoch_end` (projections
+        of the parameters back into an allowed set)."""
+
+    def on_epoch_end(self, epoch, losses):
+        """Called at the end of every epoch, after the optimisation step and before
+        validation (structural changes of the model such as re-seeding components,
+        updates of loss weights).
+
+        :param losses: Mapping from loss term name to its value in this epoch as a
+            float. Always has ``"total"``; models that report their loss per term (for
+            example :class:`mowl.models.GroundedEL`: ``"fact"``, ``"axioms"``,
+            ``"region"``) add those.
+        """
+
     def optimizer(self):
         """Return the optimiser, or ``NotImplemented`` to use the model's."""
+        return NotImplemented
+
+    def step_loss(self, step):
+        """The loss of one optimisation step, when the regime computes it instead of the
+        training loop (which otherwise scores the rows of every form, with negatives and the
+        combination of :meth:`loss`). Called after ``on_epoch_start`` and with the gradients
+        of the optimiser zeroed. Return
+
+        * a scalar tensor: the loop adds the additional losses, calls ``backward`` and takes
+          the optimiser step;
+        * a mapping of terms with a ``"total"`` tensor: as a tensor, and the terms (as floats)
+          are what ``on_epoch_end`` receives (a method whose step has several named terms);
+        * :class:`Accumulated`: the regime has back-propagated the step itself, in chunks
+          (:func:`mowl.training.loop.accumulate_backward`; memory bounded by the chunk); the loop adds the
+          gradient of the additional losses and takes the optimiser step;
+        * ``None``: nothing to supervise in this step: no optimiser step, and the step does
+          not count in the mean loss of the epoch;
+        * ``NotImplemented`` (default): the loop's own step.
+
+        :param step: The step (or, for a loop whose epoch hooks see epochs, the epoch).
+        """
         return NotImplemented
 
 
 class ComposedRegime(TrainingRegime):
     """Combination of several regimes.
 
-    Dataset transformations are applied in order, per-epoch hooks are all called,
+    Dataset transformations are applied in order, per-epoch hooks (start and end) are
+    all called in order,
     negative filters are chained in order,
     additional losses are summed, training stops as soon
     as one regime asks for it, and for :meth:`negatives`, :meth:`loss` and
@@ -130,6 +252,17 @@ class ComposedRegime(TrainingRegime):
                 raise TypeError("ComposedRegime takes TrainingRegime objects.")
         self.regimes = tuple(regimes)
         self.key = "+".join(r.key for r in regimes if r.key)
+
+    def overridden_hooks(self):
+        return frozenset().union(*(r.overridden_hooks() for r in self.regimes))
+
+    @property
+    def replaces_validation(self):
+        return any(r.replaces_validation for r in self.regimes)
+
+    @property
+    def skips_empty_steps(self):
+        return any(r.skips_empty_steps for r in self.regimes)
 
     def attach(self, model):
         super().attach(model)
@@ -162,6 +295,9 @@ class ComposedRegime(TrainingRegime):
     def optimizer(self):
         return self._first("optimizer")
 
+    def step_loss(self, step):
+        return self._first("step_loss", step)
+
     @property
     def score_negatives_like_positives(self):
         """Taken from the regime that decides :meth:`loss` (the first one overriding
@@ -169,6 +305,14 @@ class ComposedRegime(TrainingRegime):
         for r in self.regimes:
             if type(r).loss is not TrainingRegime.loss:
                 return r.score_negatives_like_positives
+        return False
+
+    def scores_negatives_like_positives(self, gci_name):
+        for r in self.regimes:
+            if type(r).loss is not TrainingRegime.loss:
+                decided = r.scores_negatives_like_positives(gci_name)
+                if decided is not None:
+                    return decided
         return False
 
     def should_stop(self, epoch):
@@ -182,6 +326,23 @@ class ComposedRegime(TrainingRegime):
     def on_epoch_start(self, epoch, epochs):
         for r in self.regimes:
             r.on_epoch_start(epoch, epochs)
+
+    def on_epoch_end(self, epoch, losses):
+        for r in self.regimes:
+            r.on_epoch_end(epoch, losses)
+
+    def regularization(self, default):
+        # Chained: every regime sees the term the previous ones left.
+        changed = False
+        for r in self.regimes:
+            out = r.regularization(default)
+            if out is not NotImplemented:
+                default, changed = out, True
+        return default if changed else NotImplemented
+
+    def after_step(self):
+        for r in self.regimes:
+            r.after_step()
 
     def additional_loss(self, epoch):
         total = None

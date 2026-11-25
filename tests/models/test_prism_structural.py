@@ -13,7 +13,7 @@ mowl.init_jvm("2g")
 from mowl.datasets import PathDataset
 from mowl.geometric.completion import CanonicalModel
 from mowl.models import PrismEL
-import mowl.nn.el.prism.losses as PL
+import mowl.baselines.nn.el.prism.losses as PL
 from tests.geometric.helpers import NS, _strict_structural_loss, fixture_path
 
 
@@ -32,8 +32,10 @@ def test_prism_structural_train_tables(t3_dataset: PathDataset, scratch_dir: Pat
         learning_rate=0.01,
         model_filepath=str(scratch_dir / "prism_struct_t3.pt"),
     )
-    assert model.module.definition_table is None
-    assert model.module.existence_targets is None
+    # the combination builds the structural tables when the model is made (the earlier module
+    # built them when training started)
+    assert model.module.definition_table is not None
+    assert model.module.existence_targets is not None
 
     model.train(epochs=2, validate_every=10)
 
@@ -52,7 +54,8 @@ def test_prism_structural_train_tables(t3_dataset: PathDataset, scratch_dir: Pat
     gci1_rows = model.training_datasets["gci1"][:]
     assert int(table.masked_gci1(gci1_rows).sum().item()) == 3
     assert targets.pairs.shape == (3, 2)
-    assert model.additional_training_loss(0) is not None
+    # the existence and size penalties are the regularisation of the combination
+    assert model.get_regularization_loss() is not None
 
     # Under structural objective, compute_loss(pos) equals pos.mean() (no double squaring),
     # while the axiom objective retains MSE(pos.mean(), 0) = pos.mean()**2.

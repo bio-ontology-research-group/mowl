@@ -73,7 +73,28 @@ Summary
      - ``regd-*``
      - partly
      - About half of 48 cells within 0.04 F1. The prediction-task numbers of the paper
-       depend on a bug in its evaluation code.
+       depend on a bug in its evaluation code. The authors' released code, run with its
+       own sweep, reproduces the paper's ELBE, ELEm and RegD-with-balls numbers but not
+       RegD with boxes (0.39 against 0.63 on ANATOMY inference); mOWL's RegD with boxes is
+       at or above the released code.
+   * - Concept2Box
+     - ``concept2box-*``
+     - not reproduced
+     - MRR 0.02 / 0.30 / 0.73 (instance view / ontology view / concept linking) against
+       0.51 / 0.65 / 0.87. The instance-view numbers of the paper cannot come from the
+       released data: its TransE row is the "TransE (all)" row of the JOIE paper, computed
+       on the larger, unreleased DB111K-174. On the released data plain TransE reaches MRR
+       0.09 to 0.16 against 0.32.
+   * - EIKE
+     - ``yago39k-*``, ``m-yago39k-*``
+     - not reproduced
+     - F1 of 68 / 67 / 85 (InstanceOf / SubClassOf / relational) against 87 / 81 / 93.
+       The authors' code reproduces the paper. It keeps the axes of the ellipsoids fixed
+       for most of the training (concepts are spheres); mOWL trains them and over-fits.
+       With ``train_axes=False`` and ``init="small"`` mOWL gives 82 / 54 / 92, which is
+       what the authors' code gives under mOWL's loop for InstanceOf and the relational
+       triples (81 / 74 / 91). SubClassOf is open (see the notes of the recipe module
+       ``mowl.benchmarks.recipe_sets.wang2024_eike``).
    * - ELK-Em
      - ``elkem-*``
      - partly
@@ -96,6 +117,89 @@ Summary
      - none
      - no benchmark
      - The reason is recorded on each catalogue card.
+
+The methods that are not in this table (the order, graph, query and region methods added
+with the parts) are compared with their publications in the three-way table of
+:doc:`index`: published number, mOWL built from parts, and the direct baseline code.
+
+Runs that cannot be made
+------------------------
+
+* **FaithEL** on the joint benchmarks (GO, GALEN, ANATOMY, PPI): the canonical model the
+  method is defined on would have between 3e8 and 6e9 elements for these ontologies; the
+  model refuses to build it.
+* **BoxSEL** on Person, Country and Hybrid (``boxsel-sel-*``): the Statistical EL ontologies
+  of the paper are not released. :mod:`mowl.datasets.builtin.sel_conditionals` builds one
+  from assertions.
+* **AConE** on ``query-wn18rr-qa``: the query sets of WN18RR are not downloaded by mOWL;
+  give ``data_dir``.
+* **HiT and OnT** need the optional language-model packages and a GPU with enough memory
+  for the encoder.
+
+Which epoch is kept, and what it did to the joint benchmarks
+------------------------------------------------------------
+
+Up to mOWL 2.1.0 an EL model kept the epoch with the lowest loss of the validation axioms.
+That loss looks at true axioms only, and for several box models it is lowest before training
+has separated true from false axioms (all boxes still overlap). In the first round of the
+joint benchmarks 84 of 758 runs kept such an untrained state, among them every BoxSEL run and
+most Concept2Box runs, which then ranked at chance level (AUC 0.50).
+
+The default is now ``validation_criterion="separation"``: the epoch is kept at which the
+validation axioms score better than corrupted copies of themselves most often
+(:func:`mowl.evaluation.validation.corrupted_pair_error`). ``validation_criterion="loss"``
+gives the rule of 2.1.0. The affected runs were repeated with the new rule (AUC, one seed):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 20
+
+   * - Benchmark
+     - BoxSEL
+     - Concept2Box
+   * - ``common-go-subsumption-prediction``
+     - 0.50 → 0.74
+     - 0.91
+   * - ``common-go-subsumption-inference``
+     - 0.50 → 0.76
+     - 0.93
+   * - ``common-go-existential-prediction``
+     - 0.50 → 0.91
+     - 0.87
+   * - ``common-galen-subsumption-prediction``
+     - 0.50 → 0.81
+     - 0.92
+   * - ``common-galen-subsumption-inference``
+     - 0.50 → 0.61
+     - 0.52
+   * - ``common-galen-existential-prediction``
+     - 0.51 → 0.89
+     - 0.87
+   * - ``common-anatomy-subsumption-prediction``
+     - 0.50 → 0.89
+     - 0.92
+   * - ``common-anatomy-subsumption-inference``
+     - 0.50 → 0.89
+     - 0.94
+   * - ``common-anatomy-existential-prediction``
+     - 0.51 → 0.94
+     - 0.94
+
+``common-galen-subsumption-inference`` stays close to chance for Concept2Box (0.52) and
+EIKE (0.54) with either rule, and this is what the two methods can do, not a defect. The test
+axioms are subsumptions a reasoner derives from the ontology. In GALEN 0.4% of them (64 of
+16,325) follow from the stated subsumptions between named classes alone; all others need the
+definitions (13,595 axioms ``C ⊓ D ⊑ E`` and 13,597 axioms ``∃r.C ⊑ D``). In GO 60% and in
+ANATOMY 46% follow from the stated hierarchy. Concept2Box and EIKE train on ``C ⊑ D`` (and
+Concept2Box on ``C ⊑ ∃r.D``) and do not use the other normal forms, so on GALEN they are
+trained (the training loss falls) but cannot rank the derived subsumptions, while on GO and
+ANATOMY Concept2Box reaches 0.93 and 0.94. The geometric methods above 0.8 on this benchmark
+(such as ELEm, EmEL++, ELBE and Box\ :sup:`2`\ EL built from parts) train on the four
+normal forms.
+
+The baseline code with its own training regimes keeps its released selection rule, and its
+results did not change. The baseline ELBE stays at chance on GALEN inference (0.50, against
+0.84 for ELBE built from parts): its training loss does not fall there.
 
 Numbers
 -------
@@ -324,6 +428,9 @@ can be reproduced. The full reasoning is on each catalogue card.
    * - :class:`mowl.models.E2R` (Garg et al., 2019)
      - FB15K and WN18 are knowledge-graph benchmarks; the LUBM protocol and the training
        settings are not specified, and no code was found.
+   * - :class:`mowl.models.GroundedEL` (original to mOWL)
+     - No publication yet; its guarantees are tested on small ontologies
+       (``tests/models/test_grounded_model.py``).
    * - :class:`mowl.models.EmELVar` (Mohapatra et al., 2021)
      - With the loss as printed, the total loss is never lower than that of EmEL++, so
        the reported improvement is not explained by the paper; the authors' code was not
@@ -334,6 +441,20 @@ Not run
 
 ``box2el-yeast-ppi``, ``box2el-human-ppi``, ``dele-human-ppi``, ``dele-human-function``
 and ``cate-yeast-ppi`` have recipes or published numbers but no finished run yet.
+
+Published, parts and direct implementation
+------------------------------------------
+
+Each method run as the combination of parts users get and as its direct implementation
+(:mod:`mowl.baselines`), with the same recipe and seeds (see :ref:`baseline-benchmarks`).
+The table shows one metric per benchmark, method and recipe, on all test axioms: the mean
+reciprocal rank where it is reported, otherwise the first of Hits\@10, Hits\@100, AUC, F1,
+accuracy, success rate and mean rank. Every metric and subset of every run, with the
+differences and the number of seeds, is in :download:`three_way.csv`. Both are written by
+``scripts/collect_benchmarks.py RESULTS --out report --headline-rst
+docs/source/benchmarks/_headline.rst``.
+
+.. include:: _headline.rst
 
 What had to be made explicit
 ----------------------------

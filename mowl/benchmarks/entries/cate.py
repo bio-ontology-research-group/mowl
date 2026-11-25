@@ -34,6 +34,7 @@ BENCHMARKS = [
     Benchmark(
         key="cate-ore1-membership", name="CatE class membership prediction (ORE1)",
         task=Task.MEMBERSHIP_PREDICTION,
+        evaluation_regime="cate-filtered-ranking",
         description=("Rank every test assertion C(a) against C'(a) for every named "
                      "concept C'; filtered by the training assertions. ",
                      _COMMON + " Table 2."),
@@ -52,6 +53,7 @@ BENCHMARKS = [
     Benchmark(
         key="cate-go-completion", name="CatE TBox completion (GO)",
         task=Task.AXIOM_PREDICTION,
+        evaluation_regime="cate-filtered-ranking",
         description=("Rank every query C ⊑ D against C ⊑ D' for every named concept "
                      "D'; filtered by the training subsumptions and their deductive "
                      "closure (the release's inferred_ancestors); a query's head is "
@@ -72,6 +74,7 @@ BENCHMARKS = [
     Benchmark(
         key="cate-foodon-completion", name="CatE TBox completion (FoodOn)",
         task=Task.AXIOM_PREDICTION,
+        evaluation_regime="cate-filtered-ranking",
         description=("Rank every query C ⊑ D against C ⊑ D' for every named concept "
                      "D'; filtered by the training subsumptions and their deductive "
                      "closure (the release's inferred_ancestors); a query's head is "
@@ -90,6 +93,9 @@ BENCHMARKS = [
     Benchmark(
         key="cate-yeast-ppi", name="CatE PPI prediction (yeast)",
         task=Task.LINK_PREDICTION,
+        evaluation_regime="cate-ppi-ranking",
+        completion_tasks=("existential-prediction",),
+        encodes=("link-prediction",),
         description=("For every test axiom P1 ⊑ ∃interacts.P2, rank P1 among the yeast "
                      "proteins with P2 fixed and P2 with P1 fixed, and average over "
                      "the two directions; filtered by the training and validation "

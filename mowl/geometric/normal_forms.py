@@ -1,6 +1,7 @@
 """EL++ normal forms and ontology normalisation for :mod:`mowl.geometric`.
 
 Guarantees:
+
 - Converts a mOWL :class:`~mowl.datasets.Dataset` or OWLAPI ``OWLOntology`` into
   a :class:`NormalisedOntology` containing frozen normal-form dataclasses:
   :class:`NF1` (``A <= B`` and ``A <= bot``), :class:`NF2` (``A1 and A2 <= B`` and
@@ -20,6 +21,7 @@ Guarantees:
   ``dropped_axioms``.
 
 References:
+
 - Baader, Brandt & Lutz, IJCAI 2005 (Pushing the EL Envelope — EL++ normal forms).
 - Kazakov, Krötzsch & Simančík, JAR 2014 (The Incredible ELK).
 - Gutiérrez-Basulto & Schockaert, KR 2018 (arXiv:1805.10461), Props. 3, 4.
@@ -282,6 +284,7 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
       over named object properties) are normalised into :class:`NF1`,
       :class:`NF2`, :class:`NF3`, and :class:`NF4`.
     - *RBox (extracted across the imports closure):*
+
       - ``SubObjectPropertyOf(r, s)`` with named ``r, s`` -> :class:`NF6` ``(r, s)``.
       - ``EquivalentObjectProperties(r_1, ..., r_k)`` with named ``r_i`` ->
         pairwise :class:`NF6` ``(r_i, r_j)`` and :class:`NF6` ``(r_j, r_i)`` for
@@ -294,6 +297,7 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
         split into ``k - 1`` :class:`NF7` axioms using fresh auxiliary roles
         ``http://mowl.borg/geo/aux#<s_local>_chain_<i>``.
     - *ABox (extracted across the imports closure, individuals as fresh nominal names):*
+
       - Each named individual ``a`` is mapped to ``N_a = nominal_name(a)`` and
         included in ``concept_names``.
       - Atomic ``ClassAssertion(C, a)`` with a named class ``C`` and named
@@ -315,6 +319,7 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
     - *ABox assertions that raise*
       :class:`~mowl.geometric.errors.UnsupportedAxiomError` *(with the axiom text;
       no silent ABox drops):*
+
       - ``ClassAssertion`` with a complex (anonymous) class expression.
       - ``ClassAssertion`` on an anonymous individual.
       - ``ObjectPropertyAssertion`` with an inverse property
@@ -325,6 +330,7 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
         (``NegativeObjectPropertyAssertion``, ``DataPropertyAssertion``,
         ``NegativeDataPropertyAssertion``).
     - *Dropped TBox and RBox axioms (each increments ``dropped_axioms`` by 1):*
+
       - Any TBox axiom filtered out by :meth:`ELNormalizer.preprocess_ontology`
         (axioms containing ``ObjectUnionOf``, ``ObjectComplementOf``,
         ``ObjectAllValuesFrom``, ``ObjectMinCardinality``, ``ObjectMaxCardinality``,

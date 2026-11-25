@@ -82,8 +82,11 @@ def test_model_k1_matches_elbe_losses_after_init(scratch_dir: Path) -> None:
         model_filepath=str(scratch_dir / "melbe_k1.pt"),
     )
 
-    for k, v in elbe.module.state_dict().items():
-        assert torch.equal(v, melbe.module.state_dict()[k]), f"Mismatch in state_dict key {k}"
+    # (the tables under the names both modules have had since their release; each module also
+    # keeps them under the names of its parts)
+    for k in ("class_embed", "class_offset", "rel_embed"):
+        v, w = getattr(elbe.module, k).weight, getattr(melbe.module, k).weight
+        assert torch.equal(v, w), f"Mismatch in table {k}"
 
     loss_elbe_init = _epoch_loss(elbe, seed=999)
     loss_melbe_init = _epoch_loss(melbe, seed=999)

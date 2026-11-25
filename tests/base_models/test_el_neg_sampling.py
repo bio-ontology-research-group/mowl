@@ -290,6 +290,10 @@ class TestMultiColumnTraining(TestCase):
                 return {"gci2": {"corrupt_column": 2}}
 
             def generate_negatives(self, gci_name, gci_dataset):
+                # As in the shipped examples: only gci2 has a negative loss, and asking a
+                # module for a negative of another form is refused (strict negatives).
+                if gci_name != "gci2":
+                    return None
                 data = gci_dataset[:]
                 ids = np.random.choice(list(self.class_index_dict.values()),
                                        size=len(gci_dataset), replace=True)

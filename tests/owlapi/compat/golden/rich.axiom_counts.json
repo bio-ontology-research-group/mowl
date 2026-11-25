@@ -1,0 +1,35 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "by_type": {
+   "AnnotationAssertion": 7,
+   "AsymmetricObjectProperty": 1,
+   "ClassAssertion": 4,
+   "DataPropertyAssertion": 3,
+   "DataPropertyDomain": 1,
+   "DataPropertyRange": 1,
+   "Declaration": 33,
+   "DifferentIndividuals": 1,
+   "DisjointClasses": 1,
+   "DisjointUnion": 1,
+   "EquivalentClasses": 9,
+   "FunctionalDataProperty": 1,
+   "FunctionalObjectProperty": 1,
+   "InverseFunctionalObjectProperty": 1,
+   "InverseObjectProperties": 1,
+   "IrrefexiveObjectProperty": 1,
+   "NegativeObjectPropertyAssertion": 1,
+   "ObjectPropertyAssertion": 4,
+   "ObjectPropertyDomain": 1,
+   "ObjectPropertyRange": 1,
+   "ReflexiveObjectProperty": 1,
+   "SubClassOf": 8,
+   "SubObjectPropertyOf": 2,
+   "SubPropertyChainOf": 1,
+   "SymmetricObjectProperty": 1,
+   "TransitiveObjectProperty": 1
+  },
+  "logical": 48,
+  "total": 88
+ }
+}

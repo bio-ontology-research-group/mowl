@@ -20,6 +20,12 @@ class Node2Vec(WalkingModel):
     :type p: float
     :param q: In-out hyperparameter. Default is 1.
     :type q: float
+
+    .. warning::
+
+        The Java walker draws from an unseeded random generator (``scala.util.Random`` without
+        a seed in ``Node2Vec.scala``), so the walks differ from run to run and :attr:`seeded` is
+        ``False``. A seed needs a change of the Scala source and a rebuild of the jar.
     '''
 
     def __init__(self,
@@ -44,6 +50,7 @@ class Node2Vec(WalkingModel):
                 q = float(q)
             else:
                 raise TypeError("Optional parameter q must be of type int or float")
+        self.seeded = False
         self.p = p
         self.q = q
 
@@ -51,7 +58,7 @@ class Node2Vec(WalkingModel):
         if nodes_of_interest is None:
             nodes_of_interest = ArrayList()
         else:
-            all_nodes, _ = PyEdge.getEntitiesAndRelations(edges)
+            all_nodes, _ = PyEdge.get_entities_and_relations(edges)
             all_nodes = set(all_nodes)
             python_nodes = nodes_of_interest[:]
             nodes_of_interest = ArrayList()
@@ -66,6 +73,7 @@ class Node2Vec(WalkingModel):
             newEdge = Edge(edge.src, edge.rel, edge.dst, edge.weight)
             edgesJ.add(newEdge)
 
+        self._start_outfile()
         walker = N2V(edgesJ, self.num_walks, self.walk_length, self.p, self.q, self.workers,
                      self.outfile, nodes_of_interest)
 
