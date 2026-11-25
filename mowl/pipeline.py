@@ -17,6 +17,9 @@ model together with the metrics.
 
    ...ELBE ['all']
 
+The Java virtual machine is started if it is not running (``jvm_memory``), so the module
+can be imported and used without calling :func:`mowl.init_jvm` first.
+
 It is a thin layer over :func:`mowl.benchmarks.runner.run_benchmark`: the methods are those
 of :func:`mowl.catalog.list_methods`, the benchmarks those of
 :func:`mowl.benchmarks.list_benchmarks`, and every argument of ``run_benchmark`` can be given.
@@ -25,18 +28,7 @@ of :func:`mowl.catalog.list_methods`, the benchmarks those of
 import os
 from dataclasses import dataclass
 
-from mowl.benchmarks.protocols.base import Protocol
-
-__all__ = ["pipeline", "PipelineResult", "TrainOnlyProtocol"]
-
-
-class TrainOnlyProtocol(Protocol):
-    """The protocol of :func:`pipeline` when no evaluation is asked for: no metrics."""
-
-    key = ""
-
-    def evaluate(self, model, dataset):
-        return {}
+__all__ = ["pipeline", "load_pipeline", "PipelineResult"]
 
 
 @dataclass
@@ -47,11 +39,15 @@ class PipelineResult:
     :param dataset: The dataset the model was trained on.
     :param result: The :class:`mowl.benchmarks.runner.BenchmarkResult` of the run: metrics,
         settings, seed, timings and software versions.
+    :param call: What :func:`pipeline` was called with, as far as it can be written to a
+        file: the benchmark or evaluation key and the paths of a dataset given as paths.
+        :func:`load_pipeline` builds the model again from it.
     """
 
     model: object
     dataset: object
     result: object
+    call: dict = None
 
     @property
     def metrics(self):
@@ -79,16 +75,20 @@ class PipelineResult:
         """Write the run to ``directory``.
 
         ``results.json`` is the :class:`~mowl.benchmarks.runner.BenchmarkResult` (read it
-        back with ``BenchmarkResult.load``). ``model.pt`` is the ``state_dict`` of the
-        model's PyTorch module, for models that have one (``model.module``); load it into
-        a model built with the same arguments, which are in ``results.json`` under
-        ``options``.
+        back with ``BenchmarkResult.load``). ``pipeline.json`` is :attr:`call`.
+        ``model.pt`` is the ``state_dict`` of the model's PyTorch module, for models that
+        have one (``model.module``). :func:`load_pipeline` reads the three files and
+        returns the model with its parameters.
 
         :return: The paths written, by name.
         """
+        import json
         os.makedirs(directory, exist_ok=True)
-        written = {"results": os.path.join(directory, "results.json")}
+        written = {"results": os.path.join(directory, "results.json"),
+                   "call": os.path.join(directory, "pipeline.json")}
         self.result.save(written["results"])
+        with open(written["call"], "w") as f:
+            json.dump(self.call or {}, f, indent=2, sort_keys=True)
         module = getattr(self.model, "module", None)
         if module is not None and hasattr(module, "state_dict"):
             import torch as th
@@ -112,8 +112,18 @@ def _training_only():
     return TrainingOnly(
         key="custom-training", name="Training on a dataset, no evaluation",
         task=Task.AXIOM_PREDICTION, description="Train a model; nothing is measured.",
-        dataset="", protocol="mowl.pipeline.TrainOnlyProtocol", metrics=(), references=(),
-        subsets=())
+        dataset="", protocol="mowl.benchmarks.protocols.train_only.TrainOnlyProtocol",
+        metrics=(), references=(), subsets=())
+
+
+def _dataset_paths(dataset):
+    """The paths of a dataset given as a path or a mapping of paths, else ``None``."""
+    if isinstance(dataset, (str, os.PathLike)):
+        return {"ontology": os.path.abspath(os.fspath(dataset))}
+    if isinstance(dataset, dict):
+        return {k: os.path.abspath(os.fspath(v)) for k, v in dataset.items()
+                if v is not None}
+    return None
 
 
 def _as_dataset(dataset):
@@ -171,6 +181,8 @@ def pipeline(method=None, benchmark=None, dataset=None, evaluation=None, model_k
                          "dataset of your own.")
     if method is None and model_factory is None:
         raise ValueError("Give a catalogue method key or a model_factory.")
+    call = {"benchmark": getattr(benchmark, "key", benchmark), "evaluation": evaluation,
+            "dataset": _dataset_paths(dataset)}
     if dataset is not None:
         if recipe is not None and evaluation is None:
             raise ValueError("A recipe belongs to a benchmark; give 'evaluation' to use "
@@ -185,4 +197,61 @@ def pipeline(method=None, benchmark=None, dataset=None, evaluation=None, model_k
         benchmark, method=method, model_factory=model_factory, model_kwargs=model_kwargs,
         epochs=epochs, seed=seed, device=device, training_regime=training_regime,
         dataset=dataset, recipe=recipe, jvm_memory=jvm_memory, **options)
-    return PipelineResult(model=model, dataset=dataset, result=result)
+    return PipelineResult(model=model, dataset=dataset, result=result, call=call)
+
+
+def load_pipeline(directory, dataset=None, device=None, jvm_memory="8g"):
+    """The run that :meth:`PipelineResult.save_to_directory` wrote to ``directory``.
+
+    The dataset is loaded again (the benchmark's, or the ontology files the run was given),
+    the model is built with the arguments of the run, and the saved parameters are loaded
+    into it. Nothing is trained or evaluated; the metrics are the saved ones.
+
+    :param directory: The directory of ``results.json``, ``pipeline.json`` and ``model.pt``.
+    :param dataset: The dataset of the run, if it was given to :func:`pipeline` as a
+        :class:`mowl.datasets.Dataset` (an object cannot be written to the directory), or
+        to use ontology files that have moved.
+    :param device: Torch device of the loaded model (default: that of the run).
+    :param jvm_memory: Heap size if the JVM has to be started.
+    :rtype: :class:`PipelineResult`
+    """
+    import json
+    import torch as th
+    from mowl.benchmarks.runner import BenchmarkResult, _ensure_jvm, run_benchmark_with_model
+
+    saved = BenchmarkResult.load(os.path.join(directory, "results.json"))
+    with open(os.path.join(directory, "pipeline.json")) as f:
+        call = json.load(f)
+    parameters = os.path.join(directory, "model.pt")
+    if not os.path.exists(parameters):
+        raise FileNotFoundError(
+            f"{directory} has no model.pt: the model of this run has no PyTorch module "
+            f"whose parameters could be saved.")
+    if saved.method is None:
+        raise ValueError("The run used a model_factory, which cannot be written to a file; "
+                         "build the model and load model.pt into its module.")
+    options = saved.options
+    device = device or saved.device
+    if call.get("benchmark") is not None:
+        benchmark = call["benchmark"]
+    else:
+        if dataset is None:
+            dataset = call.get("dataset")
+        if dataset is None:
+            raise ValueError("The run was given a Dataset object; pass it as dataset=.")
+        _ensure_jvm(jvm_memory)
+        dataset = _as_dataset(dataset)
+        benchmark = call.get("evaluation") or _training_only()
+    regime = options.get("training_regime")
+    if isinstance(regime, list) and len(regime) == 2 and isinstance(regime[1], dict):
+        regime = tuple(regime)          # (key, arguments), written to JSON as a list
+    _, model, dataset = run_benchmark_with_model(
+        benchmark, method=saved.method, model_kwargs=options.get("model_kwargs"),
+        epochs=saved.epochs, seed=saved.seed, device=device,
+        training_regime=regime, dataset=dataset,
+        dataset_kwargs=options.get("dataset_kwargs"),
+        protocol_kwargs=options.get("protocol_kwargs"), jvm_memory=jvm_memory,
+        implementation=(saved.implementation or {}).get("name", "parts"),
+        train=False, evaluate=False)
+    model.module.load_state_dict(th.load(parameters, map_location=device))
+    return PipelineResult(model=model, dataset=dataset, result=saved, call=call)

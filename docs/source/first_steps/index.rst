@@ -3,7 +3,8 @@ First steps
 
 The fastest way to train and evaluate a method is :func:`mowl.pipeline.pipeline`. It takes
 the name of a method and the name of a benchmark, builds the model, trains it, evaluates
-it and returns the trained model together with the metrics.
+it and returns the trained model together with the metrics. It starts the Java virtual
+machine itself if it is not running.
 
 Training and evaluating a model
 -------------------------------
@@ -72,28 +73,35 @@ Saving and loading
 ------------------
 
 ``save_to_directory`` writes ``results.json`` (metrics, settings, seed, timings and software
-versions) and ``model.pt`` (the parameters of the model's PyTorch module).
+versions), ``pipeline.json`` (what the pipeline was called with) and ``model.pt`` (the
+parameters of the model's PyTorch module). :func:`mowl.pipeline.load_pipeline` reads them
+back: it loads the dataset again, builds the model with the arguments of the run and puts
+the saved parameters into it. Nothing is trained or evaluated again.
 
 .. testcode::
 
    import os, tempfile
    import torch as th
-   from mowl.benchmarks.runner import BenchmarkResult
+   from mowl.pipeline import load_pipeline
 
    directory = os.path.join(tempfile.mkdtemp(), "elbe_helly")
-   written = result.save_to_directory(directory)
+   result.save_to_directory(directory)
    print(sorted(os.listdir(directory)))
 
-   saved = BenchmarkResult.load(written["results"])
-   print(saved.metrics == result.metrics)
-
-   # the parameters go back into a model built with the same arguments
-   result.model.module.load_state_dict(th.load(written["model"]))
+   loaded = load_pipeline(directory)
+   print(type(loaded.model).__name__, loaded.metrics == result.metrics)
+   print(th.equal(loaded.model.module.class_embed.weight,
+                  result.model.module.class_embed.weight))
 
 .. testoutput::
 
-   ['model.pt', 'results.json']
+   ['model.pt', 'pipeline.json', 'results.json']
+   ELBE True
    True
+
+A run on a :class:`mowl.datasets.Dataset` object of your own is loaded with
+``load_pipeline(directory, dataset=...)``, because an object cannot be written to the
+directory; a run on ontology files is loaded from the same files.
 
 Using your own ontology
 -----------------------
@@ -144,6 +152,42 @@ ontology are ranked as in the Box²EL prediction benchmarks.
 
    Epoch 1: Train loss: ...
    True
+
+Using the trained model for predictions
+---------------------------------------
+
+A trained model scores axioms: ``model.score(axiom)`` takes an OWL axiom and returns its
+cost under the model, where a lower value means a better fit. Ranking candidate axioms by
+this score is how predictions are made. Here the model trained on the small ontology above
+is trained for longer and asked which of three classes is the most plausible superclass of
+``Dog``.
+
+.. testcode::
+
+   from mowl.owlapi import OWLAPIAdapter
+
+   trained = pipeline("elem", dataset=train, epochs=300, model_kwargs={"embed_dim": 8})
+   adapter = OWLAPIAdapter()
+
+   def named(name):
+       return adapter.create_class("http://example.org/" + name)
+
+   def cost(sub, sup):
+       axiom = adapter.create_subclass_of(named(sub), named(sup))
+       return float(trained.model.score(axiom))
+
+   candidates = ["Bird", "Food", "Mammal"]
+   print(sorted(candidates, key=lambda sup: cost("Dog", sup))[0])
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   Epoch 1: Train loss: ...
+   Mammal
+
+The evaluation regimes of :doc:`/evaluation/index` do the same over all candidates and
+report ranking metrics; the class and relation vectors themselves are in
+``trained.model.module``.
 
 Training as a publication did
 -----------------------------

@@ -529,9 +529,12 @@ def run_benchmark_with_model(benchmark, method=None, model_factory=None, model_k
                              dataset=None, dataset_kwargs=None, protocol_kwargs=None,
                              validate_every=None, select_best=True, workdir=None,
                              jvm_memory="8g", deterministic=True, recipe=None,
-                             implementation="parts"):
+                             implementation="parts", train=True, evaluate=True):
     """:func:`run_benchmark`, returning the trained model and the dataset as well.
 
+    :param train: ``False`` builds the model and does not train it (to load saved
+        parameters into it).
+    :param evaluate: ``False`` skips the evaluation; the result has no metrics.
     :return: ``(result, model, dataset)``: the :class:`BenchmarkResult`, the trained model
         and the dataset it was trained on (as prepared by the benchmark's protocol).
     """
@@ -617,10 +620,13 @@ def run_benchmark_with_model(benchmark, method=None, model_factory=None, model_k
     if initialise is not None:
         initialise(model, dataset)
 
-    train_info = family.train(model, epochs, protocol, validate_every=validate_every,
-                              select_best=select_best)
+    if train:
+        train_info = family.train(model, epochs, protocol, validate_every=validate_every,
+                                  select_best=select_best)
+    else:
+        train_info = {"selected": "not trained"}
     t_train = time.time()
-    metrics = protocol.evaluate(model, dataset)
+    metrics = protocol.evaluate(model, dataset) if evaluate else {}
     t_eval = time.time()
 
     info = dict(getattr(protocol, "info", {}) or {})

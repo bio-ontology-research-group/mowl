@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from mowl.pipeline import PipelineResult, pipeline
+from mowl.pipeline import PipelineResult, load_pipeline, pipeline
 from tests.benchmarks.tiny import scratch_dir, tiny_dataset, write_tiny
 
 
@@ -57,3 +57,45 @@ def test_arguments_that_do_not_go_together_are_refused():
         pipeline(benchmark="helly-tk")
     with pytest.raises(ValueError, match="keys 'ontology'"):
         pipeline("elem", dataset={"train": "x.owl"})
+
+
+def _same_parameters(a, b):
+    import torch as th
+    sa, sb = a.module.state_dict(), b.module.state_dict()
+    return set(sa) == set(sb) and all(th.equal(sa[k], sb[k]) for k in sa)
+
+
+def test_a_saved_benchmark_run_is_loaded_with_its_parameters():
+    out = pipeline("elbe", benchmark="helly-tk", epochs=2, model_kwargs={"embed_dim": 2})
+    directory = os.path.join(scratch_dir(), "run")
+    out.save_to_directory(directory)
+    back = load_pipeline(directory)
+    assert back.model is not out.model and type(back.model) is type(out.model)
+    assert _same_parameters(back.model, out.model)
+    assert back.metrics == out.metrics and back.call == out.call
+
+
+def test_a_saved_run_on_ontology_files_is_loaded_from_the_same_files():
+    train, valid, test = write_tiny()
+    paths = {"ontology": train, "validation": valid, "testing": test}
+    out = pipeline("elem", dataset=paths, evaluation="box2el-go-prediction", epochs=3,
+                   model_kwargs={"embed_dim": 4})
+    directory = os.path.join(scratch_dir(), "run")
+    out.save_to_directory(directory)
+    back = load_pipeline(directory)
+    assert _same_parameters(back.model, out.model)
+    assert back.model.dataset.class_to_id.keys() == out.model.dataset.class_to_id.keys()
+
+    only_trained = pipeline("elem", dataset=train, epochs=2, model_kwargs={"embed_dim": 4})
+    only_trained.save_to_directory(directory + "2")
+    assert _same_parameters(load_pipeline(directory + "2").model, only_trained.model)
+
+
+def test_a_run_on_a_dataset_object_needs_the_dataset_to_load():
+    out = pipeline("elem", dataset=tiny_dataset(), epochs=2, model_kwargs={"embed_dim": 4})
+    directory = os.path.join(scratch_dir(), "run")
+    out.save_to_directory(directory)
+    with pytest.raises(ValueError, match="pass it as dataset="):
+        load_pipeline(directory)
+    back = load_pipeline(directory, dataset=tiny_dataset())
+    assert _same_parameters(back.model, out.model)
