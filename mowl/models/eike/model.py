@@ -47,6 +47,8 @@ class EIKE(ComposedEL):
         paper's UNP variant for them). No language model is needed or downloaded by mOWL.
     :param freeze_intensional: Do not train the intensional concept vectors.
     :param neg_sampling_gcis: As in :class:`~mowl.base_models.EmbeddingELModel`.
+    :param train_axes: ``False`` keeps the axes of the ellipsoids at 1 (spheres with a
+        learned radius), as the authors' code does for most of its training.
     """
 
     axiom_scoring = "module"
