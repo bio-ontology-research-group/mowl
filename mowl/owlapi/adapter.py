@@ -3,19 +3,7 @@ from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.model import IRI
 
 import mowl.error as err
-from java.util import ArrayList, HashSet
-
-
-def _jlist(items):
-    """A ``java.util.ArrayList`` of ``items``.
-
-    OWLAPI 5 overloads its factory methods on collection, array and stream, so a Python
-    sequence no longer selects one of them.
-    """
-    out = ArrayList()
-    for item in items:
-        out.add(item)
-    return out
+from java.util import HashSet
 
 
 class OWLAPIAdapter():
@@ -87,11 +75,11 @@ class OWLAPIAdapter():
 
     def create_equivalent_classes(self, *cexprs):
         """Creates OWLEquivalentClassesAxiom for a given list of class expressions"""
-        return self.data_factory.getOWLEquivalentClassesAxiom(_jlist(cexprs))
+        return self.data_factory.getOWLEquivalentClassesAxiom(cexprs)
 
     def create_disjoint_classes(self, *cexprs):
         """Creates OWLDisjointClassesAxiom for a given list of class expressions"""
-        return self.data_factory.getOWLDisjointClassesAxiom(_jlist(cexprs))
+        return self.data_factory.getOWLDisjointClassesAxiom(cexprs)
 
     def create_object_some_values_from(self, obj_prop, cexpr):
         """Creates OWLObjectSomeValuesFrom for a given object property and a class expression"""
@@ -103,11 +91,11 @@ class OWLAPIAdapter():
 
     def create_object_intersection_of(self, *cexprs):
         """Creates OWLObjectIntersectionOf for a given list of class expressions"""
-        return self.data_factory.getOWLObjectIntersectionOf(_jlist(cexprs))
+        return self.data_factory.getOWLObjectIntersectionOf(cexprs)
 
     def create_object_union_of(self, *cexprs):
         """Creates OWLObjectUnionOf for a given list of class expressions"""
-        return self.data_factory.getOWLObjectUnionOf(_jlist(cexprs))
+        return self.data_factory.getOWLObjectUnionOf(cexprs)
 
     def create_complement_of(self, cexpr):
         """Creates OWLObjectComplementOf for a given class expression"""

@@ -8,7 +8,7 @@ from mowl.owlapi.defaults import BOT
 from uk.ac.manchester.cs.owl.owlapi import SWRLRuleImpl, OWLEquivalentObjectPropertiesAxiomImpl
 
 from org.semanticweb.owlapi.model import IRI
-from java.util import ArrayList, HashSet
+from java.util import HashSet
 
 
 class TestElNormalizer(TestCase):
@@ -95,7 +95,7 @@ class TestElNormalizer(TestCase):
         role2 = self.data_factory.getOWLObjectProperty(IRI.create("http://role2"))
         role_set.add(role2)
 
-        equivalent = OWLEquivalentObjectPropertiesAxiomImpl(ArrayList(role_set), HashSet())
+        equivalent = OWLEquivalentObjectPropertiesAxiomImpl(role_set, HashSet())
         self.equivalent_object_properties_axiom = equivalent
 
         # SymmetricObjectProperty Axiom
