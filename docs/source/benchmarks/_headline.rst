@@ -179,7 +179,7 @@
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 1.907e-05
+     - 0.1311
      - -
    * - common-anatomy-existential-prediction
      - composed (mowl-common)
@@ -209,7 +209,7 @@
      - concept2box (mowl-common)
      - f_mrr
      - -
-     - 1.844e-05
+     - 0.04127
      - -
    * - common-anatomy-existential-prediction
      - cone_qe (mowl-common)
@@ -395,13 +395,13 @@
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 1.882e-05
+     - 0.0003618
      - -
    * - common-anatomy-subsumption-inference
      - cate (mowl-common)
      - f_mrr
      - -
-     - -
+     - 0.02754
      - 0.02948
    * - common-anatomy-subsumption-inference
      - composed (mowl-common)
@@ -437,7 +437,7 @@
      - concept2box (mowl-common)
      - f_mrr
      - -
-     - 1.882e-05
+     - 0.004058
      - -
    * - common-anatomy-subsumption-inference
      - cone_qe (mowl-common)
@@ -480,7 +480,7 @@
      - f_mrr
      - -
      - 0.03345
-     - 0.01445
+     - 0.01485
    * - common-anatomy-subsumption-inference
      - elem (mowl-common)
      - f_mrr
@@ -515,7 +515,7 @@
      - falcon (mowl-common)
      - f_mrr
      - -
-     - -
+     - 0.0009378
      - 0.000941
    * - common-anatomy-subsumption-inference
      - graph_kge (mowl-common)
@@ -565,6 +565,12 @@
      - -
      - 0.02794
      - 0.004141
+   * - common-anatomy-subsumption-inference
+     - ont (mowl-common)
+     - f_mrr
+     - -
+     - 0.008368
+     - -
    * - common-anatomy-subsumption-inference
      - onto2vec (mowl-common)
      - f_mrr
@@ -683,7 +689,7 @@
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 1.844e-05
+     - 0.0009702
      - -
    * - common-anatomy-subsumption-prediction
      - cate (mowl-common)
@@ -725,7 +731,7 @@
      - concept2box (mowl-common)
      - f_mrr
      - -
-     - 1.844e-05
+     - 0.002186
      - -
    * - common-anatomy-subsumption-prediction
      - cone_qe (mowl-common)
@@ -942,7 +948,7 @@
      - f_mrr
      - -
      - 0.3372
-     - -
+     - 0.1115
    * - common-galen-existential-prediction
      - boxe (mowl-common)
      - f_mrr
@@ -959,7 +965,7 @@
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 6.06e-05
+     - 0.1461
      - -
    * - common-galen-existential-prediction
      - composed (mowl-common)
@@ -989,7 +995,7 @@
      - concept2box (mowl-common)
      - f_mrr
      - -
-     - 5.735e-05
+     - 0.0103
      - -
    * - common-galen-existential-prediction
      - cone_qe (mowl-common)
@@ -1014,13 +1020,13 @@
      - f_mrr
      - -
      - 0.202
-     - -
+     - 0.09255
    * - common-galen-existential-prediction
      - elem (mowl-common)
      - f_mrr
      - -
      - 0.2486
-     - -
+     - 0.2219
    * - common-galen-existential-prediction
      - elkem (mowl-common)
      - f_mrr
@@ -1068,7 +1074,7 @@
      - f_mrr
      - -
      - 0.2872
-     - -
+     - 0.1639
    * - common-galen-existential-prediction
      - multielbe (mowl-common)
      - f_mrr
@@ -1080,6 +1086,12 @@
      - f_mrr
      - -
      - 0.01712
+     - 0.009693
+   * - common-galen-existential-prediction
+     - ont (mowl-common)
+     - f_mrr
+     - -
+     - 0.06194
      - -
    * - common-galen-existential-prediction
      - onto2vec (mowl-common)
@@ -1116,7 +1128,7 @@
      - f_mrr
      - -
      - 0.1806
-     - -
+     - 0.05662
    * - common-galen-existential-prediction
      - regd_elem (mowl-common)
      - f_mrr
@@ -1134,7 +1146,7 @@
      - f_mrr
      - -
      - 0.1611
-     - -
+     - 0.1734
    * - common-galen-subsumption-inference
      - acone (mowl-common)
      - f_mrr
@@ -1164,7 +1176,7 @@
      - f_mrr
      - -
      - 0.03278
-     - -
+     - 0.03071
    * - common-galen-subsumption-inference
      - box_lattice (mowl-common)
      - f_mrr
@@ -1187,7 +1199,7 @@
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 8.643e-05
+     - 0.0001512
      - -
    * - common-galen-subsumption-inference
      - cate (mowl-common)
@@ -1229,7 +1241,7 @@
      - concept2box (mowl-common)
      - f_mrr
      - -
-     - 8.643e-05
+     - 0.0003487
      - -
    * - common-galen-subsumption-inference
      - cone_qe (mowl-common)
@@ -1265,20 +1277,20 @@
      - eike (mowl-common)
      - f_mrr
      - -
-     - 0.0005226
+     - 0.0005649
      - -
    * - common-galen-subsumption-inference
      - elbe (mowl-common)
      - f_mrr
      - -
      - 0.0275
-     - -
+     - 0.001145
    * - common-galen-subsumption-inference
      - elem (mowl-common)
      - f_mrr
      - -
      - 0.01596
-     - -
+     - 0.007643
    * - common-galen-subsumption-inference
      - elkem (mowl-common)
      - f_mrr
@@ -1338,7 +1350,7 @@
      - f_mrr
      - -
      - 0.0006637
-     - -
+     - 0.0003575
    * - common-galen-subsumption-inference
      - multielbe (mowl-common)
      - f_mrr
@@ -1350,7 +1362,7 @@
      - f_mrr
      - -
      - 0.0003387
-     - -
+     - 0.0002387
    * - common-galen-subsumption-inference
      - ont (mowl-common)
      - f_mrr
@@ -1398,7 +1410,7 @@
      - f_mrr
      - -
      - 0.001477
-     - -
+     - 0.0021
    * - common-galen-subsumption-inference
      - regd_elem (mowl-common)
      - f_mrr
@@ -1428,7 +1440,7 @@
      - f_mrr
      - -
      - 0.005221
-     - -
+     - 0.001604
    * - common-galen-subsumption-prediction
      - acone (mowl-common)
      - f_mrr
@@ -1458,7 +1470,7 @@
      - f_mrr
      - -
      - 0.1421
-     - -
+     - 0.03571
    * - common-galen-subsumption-prediction
      - box_lattice (mowl-common)
      - f_mrr
@@ -1481,7 +1493,7 @@
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 5.734e-05
+     - 0.009978
      - -
    * - common-galen-subsumption-prediction
      - cate (mowl-common)
@@ -1523,7 +1535,7 @@
      - concept2box (mowl-common)
      - f_mrr
      - -
-     - 5.734e-05
+     - 0.008852
      - -
    * - common-galen-subsumption-prediction
      - cone_qe (mowl-common)
@@ -1566,13 +1578,13 @@
      - f_mrr
      - -
      - 0.1225
-     - 0.0561
+     - 0.05893
    * - common-galen-subsumption-prediction
      - elem (mowl-common)
      - f_mrr
      - -
      - 0.08285
-     - -
+     - 0.06418
    * - common-galen-subsumption-prediction
      - elkem (mowl-common)
      - f_mrr
@@ -1627,6 +1639,12 @@
      - -
      - 0.00307
      - 0.003069
+   * - common-galen-subsumption-prediction
+     - mcmultibox (mowl-common)
+     - f_mrr
+     - -
+     - 0.01001
+     - -
    * - common-galen-subsumption-prediction
      - multiboxel (mowl-common)
      - f_mrr
@@ -1763,7 +1781,7 @@
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 3.781e-05
+     - 0.009742
      - -
    * - common-go-existential-prediction
      - composed (mowl-common)
@@ -1793,7 +1811,7 @@
      - concept2box (mowl-common)
      - f_mrr
      - -
-     - 3.467e-05
+     - 0.007347
      - -
    * - common-go-existential-prediction
      - cone_qe (mowl-common)
@@ -1861,6 +1879,12 @@
      - -
      - 0.006258
      - 0.006258
+   * - common-go-existential-prediction
+     - mcmultibox (mowl-common)
+     - f_mrr
+     - -
+     - 5.728e-05
+     - -
    * - common-go-existential-prediction
      - multiboxel (mowl-common)
      - f_mrr
@@ -1985,7 +2009,7 @@
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 4.358e-05
+     - 0.0003105
      - -
    * - common-go-subsumption-inference
      - cate (mowl-common)
@@ -2027,7 +2051,7 @@
      - concept2box (mowl-common)
      - f_mrr
      - -
-     - 4.358e-05
+     - 0.006957
      - -
    * - common-go-subsumption-inference
      - cone_qe (mowl-common)
@@ -2210,6 +2234,12 @@
      - 0.01352
      - -
    * - common-go-subsumption-inference
+     - reshuffle (mowl-common)
+     - f_mrr
+     - -
+     - 0.01215
+     - -
+   * - common-go-subsumption-inference
      - shadow_cones (mowl-common)
      - f_mrr
      - -
@@ -2279,14 +2309,14 @@
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 3.468e-05
+     - 0.0002367
      - -
    * - common-go-subsumption-prediction
      - cate (mowl-common)
      - f_mrr
      - -
      - 0.01235
-     - -
+     - 0.01216
    * - common-go-subsumption-prediction
      - composed (mowl-common)
      - f_mrr
@@ -2298,6 +2328,12 @@
      - f_mrr
      - -
      - 0.0002193
+     - -
+   * - common-go-subsumption-prediction
+     - composed_graph_kge (mowl-common)
+     - f_mrr
+     - -
+     - 0.009436
      - -
    * - common-go-subsumption-prediction
      - composed_sequences (mowl-common)
@@ -2315,7 +2351,13 @@
      - concept2box (mowl-common)
      - f_mrr
      - -
-     - 3.468e-05
+     - 0.005869
+     - -
+   * - common-go-subsumption-prediction
+     - cone_qe (mowl-common)
+     - f_mrr
+     - -
+     - 0.0004523
      - -
    * - common-go-subsumption-prediction
      - dfalc (mowl-common)
@@ -2402,17 +2444,23 @@
      - 0.02463
      - -
    * - common-go-subsumption-prediction
+     - hit (mowl-common)
+     - f_mrr
+     - -
+     - 0.04888
+     - -
+   * - common-go-subsumption-prediction
      - hyperbolic_cones (mowl-common)
      - f_mrr
      - -
      - 0.00108
-     - -
+     - 0.00108
    * - common-go-subsumption-prediction
      - multiboxel (mowl-common)
      - f_mrr
      - -
      - 0.01622
-     - -
+     - 0.009305
    * - common-go-subsumption-prediction
      - multielbe (mowl-common)
      - f_mrr
@@ -2424,7 +2472,7 @@
      - f_mrr
      - -
      - 0.008369
-     - -
+     - 0.00502
    * - common-go-subsumption-prediction
      - ont (mowl-common)
      - f_mrr
@@ -2466,18 +2514,24 @@
      - f_mrr
      - -
      - 0.007527
-     - -
+     - 0.007527
    * - common-go-subsumption-prediction
      - regd (mowl-common)
      - f_mrr
      - -
-     - -
+     - 0.04462
      - 0.03992
    * - common-go-subsumption-prediction
      - regd_elem (mowl-common)
      - f_mrr
      - -
      - 0.06605
+     - -
+   * - common-go-subsumption-prediction
+     - reshuffle (mowl-common)
+     - f_mrr
+     - -
+     - 0.07295
      - -
    * - common-go-subsumption-prediction
      - shadow_cones (mowl-common)
@@ -2498,6 +2552,18 @@
      - 0.05722
      - 0.05695
    * - common-human-ppi
+     - acone (mowl-common)
+     - f_mrr
+     - -
+     - 0.0006749
+     - -
+   * - common-human-ppi
+     - alcone (mowl-common)
+     - f_mrr
+     - -
+     - 0.0001369
+     - -
+   * - common-human-ppi
      - betae (mowl-common)
      - f_mrr
      - -
@@ -2507,25 +2573,49 @@
      - box2el (mowl-common)
      - f_mrr
      - -
-     - -
+     - 0.1031
      - 0.1038
    * - common-human-ppi
      - boxe (mowl-common)
      - f_mrr
      - -
-     - -
+     - 0.1362
      - 0.1272
+   * - common-human-ppi
+     - boxel (mowl-common)
+     - f_mrr
+     - -
+     - 0.07003
+     - -
    * - common-human-ppi
      - boxsel (mowl-common)
      - f_mrr
      - -
-     - 0.0001402
+     - 0.01579
      - -
+   * - common-human-ppi
+     - cate (mowl-common)
+     - f_mrr
+     - -
+     - -
+     - 0.07709
    * - common-human-ppi
      - composed (mowl-common)
      - f_mrr
      - -
      - 0.0004756
+     - -
+   * - common-human-ppi
+     - composed-alc (mowl-common)
+     - f_mrr
+     - -
+     - 0.0003859
+     - -
+   * - common-human-ppi
+     - composed_graph_kge (mowl-common)
+     - f_mrr
+     - -
+     - 0.2009
      - -
    * - common-human-ppi
      - composed_sequences (mowl-common)
@@ -2534,10 +2624,22 @@
      - 0.2053
      - -
    * - common-human-ppi
+     - concept2box (mowl-common)
+     - f_mrr
+     - -
+     - 0.1448
+     - -
+   * - common-human-ppi
+     - cone_qe (mowl-common)
+     - f_mrr
+     - -
+     - 0.0001443
+     - -
+   * - common-human-ppi
      - dfalc (mowl-common)
      - f_mrr
      - -
-     - -
+     - 0.0002088
      - 0.0002088
    * - common-human-ppi
      - dl2vec (mowl-common)
@@ -2550,13 +2652,13 @@
      - f_mrr
      - -
      - 0.007116
-     - -
+     - 0.008238
    * - common-human-ppi
      - elem (mowl-common)
      - f_mrr
      - -
      - 0.02607
-     - -
+     - 0.02062
    * - common-human-ppi
      - elkem (mowl-common)
      - f_mrr
@@ -2570,11 +2672,53 @@
      - 0.1242
      - -
    * - common-human-ppi
+     - emelvar (mowl-common)
+     - f_mrr
+     - -
+     - 0.1233
+     - -
+   * - common-human-ppi
+     - expressive (mowl-common)
+     - f_mrr
+     - -
+     - 0.1339
+     - -
+   * - common-human-ppi
      - falcon (mowl-common)
      - f_mrr
      - -
-     - -
      - 0.0001009
+     - 0.0001009
+   * - common-human-ppi
+     - graph_kge (mowl-common)
+     - f_mrr
+     - -
+     - 0.1458
+     - 0.1458
+   * - common-human-ppi
+     - multiboxel (mowl-common)
+     - f_mrr
+     - -
+     - 0.2384
+     - 0.2403
+   * - common-human-ppi
+     - multielbe (mowl-common)
+     - f_mrr
+     - -
+     - 0.0007682
+     - -
+   * - common-human-ppi
+     - octagon (mowl-common)
+     - f_mrr
+     - -
+     - 0.001454
+     - 0.00146
+   * - common-human-ppi
+     - ont (mowl-common)
+     - f_mrr
+     - -
+     - 0.0009063
+     - -
    * - common-human-ppi
      - onto2vec (mowl-common)
      - f_mrr
@@ -2594,11 +2738,35 @@
      - 0.2031
      - -
    * - common-human-ppi
+     - prism (mowl-common)
+     - f_mrr
+     - -
+     - 0.001021
+     - -
+   * - common-human-ppi
+     - query2box (mowl-common)
+     - f_mrr
+     - -
+     - 0.001125
+     - 0.001125
+   * - common-human-ppi
+     - regd_elem (mowl-common)
+     - f_mrr
+     - -
+     - 0.01251
+     - -
+   * - common-human-ppi
      - transbox (mowl-common)
      - f_mrr
      - -
-     - -
      - 0.001127
+     - 0.001127
+   * - common-yeast-ppi
+     - acone (mowl-common)
+     - f_mrr
+     - -
+     - 0.00159
+     - -
    * - common-yeast-ppi
      - alcone (mowl-common)
      - f_mrr
@@ -2606,10 +2774,58 @@
      - 0.0003711
      - -
    * - common-yeast-ppi
+     - betae (mowl-common)
+     - f_mrr
+     - -
+     - 0.001578
+     - -
+   * - common-yeast-ppi
+     - box2el (mowl-common)
+     - f_mrr
+     - -
+     - 0.06243
+     - 0.0618
+   * - common-yeast-ppi
      - boxe (mowl-common)
      - f_mrr
      - -
      - 0.2237
+     - 0.2284
+   * - common-yeast-ppi
+     - boxel (mowl-common)
+     - f_mrr
+     - -
+     - 0.008758
+     - -
+   * - common-yeast-ppi
+     - boxsel (mowl-common)
+     - f_mrr
+     - -
+     - 0.004601
+     - -
+   * - common-yeast-ppi
+     - cate (mowl-common)
+     - f_mrr
+     - -
+     - 0.07879
+     - -
+   * - common-yeast-ppi
+     - composed (mowl-common)
+     - f_mrr
+     - -
+     - 0.001454
+     - -
+   * - common-yeast-ppi
+     - composed-alc (mowl-common)
+     - f_mrr
+     - -
+     - 0.001107
+     - -
+   * - common-yeast-ppi
+     - composed_graph_kge (mowl-common)
+     - f_mrr
+     - -
+     - 0.2368
      - -
    * - common-yeast-ppi
      - composed_sequences (mowl-common)
@@ -2624,11 +2840,17 @@
      - 0.1291
      - -
    * - common-yeast-ppi
+     - cone_qe (mowl-common)
+     - f_mrr
+     - -
+     - 0.000657
+     - -
+   * - common-yeast-ppi
      - dfalc (mowl-common)
      - f_mrr
      - -
      - 0.0006418
-     - -
+     - 0.0006418
    * - common-yeast-ppi
      - dl2vec (mowl-common)
      - f_mrr
@@ -2636,10 +2858,76 @@
      - 0.1937
      - 0.1937
    * - common-yeast-ppi
+     - elbe (mowl-common)
+     - f_mrr
+     - -
+     - 0.01819
+     - 0.01755
+   * - common-yeast-ppi
+     - elem (mowl-common)
+     - f_mrr
+     - -
+     - 0.01692
+     - 0.01584
+   * - common-yeast-ppi
+     - elkem (mowl-common)
+     - f_mrr
+     - -
+     - 0.1088
+     - -
+   * - common-yeast-ppi
+     - emelpp (mowl-common)
+     - f_mrr
+     - -
+     - 0.163
+     - -
+   * - common-yeast-ppi
      - emelvar (mowl-common)
      - f_mrr
      - -
      - 0.1622
+     - -
+   * - common-yeast-ppi
+     - expressive (mowl-common)
+     - f_mrr
+     - -
+     - 0.06681
+     - -
+   * - common-yeast-ppi
+     - falcon (mowl-common)
+     - f_mrr
+     - -
+     - 0.0009343
+     - 0.0009344
+   * - common-yeast-ppi
+     - graph_kge (mowl-common)
+     - f_mrr
+     - -
+     - 0.1636
+     - 0.1636
+   * - common-yeast-ppi
+     - mcmultibox (mowl-common)
+     - f_mrr
+     - -
+     - 0.0003966
+     - -
+   * - common-yeast-ppi
+     - multiboxel (mowl-common)
+     - f_mrr
+     - -
+     - 0.1556
+     - 0.1538
+   * - common-yeast-ppi
+     - multielbe (mowl-common)
+     - f_mrr
+     - -
+     - 0.002051
+     - -
+   * - common-yeast-ppi
+     - octagon (mowl-common)
+     - f_mrr
+     - -
+     - 0.001838
      - -
    * - common-yeast-ppi
      - ont (mowl-common)
@@ -2665,6 +2953,30 @@
      - -
      - 0.1879
      - -
+   * - common-yeast-ppi
+     - prism (mowl-common)
+     - f_mrr
+     - -
+     - 0.002039
+     - -
+   * - common-yeast-ppi
+     - query2box (mowl-common)
+     - f_mrr
+     - -
+     - 0.002305
+     - 0.002305
+   * - common-yeast-ppi
+     - regd_elem (mowl-common)
+     - f_mrr
+     - -
+     - 0.01667
+     - -
+   * - common-yeast-ppi
+     - transbox (mowl-common)
+     - f_mrr
+     - -
+     - 0.001309
+     - 0.001309
    * - dele-foodon-subsumption
      - box2el (mashkova2024:+l)
      - hits@10
@@ -2873,7 +3185,7 @@
      - elem (mashkova2024:+l+n)
      - hits@10
      - 0.06
-     - -
+     - 0.06196
      - 0.06163
    * - dele-yeast-ppi
      - elem (mashkova2024:base)
@@ -3235,6 +3547,18 @@
      - 0.04
      - 0.04722
      - 0.04796
+   * - emelpp-anatomy-prediction
+     - elem (mondal2021)
+     - hits@10
+     - 0.19
+     - 0.1155
+     - -
+   * - emelpp-anatomy-prediction
+     - emelpp (mondal2021)
+     - hits@10
+     - 0.17
+     - 0.2125
+     - 0.1974
    * - emelpp-galen-prediction
      - elem (mondal2021)
      - hits@10
@@ -3269,14 +3593,20 @@
      - concept2box (huang2023)
      - mrr
      - 0.51
-     - 0.01621
+     - 0.08821
      - 0.001542
    * - joie-dbpedia-ontology-view-completion
      - concept2box (huang2023)
      - mrr
      - 0.65
-     - 0.2963
+     - 0.3084
      - 0.01143
+   * - kg-fb15k237-link-prediction
+     - boxe (abboud2020)
+     - f_mrr
+     - 0.318
+     - 0.3531
+     - 0.3532
    * - kg-fb15k237-link-prediction
      - expressive (pavlovic2023)
      - f_mrr
@@ -3503,8 +3833,14 @@
      - boxe (abboud2020)
      - f_mrr
      - 0.442
-     - -
+     - 0.488
      - 0.4876
+   * - kg-wn18rr-link-prediction
+     - expressive (pavlovic2023)
+     - f_mrr
+     - 0.508
+     - 0.5023
+     - 0.5016
    * - m-yago39k-instanceof-classification
      - eike (wang2024eike:pre-eye)
      - f1
@@ -3553,12 +3889,42 @@
      - 0.8127
      - 0.6689
      - 0.6698
+   * - ont-anatomy-inference
+     - hit (yang2025ont)
+     - mrr
+     - 0.03
+     - 0.02384
+     - 0.02384
+   * - ont-anatomy-inference
+     - ont (yang2025ont)
+     - mrr
+     - 0.03
+     - 0.02586
+     - 0.02642
    * - ont-galen-inference
      - hit (yang2025ont)
      - mrr
      - 0.02
      - 0.02369
-     - -
+     - 0.02369
+   * - ont-galen-inference
+     - ont (yang2025ont)
+     - mrr
+     - 0.01
+     - 0.01912
+     - 0.01899
+   * - ont-go-inference
+     - hit (yang2025ont)
+     - mrr
+     - 0
+     - 0.07686
+     - 0.07713
+   * - ont-go-inference
+     - ont (yang2025ont)
+     - mrr
+     - 0.02
+     - 0.03324
+     - 0.03416
    * - regd-anatomy-inference
      - elbe (yang2025regd)
      - f1
